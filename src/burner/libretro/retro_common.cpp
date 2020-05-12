@@ -82,46 +82,46 @@ static UINT8 diag_input_select_l_r[] =  {RETRO_DEVICE_ID_JOYPAD_SELECT, RETRO_DE
 static const struct retro_core_option_definition var_empty = { NULL, NULL, NULL, {{0}}, NULL };
 static const struct retro_core_option_definition var_fbneo_allow_depth_32 = {
 	"fbneo-allow-depth-32",
-	"Use 32-bits color depth when available",
-	"Change pixel format, some games require this to render properly, it could impact performances on some platforms",
+	"尽可能使用32位色彩深度",
+	"改变像素格式，某些游戏需要此设置才能正确渲染，此设置在某些平台上可能会影响性能",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_vertical_mode = {
 	"fbneo-vertical-mode",
-	"Vertical mode",
-	"Rotate display for vertical screens",
+	"竖屏模式",
+	"为竖屏游戏旋转屏幕",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
-		{ "alternate", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
+		{ "替代方式", NULL },
 		{ NULL, NULL },
 	},
-	"disabled"
+	"禁用"
 };
 static const struct retro_core_option_definition var_fbneo_frameskip = {
 	"fbneo-frameskip",
-	"Frameskip",
-	"Skip rendering of X frames out of X+1",
+	"跳帧",
+	"跳过渲染X+1帧中的X帧",
 	{
-		{ "0", "No skipping" },
-		{ "1", "Skip rendering of 1 frames out of 2" },
-		{ "2", "Skip rendering of 2 frames out of 3" },
-		{ "3", "Skip rendering of 3 frames out of 4" },
-		{ "4", "Skip rendering of 4 frames out of 5" },
-		{ "5", "Skip rendering of 5 frames out of 6" },
+		{ "0", "无跳帧" },
+		{ "1", "每2帧跳过1帧" },
+		{ "2", "每3帧跳过2帧" },
+		{ "3", "每4帧跳过3帧" },
+		{ "4", "每5帧跳过4帧" },
+		{ "5", "每6帧跳过5帧" },
 		{ NULL, NULL },
 	},
 	"0"
 };
 static const struct retro_core_option_definition var_fbneo_cpu_speed_adjust = {
 	"fbneo-cpu-speed-adjust",
-	"CPU clock",
-	"Change emulated cpu frequency for various systems, by increasing you can fix native slowdowns in some games, by decreasing you can help performance on low-end devices",
+	"CPU 频率",
+	"为不同系统调整模拟的CPU频率，提高频率可以修正某些游戏原生的运行拖慢问题，降低频率有助于提高低端设备的性能",
 	{
 		PERCENT_VALUES
 	},
@@ -129,39 +129,39 @@ static const struct retro_core_option_definition var_fbneo_cpu_speed_adjust = {
 };
 static const struct retro_core_option_definition var_fbneo_diagnostic_input = {
 	"fbneo-diagnostic-input",
-	"Diagnostic Input",
-	"Configure button combination to enter cabinet service menu",
+	"诊断输入",
+	"设置进入基板服务菜单的组合键",
 	{
-		{ "None", NULL },
-		{ "Hold Start", NULL },
+		{ "无", NULL },
+		{ "按住 Start", NULL },
 		{ "Start + A + B", NULL },
-		{ "Hold Start + A + B", NULL },
-		{ "Start + L + R", NULL },
-		{ "Hold Start + L + R", NULL },
-		{ "Hold Select", NULL },
+		{ "按住 Start + A + B", NULL },
+		{ "按住 + L + R", NULL },
+		{ "按住 Start + L + R", NULL },
+		{ "按住 Select", NULL },
 		{ "Select + A + B", NULL },
-		{ "Hold Select + A + B", NULL },
+		{ "按住 Select + A + B", NULL },
 		{ "Select + L + R", NULL },
-		{ "Hold Select + L + R", NULL },
+		{ "按住 Select + L + R", NULL },
 		{ NULL, NULL },
 	},
-	"Hold Start"
+	"按住 Start"
 };
 static const struct retro_core_option_definition var_fbneo_hiscores = {
 	"fbneo-hiscores",
-	"Hiscores",
-	"Enable high scores support, you also need the file hiscore.dat in your system/fbneo/ folder",
+	"高分记录",
+	"启用高分记录支持，需要在system/fbneo/保存hiscore.dat文件",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_samplerate = {
 	"fbneo-samplerate",
-	"Samplerate",
-	"Configure samplerate, it could impact performances, closing & starting game again is required",
+	"音频采样率",
+	"设置音频采样率，可能会影响性能。需要重启游戏以生效",
 	{
 		{ "11025", NULL },
 		{ "22050", NULL },
@@ -173,10 +173,10 @@ static const struct retro_core_option_definition var_fbneo_samplerate = {
 };
 static const struct retro_core_option_definition var_fbneo_sample_interpolation = {
 	"fbneo-sample-interpolation",
-	"Sample Interpolation",
-	"Configure sample interpolation, it could impact performances",
+	"采样插值",
+	"设置采样插值，可能会影响性能",
 	{
-		{ "disabled", NULL },
+		{ "禁用", NULL },
 		{ "2-point 1st order", NULL },
 		{ "4-point 3rd order", NULL },
 		{ NULL, NULL },
@@ -185,10 +185,10 @@ static const struct retro_core_option_definition var_fbneo_sample_interpolation 
 };
 static const struct retro_core_option_definition var_fbneo_fm_interpolation = {
 	"fbneo-fm-interpolation",
-	"FM Interpolation",
-	"Configure FM interpolation, it could impact performances",
+	"FM音频插值",
+	"设置FM音频插值，可能会影响性能",
 	{
-		{ "disabled", NULL },
+		{ "禁用", NULL },
 		{ "4-point 3rd order", NULL },
 		{ NULL, NULL },
 	},
@@ -196,8 +196,8 @@ static const struct retro_core_option_definition var_fbneo_fm_interpolation = {
 };
 static const struct retro_core_option_definition var_fbneo_analog_speed = {
 	"fbneo-analog-speed",
-	"Analog Speed",
-	"Mitigate analog controls speed, some games might require low values to be playable",
+	"模拟摇杆速度",
+	"降低模拟摇杆的速度，某些游戏可能需要设置较低的值才有可玩性",
 	{
 		PERCENT_VALUES
 	},
@@ -206,176 +206,176 @@ static const struct retro_core_option_definition var_fbneo_analog_speed = {
 #ifdef USE_CYCLONE
 static const struct retro_core_option_definition var_fbneo_cyclone = {
 	"fbneo-cyclone",
-	"Enable cyclone",
-	"Use at your own risk, it could improve performance on some emulated systems for low-end devices, but there are known side effects : savestates won't be compatible with normal interpreter, and some systems won't work",
+	"启用Cyclone",
+	"使用风险自负, 在低端设备上可能会提高某些模拟系统的性能，但是有附带效应：及时存档会和正常解释器不兼容，有些系统可能不会工作",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"disabled"
+	"禁用"
 };
 #endif
 
 // Neo Geo core options
 static const struct retro_core_option_definition var_fbneo_neogeo_mode = {
 	"fbneo-neogeo-mode",
-	"Neo-Geo mode",
-	"Load appropriate bios depending on your choice, under the condition such a bios is compatible with the running game, changing this will restart your game",
+	"Neo-Geo模式",
+	"根据你的选择载入相应的BIOS，前提是该BIOS和运行的游戏兼容。改变此设置会重启游戏",
 	{
-		{ "DIPSWITCH", "Use bios specified in BIOS dipswitch below" },
-		{ "MVS", "Use MVS bios" },
-		{ "AES", "Use AES bios" },
-		{ "UNIBIOS", "Use UNIBIOS bios" },
+		{ "DIP开关", "使用DIP开关指定的BIOS" },
+		{ "MVS", "使用MVS BIOS" },
+		{ "AES", "使用AES BIOS" },
+		{ "UNIBIOS", "使用UNIBIOS BIOS" },
 		{ NULL, NULL },
 	},
-	"DIPSWITCH"
+	"DIP开关"
 };
 
 static const struct retro_core_option_definition var_fbneo_load_subsystem_from_parent = {
 	"fbneo-load-subsystem-from-parent",
-	"Load Subsystem from Parent Folder",
-	"If enabled, supported subsystems will be loaded using the parent directory name",
+	"以父目录载入子系统",
+	"如果启用，将使用父目录名称来载入支持的子系统",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 
 #ifdef FBNEO_DEBUG
 static const struct retro_core_option_definition var_fbneo_debug_layer_1 = {
 	"fbneo-debug-layer-1",
-	"Layer 1",
-	"For debugging",
+	"图层 1",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_layer_2 = {
 	"fbneo-debug-layer-2",
-	"Layer 2",
-	"For debugging",
+	"图层 2",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_layer_3 = {
 	"fbneo-debug-layer-3",
-	"Layer 3",
-	"For debugging",
+	"图层 3",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_layer_4 = {
 	"fbneo-debug-layer-4",
-	"Layer 4",
-	"For debugging",
+	"图层 4",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_1 = {
 	"fbneo-debug-sprite-1",
-	"Sprite 1",
-	"For debugging",
+	"角色 1",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_2 = {
 	"fbneo-debug-sprite-2",
-	"Sprite 2",
-	"For debugging",
+	"角色 2",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_3 = {
 	"fbneo-debug-sprite-3",
-	"Sprite 3",
-	"For debugging",
+	"角色 3",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_4 = {
 	"fbneo-debug-sprite-4",
-	"Sprite 4",
-	"For debugging",
+	"角色 4",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_5 = {
 	"fbneo-debug-sprite-5",
-	"Sprite 5",
-	"For debugging",
+	"角色 5",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_6 = {
 	"fbneo-debug-sprite-6",
-	"Sprite 6",
-	"For debugging",
+	"角色 6",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_7 = {
 	"fbneo-debug-sprite-7",
-	"Sprite 7",
-	"For debugging",
+	"角色 7",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 static const struct retro_core_option_definition var_fbneo_debug_sprite_8 = {
 	"fbneo-debug-sprite-8",
-	"Sprite 8",
-	"For debugging",
+	"角色 8",
+	"测试用",
 	{
-		{ "disabled", NULL },
-		{ "enabled", NULL },
+		{ "禁用", NULL },
+		{ "启用", NULL },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"启用"
 };
 #endif
 
@@ -396,7 +396,7 @@ void set_neo_system_bios()
 	if (g_opt_neo_geo_mode == NEO_GEO_MODE_DIPSWITCH)
 	{
 		// Nothing to do in DIPSWITCH mode because the NeoSystem variable is changed by the DIP Switch core option
-		log_cb(RETRO_LOG_INFO, "DIPSWITCH Neo Geo Mode selected => NeoSystem: 0x%02x.\n", NeoSystem);
+		log_cb(RETRO_LOG_INFO, "DIPS开关Neo Geo模式已选择 => NeoSystem: 0x%02x.\n", NeoSystem);
 	}
 	else if (g_opt_neo_geo_mode == NEO_GEO_MODE_MVS)
 	{
@@ -404,7 +404,7 @@ void set_neo_system_bios()
 		if (available_mvs_bios)
 		{
 			NeoSystem |= available_mvs_bios->NeoSystem;
-			log_cb(RETRO_LOG_INFO, "MVS Neo Geo Mode selected => Set NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
+			log_cb(RETRO_LOG_INFO, "MVS Neo Geo模式已选择 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
 		}
 		else
 		{
@@ -413,7 +413,7 @@ void set_neo_system_bios()
 			if (available_mvs_bios)
 			{
 				NeoSystem |= available_mvs_bios->NeoSystem;
-				log_cb(RETRO_LOG_WARN, "MVS Neo Geo Mode selected but MVS bios not available => fall back to another: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
+				log_cb(RETRO_LOG_WARN, "MVS Neo Geo模式已选择，但是没有有效的MVS bios文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
 			}
 		}
 	}
@@ -423,7 +423,7 @@ void set_neo_system_bios()
 		if (available_aes_bios)
 		{
 			NeoSystem |= available_aes_bios->NeoSystem;
-			log_cb(RETRO_LOG_INFO, "AES Neo Geo Mode selected => Set NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
+			log_cb(RETRO_LOG_INFO, "AES Neo Geo模式已选择 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
 		}
 		else
 		{
@@ -432,7 +432,7 @@ void set_neo_system_bios()
 			if (available_aes_bios)
 			{
 				NeoSystem |= available_aes_bios->NeoSystem;
-				log_cb(RETRO_LOG_WARN, "AES Neo Geo Mode selected but AES bios not available => fall back to another: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
+				log_cb(RETRO_LOG_WARN, "AES Neo Geo模式已选择，但是没有有效的AES bios文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
 			}
 		}
 	}
@@ -442,7 +442,7 @@ void set_neo_system_bios()
 		if (available_uni_bios)
 		{
 			NeoSystem |= available_uni_bios->NeoSystem;
-			log_cb(RETRO_LOG_INFO, "UNIBIOS Neo Geo Mode selected => Set NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
+			log_cb(RETRO_LOG_INFO, "UNIBIOS Neo Geo模式已选择 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
 		}
 		else
 		{
@@ -451,7 +451,7 @@ void set_neo_system_bios()
 			if (available_uni_bios)
 			{
 				NeoSystem |= available_uni_bios->NeoSystem;
-				log_cb(RETRO_LOG_WARN, "UNIBIOS Neo Geo Mode selected but UNIBIOS not available => fall back to another: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
+				log_cb(RETRO_LOG_WARN, "UNIBIOS Neo Geo模式已选择，但是没有有效的UNIBIOS文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
 			}
 		}
 	}
@@ -575,9 +575,9 @@ void set_environment()
 		vars[idx_var].desc = dipswitch_core_options[dip_idx].friendly_name.c_str();
 		// Instead of filtering out the dips, make the description a warning if it's a neogeo game using a different default bios
 		if (neogeo_use_specific_default_bios && is_neogeo_game && dipswitch_core_options[dip_idx].friendly_name.compare("BIOS") == 0)
-			vars[idx_var].info = "THIS NEOGEO GAME USES A DIFFERENT DEFAULT BIOS, CHANGE IT AT YOUR OWN RISK";
+			vars[idx_var].info = "此NEOGEO游戏使用一个不同的缺省BIOS，更改设置风险自负";
 		else
-			vars[idx_var].info = "Dipswitch setting, setting is specific to the running romset";
+			vars[idx_var].info = "Dip开关设置, 只针对特定的正在运行的游戏";
 		for (int dip_value_idx = 0; dip_value_idx < dipswitch_core_options[dip_idx].values.size(); dip_value_idx++)
 		{
 			vars[idx_var].values[dip_value_idx].value = dipswitch_core_options[dip_idx].values[dip_value_idx].friendly_name.c_str();
@@ -801,7 +801,7 @@ void check_variables(void)
 	var.key = var_fbneo_allow_depth_32.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			bAllowDepth32 = true;
 		else
 			bAllowDepth32 = false;
@@ -810,9 +810,9 @@ void check_variables(void)
 	var.key = var_fbneo_vertical_mode.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nVerticalMode = 1;
-		else if (strcmp(var.value, "alternate") == 0)
+		else if (strcmp(var.value, "替代方式") == 0)
 			nVerticalMode = 2;
 		else
 			nVerticalMode = 0;
@@ -821,7 +821,7 @@ void check_variables(void)
 	var.key = var_fbneo_load_subsystem_from_parent.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			bLoadSubsystemByParent = true;
 		else
 			bLoadSubsystemByParent = false;
@@ -851,7 +851,7 @@ void check_variables(void)
 		{
 			diag_input = NULL;
 			SetDiagInpHoldFrameDelay(0);
-			if (strcmp(var.value, "Hold Start") == 0)
+			if (strcmp(var.value, "按住 Start") == 0)
 			{
 				diag_input = diag_input_start;
 				SetDiagInpHoldFrameDelay(60);
@@ -861,7 +861,7 @@ void check_variables(void)
 				diag_input = diag_input_start_a_b;
 				SetDiagInpHoldFrameDelay(0);
 			}
-			else if(strcmp(var.value, "Hold Start + A + B") == 0)
+			else if(strcmp(var.value, "按住 Start + A + B") == 0)
 			{
 				diag_input = diag_input_start_a_b;
 				SetDiagInpHoldFrameDelay(60);
@@ -871,12 +871,12 @@ void check_variables(void)
 				diag_input = diag_input_start_l_r;
 				SetDiagInpHoldFrameDelay(0);
 			}
-			else if(strcmp(var.value, "Hold Start + L + R") == 0)
+			else if(strcmp(var.value, "按住 Start + L + R") == 0)
 			{
 				diag_input = diag_input_start_l_r;
 				SetDiagInpHoldFrameDelay(60);
 			}
-			else if(strcmp(var.value, "Hold Select") == 0)
+			else if(strcmp(var.value, "按住 Select") == 0)
 			{
 				diag_input = diag_input_select;
 				SetDiagInpHoldFrameDelay(60);
@@ -886,7 +886,7 @@ void check_variables(void)
 				diag_input = diag_input_select_a_b;
 				SetDiagInpHoldFrameDelay(0);
 			}
-			else if(strcmp(var.value, "Hold Select + A + B") == 0)
+			else if(strcmp(var.value, "按住 Select + A + B") == 0)
 			{
 				diag_input = diag_input_select_a_b;
 				SetDiagInpHoldFrameDelay(60);
@@ -896,7 +896,7 @@ void check_variables(void)
 				diag_input = diag_input_select_l_r;
 				SetDiagInpHoldFrameDelay(0);
 			}
-			else if(strcmp(var.value, "Hold Select + L + R") == 0)
+			else if(strcmp(var.value, "按住 Select + L + R") == 0)
 			{
 				diag_input = diag_input_select_l_r;
 				SetDiagInpHoldFrameDelay(60);
@@ -917,7 +917,7 @@ void check_variables(void)
 					g_opt_neo_geo_mode = NEO_GEO_MODE_AES;
 				else if (strcmp(var.value, "UNIBIOS") == 0)
 					g_opt_neo_geo_mode = NEO_GEO_MODE_UNIBIOS;
-				else if (strcmp(var.value, "DIPSWITCH") == 0)
+				else if (strcmp(var.value, "DIP开关") == 0)
 					g_opt_neo_geo_mode = NEO_GEO_MODE_DIPSWITCH;
 			}
 		}
@@ -926,7 +926,7 @@ void check_variables(void)
 	var.key = var_fbneo_hiscores.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			EnableHiscores = true;
 		else
 			EnableHiscores = false;
@@ -962,7 +962,7 @@ void check_variables(void)
 			nInterpolation = 3;
 		else if (strcmp(var.value, "2-point 1st order") == 0)
 			nInterpolation = 1;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nInterpolation = 0;
 		else
 			nInterpolation = 3;
@@ -973,7 +973,7 @@ void check_variables(void)
 	{
 		if (strcmp(var.value, "4-point 3rd order") == 0)
 			nFMInterpolation = 3;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nFMInterpolation = 0;
 		else
 			nFMInterpolation = 3;
@@ -989,9 +989,9 @@ void check_variables(void)
 	var.key = var_fbneo_cyclone.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			bCycloneEnabled = true;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			bCycloneEnabled = false;
 	}
 #endif
@@ -1000,108 +1000,108 @@ void check_variables(void)
 	var.key = var_fbneo_debug_layer_1.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nBurnLayer |= 1;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nBurnLayer &= ~1;
 	}
 
 	var.key = var_fbneo_debug_layer_2.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nBurnLayer |= 2;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nBurnLayer &= ~2;
 	}
 
 	var.key = var_fbneo_debug_layer_3.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nBurnLayer |= 4;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nBurnLayer &= ~4;
 	}
 
 	var.key = var_fbneo_debug_layer_4.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nBurnLayer |= 8;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nBurnLayer &= ~8;
 	}
 
 	var.key = var_fbneo_debug_sprite_1.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x01;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x01;
 	}
 
 	var.key = var_fbneo_debug_sprite_2.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x02;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x02;
 	}
 
 	var.key = var_fbneo_debug_sprite_3.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x04;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x04;
 	}
 
 	var.key = var_fbneo_debug_sprite_4.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x08;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x08;
 	}
 
 	var.key = var_fbneo_debug_sprite_5.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x10;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x10;
 	}
 
 	var.key = var_fbneo_debug_sprite_6.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x20;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x20;
 	}
 
 	var.key = var_fbneo_debug_sprite_7.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x40;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x40;
 	}
 
 	var.key = var_fbneo_debug_sprite_8.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
-		if (strcmp(var.value, "enabled") == 0)
+		if (strcmp(var.value, "启用") == 0)
 			nSpriteEnable |= 0x80;
-		else if (strcmp(var.value, "disabled") == 0)
+		else if (strcmp(var.value, "禁用") == 0)
 			nSpriteEnable &= ~0x80;
 	}
 #endif
