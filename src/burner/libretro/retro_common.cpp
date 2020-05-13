@@ -173,7 +173,7 @@ static const struct retro_core_option_definition var_fbneo_samplerate = {
 };
 static const struct retro_core_option_definition var_fbneo_sample_interpolation = {
 	"fbneo-sample-interpolation",
-	"采样插值",
+	"音频采样插值",
 	"设置采样插值，可能会影响性能",
 	{
 		{ "禁用", NULL },
@@ -185,7 +185,7 @@ static const struct retro_core_option_definition var_fbneo_sample_interpolation 
 };
 static const struct retro_core_option_definition var_fbneo_fm_interpolation = {
 	"fbneo-fm-interpolation",
-	"FM音频插值",
+	"FM音源插值",
 	"设置FM音频插值，可能会影响性能",
 	{
 		{ "禁用", NULL },
@@ -396,7 +396,7 @@ void set_neo_system_bios()
 	if (g_opt_neo_geo_mode == NEO_GEO_MODE_DIPSWITCH)
 	{
 		// Nothing to do in DIPSWITCH mode because the NeoSystem variable is changed by the DIP Switch core option
-		log_cb(RETRO_LOG_INFO, "DIPS开关Neo Geo模式已选择 => NeoSystem: 0x%02x.\n", NeoSystem);
+		log_cb(RETRO_LOG_INFO, "已根据DIP开关选择Neo Geo模式 => NeoSystem: 0x%02x.\n", NeoSystem);
 	}
 	else if (g_opt_neo_geo_mode == NEO_GEO_MODE_MVS)
 	{
@@ -404,7 +404,7 @@ void set_neo_system_bios()
 		if (available_mvs_bios)
 		{
 			NeoSystem |= available_mvs_bios->NeoSystem;
-			log_cb(RETRO_LOG_INFO, "MVS Neo Geo模式已选择 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
+			log_cb(RETRO_LOG_INFO, "已选择MVS Neo Geo模式 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
 		}
 		else
 		{
@@ -413,7 +413,7 @@ void set_neo_system_bios()
 			if (available_mvs_bios)
 			{
 				NeoSystem |= available_mvs_bios->NeoSystem;
-				log_cb(RETRO_LOG_WARN, "MVS Neo Geo模式已选择，但是没有有效的MVS bios文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
+				log_cb(RETRO_LOG_WARN, "已选择MVS Neo Geo模式，但是没有有效的MVS bios文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_mvs_bios->filename, available_mvs_bios->crc, available_mvs_bios->friendly_name);
 			}
 		}
 	}
@@ -423,7 +423,7 @@ void set_neo_system_bios()
 		if (available_aes_bios)
 		{
 			NeoSystem |= available_aes_bios->NeoSystem;
-			log_cb(RETRO_LOG_INFO, "AES Neo Geo模式已选择 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
+			log_cb(RETRO_LOG_INFO, "已选择AES Neo Geo模式 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
 		}
 		else
 		{
@@ -432,7 +432,7 @@ void set_neo_system_bios()
 			if (available_aes_bios)
 			{
 				NeoSystem |= available_aes_bios->NeoSystem;
-				log_cb(RETRO_LOG_WARN, "AES Neo Geo模式已选择，但是没有有效的AES bios文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
+				log_cb(RETRO_LOG_WARN, "已选择AES Neo Geo模式，但是没有有效的AES bios文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_aes_bios->filename, available_aes_bios->crc, available_aes_bios->friendly_name);
 			}
 		}
 	}
@@ -442,7 +442,7 @@ void set_neo_system_bios()
 		if (available_uni_bios)
 		{
 			NeoSystem |= available_uni_bios->NeoSystem;
-			log_cb(RETRO_LOG_INFO, "UNIBIOS Neo Geo模式已选择 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
+			log_cb(RETRO_LOG_INFO, "已选择UNIBIOS Neo Geo模式 => 设置NeoSystem: 0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
 		}
 		else
 		{
@@ -451,7 +451,7 @@ void set_neo_system_bios()
 			if (available_uni_bios)
 			{
 				NeoSystem |= available_uni_bios->NeoSystem;
-				log_cb(RETRO_LOG_WARN, "UNIBIOS Neo Geo模式已选择，但是没有有效的UNIBIOS文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
+				log_cb(RETRO_LOG_WARN, "已选择UNIBIOS Neo Geo模式，但是没有有效的UNIBIOS文件 => 使用备选：0x%02x (%s [0x%08x] (%s)).\n", NeoSystem, available_uni_bios->filename, available_uni_bios->crc, available_uni_bios->friendly_name);
 			}
 		}
 	}
