@@ -187,6 +187,7 @@ struct BurnDIPInfo {
 	char* szText;
 };
 
+#define DIP_OFFSET(x) {x, 0xf0, 0xff, 0xff, NULL},
 
 // ---------------------------------------------------------------------------
 // Common CPU definitions
@@ -405,7 +406,7 @@ void IpsApplyPatches(UINT8* base, char* rom_name);
 #define BDF_HISCORE_SUPPORTED							(1 << 11)
 
 // Flags for the hardware member
-// Format: 0xDDEEFFFF, where EE: Manufacturer, DD: Hardware platform, FFFF: Flags (used by driver)
+// Format: 0xDDEEFFFF, where DD: Manufacturer, EE: Hardware platform, FFFF: Flags (used by driver)
 
 #define HARDWARE_PUBLIC_MASK							(0x7FFF0000)
 
@@ -443,6 +444,10 @@ void IpsApplyPatches(UINT8* base, char* rom_name);
 #define HARDWARE_PREFIX_SPECTRUM                        (0x1D000000)
 #define HARDWARE_PREFIX_NES                             (0x1E000000)
 #define HARDWARE_PREFIX_FDS                             (0x1F000000)
+#define HARDWARE_PREFIX_NGP                             (0x20000000)
+
+#define HARDWARE_SNK_NGP								(HARDWARE_PREFIX_NGP | 0x00000000)
+#define HARDWARE_SNK_NGPC								(HARDWARE_PREFIX_NGP | 0x00000001)
 
 #define HARDWARE_MISC_PRE90S							(HARDWARE_PREFIX_MISC_PRE90S)
 #define HARDWARE_MISC_POST90S							(HARDWARE_PREFIX_MISC_POST90S)
@@ -693,6 +698,8 @@ void IpsApplyPatches(UINT8* base, char* rom_name);
 #define GBF_RUNGUN  									(1 << 21)
 #define GBF_STRATEGY									(1 << 22)
 #define GBF_VECTOR                                      (1 << 23)
+#define GBF_RPG                                         (1 << 24)
+#define GBF_SIM                                         (1 << 25)
 
 // flags for the family member
 #define FBF_MSLUG										(1 << 0)

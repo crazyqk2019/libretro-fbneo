@@ -210,6 +210,7 @@
 #define IDS_SEL_SEGA_GRP				(IDS_STRING +  644)
 #define IDS_SEL_NES						(IDS_STRING +  646)
 #define IDS_SEL_FDS						(IDS_STRING +  648)
+#define IDS_SEL_NGP						(IDS_STRING +  558)
 
 #define IDS_GENRE						(IDS_STRING +  650)
 #define IDS_GENRE_HORSHOOT				(IDS_STRING +  652)
@@ -235,6 +236,8 @@
 #define IDS_GENRE_RUNGUN                (IDS_STRING +  692)
 #define IDS_GENRE_STRATEGY              (IDS_STRING +  694)
 #define IDS_GENRE_ACTION                (IDS_STRING +  696)
+#define IDS_GENRE_RPG                   (IDS_STRING +  698)
+#define IDS_GENRE_SIM                   (IDS_STRING +  700)
 
 #define IDS_FAMILY						(IDS_STRING +  740)
 #define IDS_FAMILY_MSLUG				(IDS_STRING +  742)

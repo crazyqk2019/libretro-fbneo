@@ -3,9 +3,9 @@
 #include "burner.h"
 #include <process.h>
 
-// reduce the total number of sets by this number - (isgsm, neogeo, nmk004, pgm, skns, ym2608, coleco, msx_msx, spectrum, spec128, decocass, midssio, cchip, fdsbios)
+// reduce the total number of sets by this number - (isgsm, neogeo, nmk004, pgm, skns, ym2608, coleco, msx_msx, spectrum, spec128, decocass, midssio, cchip, fdsbios, ngp)
 // don't reduce for these as we display them in the list (neogeo, neocdz)
-#define REDUCE_TOTAL_SETS_BIOS		14
+#define REDUCE_TOTAL_SETS_BIOS		15
 
 UINT_PTR nTimer					= 0;
 UINT_PTR nInitPreviewTimer		= 0;
@@ -124,6 +124,7 @@ HTREEITEM hFilterPce				= NULL;
 HTREEITEM hFilterMsx				= NULL;
 HTREEITEM hFilterNes				= NULL;
 HTREEITEM hFilterFds				= NULL;
+HTREEITEM hFilterNgp				= NULL;
 HTREEITEM hFilterSms				= NULL;
 HTREEITEM hFilterGg					= NULL;
 HTREEITEM hFilterSg1000				= NULL;
@@ -159,6 +160,8 @@ HTREEITEM hFilterShoot				= NULL;
 HTREEITEM hFilterRungun 			= NULL;
 HTREEITEM hFilterAction				= NULL;
 HTREEITEM hFilterStrategy   		= NULL;
+HTREEITEM hFilterRpg        		= NULL;
+HTREEITEM hFilterSim        		= NULL;
 HTREEITEM hFilterOtherFamily		= NULL;
 HTREEITEM hFilterMslug				= NULL;
 HTREEITEM hFilterSf					= NULL;
@@ -200,72 +203,77 @@ HTREEITEM hHardware					= NULL;
 #define DISABLE_NON_AVAILABLE_SELECT	0						// Disable selecting non-available sets
 #define NON_WORKING_PROMPT_ON_LOAD		1						// Prompt user on loading non-working sets
 
-static int CapcomMiscValue		= HARDWARE_PREFIX_CAPCOM_MISC >> 24;
-static int MASKCAPMISC			= 1 << CapcomMiscValue;
-static int CaveValue			= HARDWARE_PREFIX_CAVE >> 24;
-static int MASKCAVE				= 1 << CaveValue;
-static int CpsValue				= HARDWARE_PREFIX_CAPCOM >> 24;
-static int MASKCPS				= 1 << CpsValue;
-static int Cps2Value			= HARDWARE_PREFIX_CPS2 >> 24;
-static int MASKCPS2				= 1 << Cps2Value;
-static int Cps3Value			= HARDWARE_PREFIX_CPS3 >> 24;
-static int MASKCPS3				= 1 << Cps3Value;
-static int DataeastValue		= HARDWARE_PREFIX_DATAEAST >> 24;
-static int MASKDATAEAST			= 1 << DataeastValue;
-static int GalaxianValue		= HARDWARE_PREFIX_GALAXIAN >> 24;
-static int MASKGALAXIAN			= 1 << GalaxianValue;
-static int IremValue			= HARDWARE_PREFIX_IREM >> 24;
-static int MASKIREM				= 1 << IremValue;
-static int KanekoValue			= HARDWARE_PREFIX_KANEKO >> 24;
-static int MASKKANEKO			= 1 << KanekoValue;
-static int KonamiValue			= HARDWARE_PREFIX_KONAMI >> 24;
-static int MASKKONAMI			= 1 << KonamiValue;
-static int NeogeoValue			= HARDWARE_PREFIX_SNK >> 24;
-static int MASKNEOGEO			= 1 << NeogeoValue;
-static int PacmanValue			= HARDWARE_PREFIX_PACMAN >> 24;
-static int MASKPACMAN			= 1 << PacmanValue;
-static int PgmValue				= HARDWARE_PREFIX_IGS_PGM >> 24;
-static int MASKPGM				= 1 << PgmValue;
-static int PsikyoValue			= HARDWARE_PREFIX_PSIKYO >> 24;
-static int MASKPSIKYO			= 1 << PsikyoValue;
-static int SegaValue			= HARDWARE_PREFIX_SEGA >> 24;
-static int MASKSEGA				= 1 << SegaValue;
-static int SetaValue			= HARDWARE_PREFIX_SETA >> 24;
-static int MASKSETA				= 1 << SetaValue;
-static int TaitoValue			= HARDWARE_PREFIX_TAITO >> 24;
-static int MASKTAITO			= 1 << TaitoValue;
-static int TechnosValue			= HARDWARE_PREFIX_TECHNOS >> 24;
-static int MASKTECHNOS			= 1 << TechnosValue;
-static int ToaplanValue			= HARDWARE_PREFIX_TOAPLAN >> 24;
-static int MASKTOAPLAN			= 1 << ToaplanValue;
-static int MiscPre90sValue		= HARDWARE_PREFIX_MISC_PRE90S >> 24;
-static int MASKMISCPRE90S		= 1 << MiscPre90sValue;
-static int MiscPost90sValue		= HARDWARE_PREFIX_MISC_POST90S >> 24;
-static int MASKMISCPOST90S		= 1 << MiscPost90sValue;
-static int MegadriveValue		= HARDWARE_PREFIX_SEGA_MEGADRIVE >> 24;
-static int MASKMEGADRIVE		= 1 << MegadriveValue;
-static int PCEngineValue		= HARDWARE_PREFIX_PCENGINE >> 24;
-static int MASKPCENGINE			= 1 << PCEngineValue;
-static int SmsValue				= HARDWARE_PREFIX_SEGA_MASTER_SYSTEM >> 24;
-static int MASKSMS				= 1 << SmsValue;
-static int GgValue				= HARDWARE_PREFIX_SEGA_GAME_GEAR >> 24;
-static int MASKGG				= 1 << GgValue;
-static int Sg1000Value			= HARDWARE_PREFIX_SEGA_SG1000 >> 24;
-static int MASKSG1000			= 1 << Sg1000Value;
-static int ColecoValue			= HARDWARE_PREFIX_COLECO >> 24;
-static int MASKCOLECO			= 1 << ColecoValue;
-static int MsxValue				= HARDWARE_PREFIX_MSX >> 24;
-static int MASKMSX				= 1 << MsxValue;
-static int SpecValue			= HARDWARE_PREFIX_SPECTRUM >> 24;
-static int MASKSPECTRUM			= 1 << SpecValue;
-static int MidwayValue			= HARDWARE_PREFIX_MIDWAY >> 24;
-static int MASKMIDWAY			= 1 << MidwayValue;
-static int NesValue				= HARDWARE_PREFIX_NES >> 24;
-static int MASKNES				= 1 << NesValue;
-static int FdsValue				= HARDWARE_PREFIX_FDS >> 24;
-static int MASKFDS				= 1 << FdsValue;
+static UINT64 CapcomMiscValue		= HARDWARE_PREFIX_CAPCOM_MISC >> 24;
+static UINT64 MASKCAPMISC			= 1 << CapcomMiscValue;
+static UINT64 CaveValue				= HARDWARE_PREFIX_CAVE >> 24;
+static UINT64 MASKCAVE				= 1 << CaveValue;
+static UINT64 CpsValue				= HARDWARE_PREFIX_CAPCOM >> 24;
+static UINT64 MASKCPS				= 1 << CpsValue;
+static UINT64 Cps2Value				= HARDWARE_PREFIX_CPS2 >> 24;
+static UINT64 MASKCPS2				= 1 << Cps2Value;
+static UINT64 Cps3Value				= HARDWARE_PREFIX_CPS3 >> 24;
+static UINT64 MASKCPS3				= 1 << Cps3Value;
+static UINT64 DataeastValue			= HARDWARE_PREFIX_DATAEAST >> 24;
+static UINT64 MASKDATAEAST			= 1 << DataeastValue;
+static UINT64 GalaxianValue			= HARDWARE_PREFIX_GALAXIAN >> 24;
+static UINT64 MASKGALAXIAN			= 1 << GalaxianValue;
+static UINT64 IremValue				= HARDWARE_PREFIX_IREM >> 24;
+static UINT64 MASKIREM				= 1 << IremValue;
+static UINT64 KanekoValue			= HARDWARE_PREFIX_KANEKO >> 24;
+static UINT64 MASKKANEKO			= 1 << KanekoValue;
+static UINT64 KonamiValue			= HARDWARE_PREFIX_KONAMI >> 24;
+static UINT64 MASKKONAMI			= 1 << KonamiValue;
+static UINT64 NeogeoValue			= HARDWARE_PREFIX_SNK >> 24;
+static UINT64 MASKNEOGEO			= 1 << NeogeoValue;
+static UINT64 PacmanValue			= HARDWARE_PREFIX_PACMAN >> 24;
+static UINT64 MASKPACMAN			= 1 << PacmanValue;
+static UINT64 PgmValue				= HARDWARE_PREFIX_IGS_PGM >> 24;
+static UINT64 MASKPGM				= 1 << PgmValue;
+static UINT64 PsikyoValue			= HARDWARE_PREFIX_PSIKYO >> 24;
+static UINT64 MASKPSIKYO			= 1 << PsikyoValue;
+static UINT64 SegaValue				= HARDWARE_PREFIX_SEGA >> 24;
+static UINT64 MASKSEGA				= 1 << SegaValue;
+static UINT64 SetaValue				= HARDWARE_PREFIX_SETA >> 24;
+static UINT64 MASKSETA				= 1 << SetaValue;
+static UINT64 TaitoValue			= HARDWARE_PREFIX_TAITO >> 24;
+static UINT64 MASKTAITO				= 1 << TaitoValue;
+static UINT64 TechnosValue			= HARDWARE_PREFIX_TECHNOS >> 24;
+static UINT64 MASKTECHNOS			= 1 << TechnosValue;
+static UINT64 ToaplanValue			= HARDWARE_PREFIX_TOAPLAN >> 24;
+static UINT64 MASKTOAPLAN			= 1 << ToaplanValue;
+static UINT64 MiscPre90sValue		= HARDWARE_PREFIX_MISC_PRE90S >> 24;
+static UINT64 MASKMISCPRE90S		= 1 << MiscPre90sValue;
+static UINT64 MiscPost90sValue		= HARDWARE_PREFIX_MISC_POST90S >> 24;
+static UINT64 MASKMISCPOST90S		= 1 << MiscPost90sValue;
+static UINT64 MegadriveValue		= HARDWARE_PREFIX_SEGA_MEGADRIVE >> 24;
+static UINT64 MASKMEGADRIVE			= 1 << MegadriveValue;
+static UINT64 PCEngineValue			= HARDWARE_PREFIX_PCENGINE >> 24;
+static UINT64 MASKPCENGINE			= 1 << PCEngineValue;
+static UINT64 SmsValue				= HARDWARE_PREFIX_SEGA_MASTER_SYSTEM >> 24;
+static UINT64 MASKSMS				= 1 << SmsValue;
+static UINT64 GgValue				= HARDWARE_PREFIX_SEGA_GAME_GEAR >> 24;
+static UINT64 MASKGG				= 1 << GgValue;
+static UINT64 Sg1000Value			= HARDWARE_PREFIX_SEGA_SG1000 >> 24;
+static UINT64 MASKSG1000			= 1 << Sg1000Value;
+static UINT64 ColecoValue			= HARDWARE_PREFIX_COLECO >> 24;
+static UINT64 MASKCOLECO			= 1 << ColecoValue;
+static UINT64 MsxValue				= HARDWARE_PREFIX_MSX >> 24;
+static UINT64 MASKMSX				= 1 << MsxValue;
+static UINT64 SpecValue				= HARDWARE_PREFIX_SPECTRUM >> 24;
+static UINT64 MASKSPECTRUM			= 1 << SpecValue;
+static UINT64 MidwayValue			= HARDWARE_PREFIX_MIDWAY >> 24;
+static UINT64 MASKMIDWAY			= 1 << MidwayValue;
+static UINT64 NesValue				= HARDWARE_PREFIX_NES >> 24;
+static UINT64 MASKNES				= 1 << NesValue;
 
-static int MASKALL				= MASKCAPMISC | MASKCAVE | MASKCPS | MASKCPS2 | MASKCPS3 | MASKDATAEAST | MASKGALAXIAN | MASKIREM | MASKKANEKO | MASKKONAMI | MASKNEOGEO | MASKPACMAN | MASKPGM | MASKPSIKYO | MASKSEGA | MASKSETA | MASKTAITO | MASKTECHNOS | MASKTOAPLAN | MASKMISCPRE90S | MASKMISCPOST90S | MASKMEGADRIVE | MASKPCENGINE | MASKSMS | MASKGG | MASKSG1000 | MASKCOLECO | MASKMSX | MASKSPECTRUM | MASKMIDWAY | MASKNES | MASKFDS;
+static UINT64 FdsValue				= (UINT64)HARDWARE_PREFIX_FDS >> 24;
+static UINT64 MASKFDS				= (UINT64)1 << FdsValue;            // 1 << 0x1f - needs casting or.. bonkers!
+
+// this is where things start going above the 32bit-zone..
+static UINT64 NgpValue				= (UINT64)HARDWARE_PREFIX_NGP >> 24;
+static UINT64 MASKNGP				= (UINT64)1 << NgpValue;
+
+static UINT64 MASKALL				= ((UINT64)MASKCAPMISC | MASKCAVE | MASKCPS | MASKCPS2 | MASKCPS3 | MASKDATAEAST | MASKGALAXIAN | MASKIREM | MASKKANEKO | MASKKONAMI | MASKNEOGEO | MASKPACMAN | MASKPGM | MASKPSIKYO | MASKSEGA | MASKSETA | MASKTAITO | MASKTECHNOS | MASKTOAPLAN | MASKMISCPRE90S | MASKMISCPOST90S | MASKMEGADRIVE | MASKPCENGINE | MASKSMS | MASKGG | MASKSG1000 | MASKCOLECO | MASKMSX | MASKSPECTRUM | MASKMIDWAY | MASKNES | MASKFDS | MASKNGP);
 
 #define UNAVAILABLE				(1 << 27)
 #define AVAILABLE				(1 << 28)
@@ -276,15 +284,15 @@ static int MASKALL				= MASKCAPMISC | MASKCAVE | MASKCPS | MASKCPS2 | MASKCPS3 |
 #define MASKBOARDTYPEGENUINE	(1)
 #define MASKFAMILYOTHER			0x10000000
 
-#define MASKALLGENRE			(GBF_HORSHOOT | GBF_VERSHOOT | GBF_SCRFIGHT | GBF_VSFIGHT | GBF_BIOS | GBF_BREAKOUT | GBF_CASINO | GBF_BALLPADDLE | GBF_MAZE | GBF_MINIGAMES | GBF_PINBALL | GBF_PLATFORM | GBF_PUZZLE | GBF_QUIZ | GBF_SPORTSMISC | GBF_SPORTSFOOTBALL | GBF_MISC | GBF_MAHJONG | GBF_RACING | GBF_SHOOT | GBF_ACTION | GBF_RUNGUN | GBF_STRATEGY)
+#define MASKALLGENRE			(GBF_HORSHOOT | GBF_VERSHOOT | GBF_SCRFIGHT | GBF_VSFIGHT | GBF_BIOS | GBF_BREAKOUT | GBF_CASINO | GBF_BALLPADDLE | GBF_MAZE | GBF_MINIGAMES | GBF_PINBALL | GBF_PLATFORM | GBF_PUZZLE | GBF_QUIZ | GBF_SPORTSMISC | GBF_SPORTSFOOTBALL | GBF_MISC | GBF_MAHJONG | GBF_RACING | GBF_SHOOT | GBF_ACTION | GBF_RUNGUN | GBF_STRATEGY | GBF_RPG | GBF_SIM)
 #define MASKALLFAMILY			(MASKFAMILYOTHER | FBF_MSLUG | FBF_SF | FBF_KOF | FBF_DSTLK | FBF_FATFURY | FBF_SAMSHO | FBF_19XX | FBF_SONICWI | FBF_PWRINST | FBF_SONIC | FBF_DONPACHI | FBF_MAHOU)
 #define MASKALLBOARD			(MASKBOARDTYPEGENUINE | BDF_BOOTLEG | BDF_DEMO | BDF_HACK | BDF_HOMEBREW | BDF_PROTOTYPE)
 
 #define MASKCAPGRP				(MASKCAPMISC | MASKCPS | MASKCPS2 | MASKCPS3)
 #define MASKSEGAGRP				(MASKSEGA | MASKSG1000 | MASKSMS | MASKMEGADRIVE | MASKGG)
 
-int nLoadMenuShowY				= 0;
-int nLoadMenuShowX				= 0;
+UINT64 nLoadMenuShowX			= 0; // hardware etc
+int nLoadMenuShowY				= 0; // selector options
 int nLoadMenuBoardTypeFilter	= 0;
 int nLoadMenuGenreFilter		= 0;
 int nLoadMenuFavoritesFilter	= 0;
@@ -562,6 +570,8 @@ static int DoExtraFilters()
 	if ((~nLoadMenuGenreFilter & GBF_ACTION)				&& (BurnDrvGetGenreFlags() & GBF_ACTION))			bGenreOk = 1;
 	if ((~nLoadMenuGenreFilter & GBF_RUNGUN)				&& (BurnDrvGetGenreFlags() & GBF_RUNGUN))			bGenreOk = 1;
 	if ((~nLoadMenuGenreFilter & GBF_STRATEGY)				&& (BurnDrvGetGenreFlags() & GBF_STRATEGY))			bGenreOk = 1;
+	if ((~nLoadMenuGenreFilter & GBF_RPG)					&& (BurnDrvGetGenreFlags() & GBF_RPG))				bGenreOk = 1;
+	if ((~nLoadMenuGenreFilter & GBF_SIM)					&& (BurnDrvGetGenreFlags() & GBF_SIM))				bGenreOk = 1;
 	if (bGenreOk == 0) return 1;
 
 	return 0;
@@ -640,7 +650,7 @@ static int SelListMake()
 
 		if(!gameAv[nBurnDrvActive]) nMissingDrvCount++;
 
-		int nHardware = 1 << (BurnDrvGetHardwareCode() >> 24);
+		UINT64 nHardware = (UINT64)1 << (BurnDrvGetHardwareCode() >> 24);
 		if ((nHardware & MASKALL) && ((nHardware & nLoadMenuShowX) || (nHardware & MASKALL) == 0)) {
 			continue;
 		}
@@ -705,7 +715,7 @@ static int SelListMake()
 
 		if(!gameAv[nBurnDrvActive]) nMissingDrvCount++;
 
-		int nHardware = 1 << (BurnDrvGetHardwareCode() >> 24);
+		UINT64 nHardware = (UINT64)1 << (BurnDrvGetHardwareCode() >> 24);
 		if ((nHardware & MASKALL) && ((nHardware & nLoadMenuShowX) || ((nHardware & MASKALL) == 0))) {
 			continue;
 		}
@@ -1305,6 +1315,8 @@ static void CreateFilters()
 	_TVCreateFiltersA(hGenre		, IDS_GENRE_SPORTSMISC	, hFilterSportsmisc		, nLoadMenuGenreFilter & GBF_SPORTSMISC				);
 	_TVCreateFiltersA(hGenre		, IDS_GENRE_SPORTSFOOTBALL, hFilterSportsfootball, nLoadMenuGenreFilter & GBF_SPORTSFOOTBALL		);
 	_TVCreateFiltersA(hGenre		, IDS_GENRE_STRATEGY	, hFilterStrategy   	, nLoadMenuGenreFilter & GBF_STRATEGY   			);
+	_TVCreateFiltersA(hGenre		, IDS_GENRE_RPG			, hFilterRpg   			, nLoadMenuGenreFilter & GBF_RPG   					);
+	_TVCreateFiltersA(hGenre		, IDS_GENRE_SIM			, hFilterSim   			, nLoadMenuGenreFilter & GBF_SIM   					);
 	_TVCreateFiltersA(hGenre		, IDS_GENRE_BIOS		, hFilterBios			, nLoadMenuGenreFilter & GBF_BIOS					);
 
 	_TVCreateFiltersC(hRoot			, IDS_SEL_HARDWARE		, hHardware				, nLoadMenuShowX & MASKALL					);
@@ -1346,6 +1358,7 @@ static void CreateFilters()
 	_TVCreateFiltersA(hHardware		, IDS_SEL_SPECTRUM		, hFilterSpectrum		, nLoadMenuShowX & MASKSPECTRUM						);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_NES			, hFilterNes			, nLoadMenuShowX & MASKNES							);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_FDS			, hFilterFds			, nLoadMenuShowX & MASKFDS							);
+	_TVCreateFiltersA(hHardware		, IDS_SEL_NGP			, hFilterNgp			, nLoadMenuShowX & MASKNGP							);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_MISCPRE90S	, hFilterMiscPre90s		, nLoadMenuShowX & MASKMISCPRE90S					);
 	_TVCreateFiltersA(hHardware		, IDS_SEL_MISCPOST90S	, hFilterMiscPost90s	, nLoadMenuShowX & MASKMISCPOST90S					);
 
@@ -1361,7 +1374,7 @@ static void CreateFilters()
 	TreeView_SelectSetFirstVisible(hFilterList, hFavorites);
 }
 
-#define ICON_MAXCONSOLES 10
+#define ICON_MAXCONSOLES 11
 
 enum {
 	ICON_MEGADRIVE = 0,
@@ -1373,7 +1386,8 @@ enum {
 	ICON_MSX = 6,
 	ICON_SPECTRUM = 7,
 	ICON_NES = 8,
-	ICON_FDS = 9
+	ICON_FDS = 9,
+	ICON_NGP = 10
 };
 
 static HICON hConsDrvIcon[ICON_MAXCONSOLES];
@@ -1425,6 +1439,9 @@ void LoadDrvIcons()
 
 		_stprintf(szIcon, _T("%sfds_icon.ico"), szAppIconsPath);
 		hConsDrvIcon[ICON_FDS] = (HICON)LoadImage(hAppInst, szIcon, IMAGE_ICON, nIconsSizeXY, nIconsSizeXY, LR_LOADFROMFILE);
+
+		_stprintf(szIcon, _T("%sngp_icon.ico"), szAppIconsPath);
+		hConsDrvIcon[ICON_NGP] = (HICON)LoadImage(hAppInst, szIcon, IMAGE_ICON, nIconsSizeXY, nIconsSizeXY, LR_LOADFROMFILE);
 	}
 
 	unsigned int nOldDrvSel = nBurnDrvActive;
@@ -1445,6 +1462,7 @@ void LoadDrvIcons()
 			 || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SPECTRUM)
 			 || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_NES)
 			 || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_FDS)
+			 || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NGP)
 			)) {
 			continue; // Skip everything but arcade
 		}
@@ -1498,6 +1516,11 @@ void LoadDrvIcons()
 
 		if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_FDS) {
 			hDrvIcon[nDrvIndex] = hConsDrvIcon[ICON_FDS];
+			continue;
+		}
+
+		if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NGP) {
+			hDrvIcon[nDrvIndex] = hConsDrvIcon[ICON_NGP];
 			continue;
 		}
 
@@ -1694,6 +1717,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterSpectrum, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterNes, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterFds, FALSE);
+				_TreeView_SetCheckState(hFilterList, hFilterNgp, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterMidway, FALSE);
 
 				nLoadMenuShowX |= MASKALL;
@@ -1733,9 +1757,10 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterSpectrum, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterNes, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterFds, TRUE);
+				_TreeView_SetCheckState(hFilterList, hFilterNgp, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterMidway, TRUE);
 
-				nLoadMenuShowX &= (0xFFFFFFFF - MASKALL); //0xf8000000; make this dynamic for future hardware additions -dink
+				nLoadMenuShowX &= ~MASKALL; //0xf8000000; make this dynamic for future hardware additions -dink
 			}
 		}
 
@@ -1827,8 +1852,6 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterMegadrive, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterGg, FALSE);
 
-				// this block is also toggled above, which is why the following
-				// line does not make sense ((nLoadMenuShowX & MASKSEGAGRP) == 0)
 				nLoadMenuShowX &= ~MASKSEGAGRP;
 			} else {
 				_TreeView_SetCheckState(hFilterList, hItemChanged, TRUE);
@@ -1853,8 +1876,6 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterCps2, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterCps3, FALSE);
 
-				// this block is also toggled above, which is why the following
-				// line does not make sense ((nLoadMenuShowX & MASKSEGAGRP) == 0)
 				nLoadMenuShowX &= ~MASKCAPGRP;
 			} else {
 				_TreeView_SetCheckState(hFilterList, hItemChanged, TRUE);
@@ -1895,6 +1916,8 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterAction, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterRungun, FALSE);
 				_TreeView_SetCheckState(hFilterList, hFilterStrategy, FALSE);
+				_TreeView_SetCheckState(hFilterList, hFilterRpg, FALSE);
+				_TreeView_SetCheckState(hFilterList, hFilterSim, FALSE);
 
 				nLoadMenuGenreFilter = MASKALLGENRE;
 			} else {
@@ -1923,6 +1946,8 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 				_TreeView_SetCheckState(hFilterList, hFilterAction, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterRungun, TRUE);
 				_TreeView_SetCheckState(hFilterList, hFilterStrategy, TRUE);
+				_TreeView_SetCheckState(hFilterList, hFilterRpg, TRUE);
+				_TreeView_SetCheckState(hFilterList, hFilterSim, TRUE);
 
 				nLoadMenuGenreFilter = 0;
 			}
@@ -1970,6 +1995,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 		if (hItemChanged == hFilterSpectrum)		_ToggleGameListing(nLoadMenuShowX, MASKSPECTRUM);
 		if (hItemChanged == hFilterNes)				_ToggleGameListing(nLoadMenuShowX, MASKNES);
 		if (hItemChanged == hFilterFds)				_ToggleGameListing(nLoadMenuShowX, MASKFDS);
+		if (hItemChanged == hFilterNgp)				_ToggleGameListing(nLoadMenuShowX, MASKNGP);
 		if (hItemChanged == hFilterMidway)			_ToggleGameListing(nLoadMenuShowX, MASKMIDWAY);
 
 		if (hItemChanged == hFilterBootleg)			_ToggleGameListing(nLoadMenuBoardTypeFilter, BDF_BOOTLEG);
@@ -2016,6 +2042,8 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 		if (hItemChanged == hFilterAction)			_ToggleGameListing(nLoadMenuGenreFilter, GBF_ACTION);
 		if (hItemChanged == hFilterRungun)			_ToggleGameListing(nLoadMenuGenreFilter, GBF_RUNGUN);
 		if (hItemChanged == hFilterStrategy)		_ToggleGameListing(nLoadMenuGenreFilter, GBF_STRATEGY);
+		if (hItemChanged == hFilterRpg)				_ToggleGameListing(nLoadMenuGenreFilter, GBF_RPG);
+		if (hItemChanged == hFilterSim)				_ToggleGameListing(nLoadMenuGenreFilter, GBF_SIM);
 
 		RebuildEverything();
 	}

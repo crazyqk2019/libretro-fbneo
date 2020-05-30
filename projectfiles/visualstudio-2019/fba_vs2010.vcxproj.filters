@@ -1018,6 +1018,15 @@
     <ClInclude Include="..\..\src\burn\devices\i4x00.h">
       <Filter>Burn\devices</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\burn\devices\k1ge.h">
+      <Filter>Burn\devices</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\burn\snd\t6w28.h">
+      <Filter>Burn\snd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cpu\tlcs900\tlcs900.h">
+      <Filter>cpus\tlcs900</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\burn\burn.cpp">
@@ -4184,14 +4193,32 @@
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_eolith.cpp">
       <Filter>Burn\drv\pst90s</Filter>
     </ClCompile>
-	<ClCompile Include="..\..\src\burn\drv\pst90s\d_eolith16.cpp">
+    <ClCompile Include="..\..\src\burn\drv\pst90s\d_eolith16.cpp">
       <Filter>Burn\drv\pst90s</Filter>
     </ClCompile>
-	<ClCompile Include="..\..\src\burn\drv\pst90s\d_f-32.cpp">
+    <ClCompile Include="..\..\src\burn\drv\pst90s\d_f-32.cpp">
       <Filter>Burn\drv\pst90s</Filter>
     </ClCompile>
-	<ClCompile Include="..\..\src\burn\drv\pst90s\d_goori.cpp">
+    <ClCompile Include="..\..\src\burn\drv\pst90s\d_goori.cpp">
       <Filter>Burn\drv\pst90s</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\burn\drv\pst90s\d_pasha2.cpp">
+      <Filter>Burn\drv\pst90s</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\burn\drv\pst90s\d_shangha3.cpp">
+      <Filter>Burn\drv\pst90s</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\burn\devices\k1ge.cpp">
+      <Filter>Burn\devices</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\burn\snd\t6w28.cpp">
+      <Filter>Burn\snd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\burn\drv\pst90s\d_ngp.cpp">
+      <Filter>Burn\drv\pst90s</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cpu\tlcs900\tlcs900.cpp">
+      <Filter>cpus\tlcs900</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -4431,6 +4458,9 @@
     </Filter>
     <Filter Include="cpus\e132xs">
       <UniqueIdentifier>{9a8ac64b-becf-4203-b8a7-345308b6514e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="cpus\tlcs900">
+      <UniqueIdentifier>{f99a460c-59bd-4aa3-9fcd-4dabb2165835}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

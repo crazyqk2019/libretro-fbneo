@@ -139,6 +139,7 @@ void retro_set_environment(retro_environment_t cb)
 		{ "Sega Master System", "sms", subsystem_rom, 1, RETRO_GAME_TYPE_SMS },
 		{ "Sega Megadrive", "md", subsystem_rom, 1, RETRO_GAME_TYPE_MD },
 		{ "Sega SG-1000", "sg1k", subsystem_rom, 1, RETRO_GAME_TYPE_SG1K },
+		{ "SNK Neo Geo Pocket", "ngp", subsystem_rom, 1, RETRO_GAME_TYPE_NGP },
 		{ "ZX Spectrum", "spec", subsystem_rom, 1, RETRO_GAME_TYPE_SPEC },
 		{ "Neogeo CD", "neocd", subsystem_iso, 1, RETRO_GAME_TYPE_NEOCD },
 		{ NULL },
@@ -460,9 +461,11 @@ static int find_rom_by_name(char *name, const ZipEntry *list, unsigned elems)
 	unsigned i = 0;
 	for (i = 0; i < elems; i++)
 	{
-		if( strcmp(list[i].szName, name) == 0 )
-		{
-			return i;
+		if (list[i].szName) {
+			if( strcmp(list[i].szName, name) == 0 )
+			{
+				return i;
+			}
 		}
 	}
 
@@ -478,9 +481,11 @@ static int find_rom_by_crc(uint32_t crc, const ZipEntry *list, unsigned elems)
 	unsigned i = 0;
 	for (i = 0; i < elems; i++)
 	{
-		if (list[i].nCrc == crc)
-		{
-			return i;
+		if (list[i].szName) {
+			if (list[i].nCrc == crc)
+			{
+				return i;
+			}
 		}
 	}
 
@@ -797,6 +802,9 @@ int CreateAllDatfiles()
 
 	snprintf(szFilename, sizeof(szFilename), "%s%c%s (%s).dat", "dats", path_default_slash_c(), APP_TITLE, "ClrMame Pro XML, Neogeo only");
 	create_datfile(szFilename, DAT_NEOGEO_ONLY);
+
+	snprintf(szFilename, sizeof(szFilename), "%s%c%s (%s).dat", "dats", path_default_slash_c(), APP_TITLE, "ClrMame Pro XML, NeoGeo Pocket Games only");
+	create_datfile(szFilename, DAT_NGP_ONLY);
 
 	return nRet;
 }
@@ -1205,16 +1213,18 @@ static bool retro_load_game_common()
 #ifdef USE_CYCLONE
 		SetSekCpuCore();
 #endif
+
 		if (!open_archive()) {
-			log_cb(RETRO_LOG_ERROR, "[FBNEO] Can't launch this game, some files are missing.\n");
+			log_cb(RETRO_LOG_ERROR, "[FBNEO] Missing files, aborting.\n");
 			return false;
 		}
+		log_cb(RETRO_LOG_INFO, "[FBNEO] No missing files, proceeding\n");
 
 		// Announcing to fbneo which samplerate we want
-		nBurnSoundRate = g_audio_samplerate;
-
 		// Some game drivers won't initialize with an undefined nBurnSoundLen
+		nBurnSoundRate = g_audio_samplerate;
 		init_audio_buffer(nBurnSoundRate, 6000);
+		log_cb(RETRO_LOG_INFO, "[FBNEO] Samplerate set to %d\n", nBurnSoundRate);
 
 		// Start CD reader emulation if needed
 		if (nGameType == RETRO_GAME_TYPE_NEOCD) {
@@ -1225,19 +1235,22 @@ static bool retro_load_game_common()
 
 		// Apply dipswitches
 		apply_dipswitch_from_variables();
+		log_cb(RETRO_LOG_INFO, "[FBNEO] Applied dipswitches from core options\n");
 
 		// Initialize game driver
 		BurnDrvInit();
+		log_cb(RETRO_LOG_INFO, "[FBNEO] Initializing driver for %s\n", g_driver_name);
 
 		// Now we know real game fps, let's initialize sound buffer again
 		init_audio_buffer(nBurnSoundRate, nBurnFPS);
+		log_cb(RETRO_LOG_INFO, "[FBNEO] Adjusted audio buffer to match driver's refresh rate (%f Hz)\n", (nBurnFPS/100.0f));
 
 		// Get MainRam for RetroAchievements support
 		INT32 nMin = 0;
 		BurnAcb = StateGetMainRamAcb;
 		BurnAreaScan(ACB_FULLSCAN, &nMin);
 		if (bMainRamFound) {
-			log_cb(RETRO_LOG_INFO, "[Cheevos] System RAM set to %p %zu\n", MainRamData, MainRamSize);
+			log_cb(RETRO_LOG_INFO, "[Cheevos] System RAM set to %p, size is %zu\n", MainRamData, MainRamSize);
 		}
 
 		// Loading minimal savestate (not exactly sure why it is needed)
@@ -1260,7 +1273,7 @@ static bool retro_load_game_common()
 			pVidImage = (UINT8*)malloc(nGameWidth * nGameHeight * nBurnBpp);
 
 		// Initialization done
-		log_cb(RETRO_LOG_INFO, "Driver %s was successfully started : game's full name is %s\n", g_driver_name, BurnDrvGetTextA(DRV_FULLNAME));
+		log_cb(RETRO_LOG_INFO, "[FBNEO] Driver %s was successfully started : game's full name is %s\n", g_driver_name, BurnDrvGetTextA(DRV_FULLNAME));
 		driver_inited = true;
 
 		return true;
@@ -1326,6 +1339,10 @@ bool retro_load_game(const struct retro_game_info *info)
 			log_cb(RETRO_LOG_INFO, "[FBNEO] subsystem fds identified from parent folder\n");
 			prefix = "fds_";
 		}
+		if(strcmp(g_rom_parent_dir, "ngp")==0) {
+			log_cb(RETRO_LOG_INFO, "[FBNEO] subsystem ngp identified from parent folder\n");
+			prefix = "ngp_";
+		}
 		if(strcmp(g_rom_parent_dir, "neocd")==0) {
 			log_cb(RETRO_LOG_INFO, "[FBNEO] subsystem neocd identified from parent folder\n");
 			prefix = "";
@@ -1386,6 +1403,9 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 			break;
 		case RETRO_GAME_TYPE_FDS:
 			prefix = "fds_";
+			break;
+		case RETRO_GAME_TYPE_NGP:
+			prefix = "ngp_";
 			break;
 		case RETRO_GAME_TYPE_NEOCD:
 			prefix = "";
