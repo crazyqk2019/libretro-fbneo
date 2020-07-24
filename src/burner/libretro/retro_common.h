@@ -78,6 +78,21 @@ struct dipswitch_core_option
 	std::vector<dipswitch_core_option_value> values;
 };
 
+struct cheat_core_option_value
+{
+	int nValue;
+	std::string friendly_name;
+};
+
+struct cheat_core_option
+{
+	int num;
+	std::string default_value;
+	std::string option_name;
+	std::string friendly_name;
+	std::vector<cheat_core_option_value> values;
+};
+
 enum neo_geo_modes
 {
 	NEO_GEO_MODE_MVS = 0,
@@ -104,15 +119,16 @@ extern RomBiosInfo *available_mvs_bios;
 extern RomBiosInfo *available_aes_bios;
 extern RomBiosInfo *available_uni_bios;
 extern std::vector<dipswitch_core_option> dipswitch_core_options;
+extern std::vector<cheat_core_option> cheat_core_options;
 extern struct GameInp *pgi_reset;
 extern struct GameInp *pgi_diag;
 extern bool is_neogeo_game;
 extern bool allow_neogeo_mode;
 extern bool core_aspect_par;
-extern bool bLoadSubsystemByParent;
 extern bool bAllowDepth32;
 extern UINT32 nVerticalMode;
 extern UINT32 nFrameskip;
+extern UINT32 nMemcardMode;
 extern UINT8 NeoSystem;
 extern INT32 g_audio_samplerate;
 extern UINT8 *diag_input;

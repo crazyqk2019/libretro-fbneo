@@ -24,6 +24,7 @@ You can emulate consoles (with specific romsets, dats are also in the [dats](/da
 * Sega Master System : `sms`
 * Sega Megadrive : `md`
 * Sega SG-1000 : `sg1k`
+* SNK Neo-Geo Pocket : `ngp`
 * ZX Spectrum : `spec`
 
 It's also possible to use folder's name for detection (this second method was added because some devices aren't compatible with subsystems) :
@@ -38,6 +39,7 @@ It's also possible to use folder's name for detection (this second method was ad
 * Sega Master System : `sms`
 * Sega Megadrive : `megadriv`
 * Sega SG-1000 : `sg1000`
+* SNK Neo-Geo Pocket : `ngp`
 * ZX Spectrum : `spectrum`
 
 ## Samples
@@ -67,8 +69,11 @@ The following "device type" also exist, but they won't be compatible with every 
 We don't provide links for roms. Google is your friend.
 
 ### Game XXX is not launching, why ?
-It is either not supported or you have a bad rom. Build a valid romset with clrmamepro as said above.
+It is either not supported or you have a bad rom, your logs will give you more details. Build a valid romset with clrmamepro as said above.
 There is also a few games marked as not working, try one of their clones.
+
+### I patched game XXX and can't run it, why ?
+Because it's considered a bad rom since the crcs won't match, however there is a method to use a patched romset, if you put the patched version of the romset into `SYSTEM_DIRECTORY/fbneo/patched` it will work (NB: you can strip it of any file that don't differ from non-patched romset if you want)
 
 ### Game XXX has graphical glitches, why ?
 Write a report with details on the issue and your platform.
@@ -88,18 +93,18 @@ We won't accept requests for "making the core faster", as far as we are concerne
 Most likely for the same reason as above.
 
 ### Game XXX runs faster in MAME2003/MAME2010, why ?
-This is not MAME, we are generally using a more "up-to-date" code. 
-Overall, FB Alpha is slower than old MAME version but more accurate and less buggy.
-This libretro port also support various features which are usually buggy or absent in MAME cores (netplay, rewind, retroachievements, ...). It takes some resources.
+Overall, FBNeo is slower than old MAME version because it's more accurate (meaning less bugs).
+This libretro port also support various features which are usually buggy or absent in MAME cores (readahead, netplay, rewind, retroachievements, ...). It might use additional resources.
 
-### Cheat code doesn't work, why ?
-There should be partial support through the new API relying on main ram exposition.
+### How do i use cheat code ?
+From a libretro point of view, there should be partial support through the API relying on main ram exposition. 
+Otherwise if you put native FBNeo cheat .ini files into `SYSTEM_DIRECTORY/fbneo/cheats`, they will be translated to core options (NB : MAME/Nebula formats don't work yet).
 
 ### Neogeo CD doesn't work, why ?
 There are several things to know :
 * You need a copy of neocdz.zip and neogeo.zip in your libretro system directory
 * You need to add `--subsystem neocd` to the command line, or to place your games in a `neocd` folder
-* Supported format are ccd/sub/img (trurip), and single file MODE1/2352 bin/cue (use utilities like "CDmage" to convert your iso if needed), **they must not be compressed**
+* Supported format are ccd/sub/img (trurip), and single file MODE1/2352 cue/bin (use utilities like "CDmage" to convert your iso if needed), **they must not be compressed**
 
 You can convert your unsupported isos by following this tutorial :
 * Get [CDMage 1.02.1](https://www.videohelp.com/software/CDMage) (freeware & no ads)
@@ -109,13 +114,14 @@ You can convert your unsupported isos by following this tutorial :
 * Press OK, wait for the process to finish (a few seconds on my computer), and it’s done !
 
 ### Killer instinct won't work, why ?
-There are several things to know :
-* It is only running at playable speed on x86_64 (other arch will basically need a cpu at 4Ghz because they lack a mips3 dynarec), and the core needs to be built like this to enable this dynarec : `make -j5 -C src/burner/libretro USE_X64_DRC=1`
-* If your rom is at `ROM_DIRECTORY/kinst.zip`, you'll need the uncompressed disc image at `ROM_DIRECTORY/kinst/kinst.img`
-* To get the uncompressed disc image, you'll need to use the chdman tool from MAME on the chd from mame, the command looks like this : `chdman extracthd -i kinst.chd -o kinst.img`
+That driver was disabled for now, it doesn't meet our quality criteria.
+~~There are several things to know :~~
+* ~~It is only running at playable speed on x86_64 (other arch will basically need a cpu at 4Ghz because they lack a mips3 dynarec), and the core needs to be built like this to enable this dynarec : `make -j5 -C src/burner/libretro USE_X64_DRC=1`~~
+* ~~If your rom is at `ROM_DIRECTORY/kinst.zip`, you'll need the uncompressed disc image at `ROM_DIRECTORY/kinst/kinst.img`~~
+* ~~To get the uncompressed disc image, you'll need to use the chdman tool from MAME on the chd from mame, the command looks like this : `chdman extracthd -i kinst.chd -o kinst.img`~~
 
 ### Hiscore won't work, why ?
 Having hiscore.dat and the core option enabled doesn't guarantee hiscores will work for a specific game, sometimes a driver will be missing the necessary code. You can request support in the issue tracker as long as the request is reasonable (i.e avoid making a list of several dozens/hundreds of games)
 
 ### On my android device, game XXX is closing my app at launch, why ?
-Android OS has one of the worst features ever created : it kills an app if it considers it's taking too long to display something, no question asked ! Furthermore 2 devices will have 2 different time limit (how the time limit is calculated is a mystery). There is basically nothing we can do about this : some android devices won't be able to run the bigger romsets because loading the zip into memory is taking too long for them.
+Android OS has one of the worst features ever created : it kills an app if it considers it's taking too long to display something, no question asked ! Furthermore 2 devices will have 2 different time limit (how the time limit is calculated is a mystery). That's called ANR and that's something you can supposedly workaround by enabling some option about ANR (Application Not Responding) inside Android's hidden developper menu. Some people also reported that those ANR issues would disappear after changing from a controller to another.

@@ -45,6 +45,7 @@ static UINT32 *RamCRam;
 static UINT32 *RamSS;
 
 static UINT32 *RamVReg;
+static UINT32 *RamVRegBuf;
 
 static UINT8 *RamC000;
 static UINT8 *RamC000_D;
@@ -61,6 +62,7 @@ UINT32 cps3_key1, cps3_key2, cps3_isSpecial;
 UINT32 cps3_bios_test_hack, cps3_game_test_hack;
 UINT32 cps3_speedup_ram_address, cps3_speedup_code_address;
 UINT8 cps3_dip;
+UINT8 cps3_fake_dip;
 UINT32 cps3_region_address, cps3_ncd_address;
 
 static UINT32 cps3_data_rom_size;
@@ -86,8 +88,11 @@ static UINT32 paldma_length = 0;
 static UINT32 chardma_source = 0;
 static UINT32 chardma_table_address = 0;
 
+static INT32 dma_timer = 0;
+static UINT16 dma_status = 0;
+
 static UINT16 spritelist_dma = 0;
-static UINT16 prev;
+static UINT16 spritelist_dma_prev = 0;
 
 static INT32 cps3_gfx_width, cps3_gfx_height;
 static INT32 cps3_gfx_max_x, cps3_gfx_max_y;
@@ -509,6 +514,7 @@ static INT32 MemIndex()
 	RamSS		= (UINT32 *) Next; Next += 0x0004000 * sizeof(UINT32);
 	
 	RamVReg		= (UINT32 *) Next; Next += 0x0000040 * sizeof(UINT32);
+	RamVRegBuf  = (UINT32 *) Next; Next += 0x0000040 * sizeof(UINT32);
 	
 	EEPROM		= (UINT16 *) Next; Next += 0x0000100 * sizeof(UINT16);
 	
@@ -556,9 +562,11 @@ UINT16 __fastcall cps3ReadWord(UINT32 addr)
 	case 0x040c0006:
 		return 0;
 #endif
-	// cps3_vbl_r
+
 	case 0x040c000c:
-	case 0x040c000e:
+		return dma_status;
+
+	case 0x040c000e: // ??
 		return 0;
 
 	case 0x05000000: return ~Cps3Input[1];
@@ -656,9 +664,9 @@ void __fastcall cps3WriteWord(UINT32 addr, UINT16 data)
 
 	case 0x040c0080: break;
 	case 0x040c0082:
-		prev = spritelist_dma;
+		spritelist_dma_prev = spritelist_dma;
 		spritelist_dma = data;
-		if ((spritelist_dma & 8) && !(prev & 8)) // 0->1
+		if ((spritelist_dma & 9) == 8 && (spritelist_dma_prev & 9) == 9) // 0->1
 		{
 			for (int i = 0; i < 0x2000/4; i += 4)
 			{
@@ -670,6 +678,7 @@ void __fastcall cps3WriteWord(UINT32 addr, UINT16 data)
 				UINT32 length = (dat & 0x01ff0000) >> 16;
 				memcpy(SprList + offs, RamSpr + offs, length*4*sizeof(UINT32)); // copy sublist
 			}
+			memcpy(RamVRegBuf, RamVReg, 0x40 * sizeof(UINT32));
 		}
 		break;
 
@@ -739,7 +748,10 @@ void __fastcall cps3WriteWord(UINT32 addr, UINT16 data)
 #endif
 				Cps3CurPal[(paldma_dest + i) ] = BurnHighCol(r, g, b, 0);
 			}
-			Sh2SetIRQLine(10, CPU_IRQSTATUS_ACK);
+
+			dma_status |= 4;
+			dma_timer = ((25000000 / 1000000) * 100);
+			Sh2StopRun();
 		}
 		break;
 	
@@ -1095,7 +1107,7 @@ static INT32 Cps3Reset()
 			Sh2SetVBR(0x06000000);
 		}
 	}
-	
+
 	if (cps3_dip & 0x80) {
 		EEPROM[0x11] = 0x100 + (EEPROM[0x11] & 0xff);
 		EEPROM[0x29] = 0x100 + (EEPROM[0x29] & 0xff);
@@ -1105,9 +1117,14 @@ static INT32 Cps3Reset()
 	}
 
 	cps3_current_eeprom_read = 0;
-	spritelist_dma = 0;
 	cps3SndReset();
 	cps3_reset = 0;
+
+	dma_status = 0;
+	spritelist_dma = 0;
+	spritelist_dma_prev = 0;
+
+	dma_timer = -1;
 
 	HiscoreReset();
 
@@ -1816,38 +1833,40 @@ INT32 DrvCps3Draw()
 			RamScreen[i] = 0x20000;
 		}
 	}
-	
+
+	UINT32 *SprSrc = (cps3_fake_dip & 1 ? RamSpr : SprList);
+
 	// Draw Sprites
 	{
 		for (INT32 i=0x00000/4;i<0x2000/4;i+=4) {
 
-			if (SprList[i+0]&0x80000000) break;
+			if (SprSrc[i+0]&0x80000000) break;
 
-			INT32 gscroll		= (SprList[i+0]&0x70000000)>>28;
-			INT32 length		= (SprList[i+0]&0x01ff0000)>>14; // how many entries in the sprite table
-			UINT32 start		= (SprList[i+0]&0x00007ff0)>>4;
+			INT32 gscroll		= (SprSrc[i+0]&0x70000000)>>28;
+			INT32 length		= (SprSrc[i+0]&0x01ff0000)>>14; // how many entries in the sprite table
+			UINT32 start		= (SprSrc[i+0]&0x00007ff0)>>4;
 
-			INT32 xpos			= (SprList[i+1]&0x03ff0000)>>16;
-			INT32 ypos			= (SprList[i+1]&0x000003ff)>>0;
+			INT32 xpos			= (SprSrc[i+1]&0x03ff0000)>>16;
+			INT32 ypos			= (SprSrc[i+1]&0x000003ff)>>0;
 
-			INT32 whichbpp		= (SprList[i+2]&0x40000000)>>30; // not 100% sure if this is right, jojo title / characters
-			INT32 whichpal		= (SprList[i+2]&0x20000000)>>29;
-			INT32 global_xflip	= (SprList[i+2]&0x10000000)>>28;
-			INT32 global_yflip	= (SprList[i+2]&0x08000000)>>27;
-			INT32 global_alpha	= (SprList[i+2]&0x04000000)>>26; // alpha / shadow? set on sfiii2 shadows, and big black image in jojo intro
-			INT32 global_bpp	= (SprList[i+2]&0x02000000)>>25;
-			INT32 global_pal	= (SprList[i+2]&0x01ff0000)>>16;
+			INT32 whichbpp		= (SprSrc[i+2]&0x40000000)>>30; // not 100% sure if this is right, jojo title / characters
+			INT32 whichpal		= (SprSrc[i+2]&0x20000000)>>29;
+			INT32 global_xflip	= (SprSrc[i+2]&0x10000000)>>28;
+			INT32 global_yflip	= (SprSrc[i+2]&0x08000000)>>27;
+			INT32 global_alpha	= (SprSrc[i+2]&0x04000000)>>26; // alpha / shadow? set on sfiii2 shadows, and big black image in jojo intro
+			INT32 global_bpp	= (SprSrc[i+2]&0x02000000)>>25;
+			INT32 global_pal	= (SprSrc[i+2]&0x01ff0000)>>16;
 
-			INT32 gscrollx		= (RamVReg[gscroll]&0x03ff0000)>>16;
-			INT32 gscrolly		= (RamVReg[gscroll]&0x000003ff)>>0;
+			INT32 gscrollx		= (RamVRegBuf[gscroll]&0x03ff0000)>>16;
+			INT32 gscrolly		= (RamVRegBuf[gscroll]&0x000003ff)>>0;
 			
 			start = (start * 0x100) >> 2;
 		
 			for (INT32 j=0; j<length; j+=4) {
 				
-				UINT32 value1 = (SprList[start+j+0]);
-				UINT32 value2 = (SprList[start+j+1]);
-				UINT32 value3 = (SprList[start+j+2]);
+				UINT32 value1 = (SprSrc[start+j+0]);
+				UINT32 value2 = (SprSrc[start+j+1]);
+				UINT32 value3 = (SprSrc[start+j+2]);
 
 				INT32 tilestable[4] = { 8,1,2,4 };
 
@@ -2060,18 +2079,45 @@ INT32 cps3Frame()
 		Cps3Input[3] |= (Cps3But3[i] & 1) << i;
 	}
 
+	// Hack to press all three attack buttons with one button
+	if (strncmp(BurnDrvGetTextA(DRV_NAME), "jojo", 4) == 0) {
+		if (Cps3Input[3] & (1 << 2)) { // p1 'all attacks' button
+			Cps3Input[3] &= ~(1 << 2); // clear 'all attacks' button
+			Cps3Input[1] |= (1 << 4) | (1 << 5) | (1 << 6); // press Weak, Medium, and Strong attack buttons
+		}
+		
+		if (Cps3Input[3] & (1 << 5)) { // p2 'all attacks' button
+			Cps3Input[3] &= ~(1 << 5); // clear 'all attacks' button
+			Cps3Input[1] |= (1 << 12) | (1 << 13) | (1 << 14); // press Weak, Medium, and Strong attack buttons
+		}
+	}	
+
 	// Clear Opposites
 	Cps3ClearOpposites(&Cps3Input[0]);
 
-	for (INT32 i=0; i<4; i++) {
+	Sh2NewFrame();
 
-		Sh2Run(6250000 * 4 / 60 / 4);
-		
+	INT32 nInterleave = 4;
+	INT32 nCyclesTotal[1] = { 25000000 / 60 };
+	INT32 nCyclesDone[1] = { 0 };
+
+	for (INT32 i = 0; i < nInterleave; i++)
+	{
+		CPU_RUN_SYNCINT(0, Sh2);
+
 		if (cps_int10_cnt >= 2) {
 			cps_int10_cnt = 0;
 			Sh2SetIRQLine(10, CPU_IRQSTATUS_ACK);
 		} else cps_int10_cnt++;
 
+		if (dma_timer > 0)
+		{
+			nCyclesDone[0] += Sh2Run(dma_timer);
+			dma_timer = -1;
+			dma_status &= ~6;
+			Sh2SetIRQLine(10, CPU_IRQSTATUS_ACK);
+			CPU_RUN_SYNCINT(0, Sh2); // finish line
+		}
 	}
 	Sh2SetIRQLine(12, CPU_IRQSTATUS_ACK);
 
@@ -2192,7 +2238,11 @@ INT32 cps3Scan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(chardma_table_address);
 
 		SCAN_VAR(spritelist_dma);
-		
+		SCAN_VAR(spritelist_dma_prev);
+
+		SCAN_VAR(dma_status);
+		SCAN_VAR(dma_timer);
+
 		//SCAN_VAR(main_flash);
 		
 		//SCAN_VAR(last_normal_byte);

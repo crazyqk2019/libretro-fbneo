@@ -24,6 +24,7 @@ INT32 nSekActive = -1;								// The cpu which is currently being emulated
 INT32 nSekCyclesTotal, nSekCyclesScanline, nSekCyclesSegment, nSekCyclesDone, nSekCyclesToDo;
 
 INT32 nSekCPUType[SEK_MAX], nSekCycles[SEK_MAX], nSekIRQPending[SEK_MAX], nSekRESETLine[SEK_MAX], nSekHALT[SEK_MAX];
+INT32 nSekCyclesToDoCache[SEK_MAX], nSekm68k_ICount[SEK_MAX];
 
 static UINT32 nSekAddressMask[SEK_MAX], nSekAddressMaskActive;
 
@@ -143,8 +144,7 @@ DEFLONGHANDLERS(0)
 #define FIND_F(x) pSekExt->MemMap[(x >> SEK_SHIFT) + SEK_WADD * 2]
 
 // Normal memory access functions
-extern "C" {
-unsigned int m68k_read8(unsigned int a)
+inline static UINT8 ReadByte(UINT32 a)
 {
 	UINT8* pr;
 
@@ -160,7 +160,7 @@ unsigned int m68k_read8(unsigned int a)
 	return pSekExt->ReadByte[(uintptr_t)pr](a);
 }
 
-unsigned int m68k_fetch8(unsigned int a)
+inline static UINT8 FetchByte(UINT32 a)
 {
 	UINT8* pr;
 
@@ -176,7 +176,7 @@ unsigned int m68k_fetch8(unsigned int a)
 	return pSekExt->ReadByte[(uintptr_t)pr](a);
 }
 
-void m68k_write8(unsigned int a, unsigned char d)
+inline static void WriteByte(UINT32 a, UINT8 d)
 {
 	UINT8* pr;
 
@@ -208,7 +208,7 @@ inline static void WriteByteROM(UINT32 a, UINT8 d)
 	pSekExt->WriteByte[(uintptr_t)pr](a, d);
 }
 
-unsigned int m68k_read16(unsigned int a)
+inline static UINT16 ReadWord(UINT32 a)
 {
 	UINT8* pr;
 
@@ -221,17 +221,18 @@ unsigned int m68k_read16(unsigned int a)
 	{
 		if (a & 1)
 		{
-			return BURN_ENDIAN_SWAP_INT16((m68k_read8(a + 0) * 256) + m68k_read8(a + 1));
+			return BURN_ENDIAN_SWAP_INT16((ReadByte(a + 0) * 256) + ReadByte(a + 1));
 		}
 		else
 		{
 			return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(pr + (a & SEK_PAGEM))));
 		}
 	}
+
 	return pSekExt->ReadWord[(uintptr_t)pr](a);
 }
 
-unsigned int m68k_fetch16(unsigned int a)
+inline static UINT16 FetchWord(UINT32 a)
 {
 	UINT8* pr;
 
@@ -243,10 +244,11 @@ unsigned int m68k_fetch16(unsigned int a)
 	if ((uintptr_t)pr >= SEK_MAXHANDLER) {
 		return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(pr + (a & SEK_PAGEM))));
 	}
+
 	return pSekExt->ReadWord[(uintptr_t)pr](a);
 }
 
-void m68k_write16(unsigned int a, unsigned short d)
+inline static void WriteWord(UINT32 a, UINT16 d)
 {
 	UINT8* pr;
 
@@ -263,8 +265,8 @@ void m68k_write16(unsigned int a, unsigned short d)
 
 			d = BURN_ENDIAN_SWAP_INT16(d);
 
-			m68k_write8(a + 0, d / 0x100);
-			m68k_write8(a + 1, d);
+			WriteByte(a + 0, d / 0x100);
+			WriteByte(a + 1, d);
 
 			return;
 		}
@@ -292,7 +294,10 @@ inline static void WriteWordROM(UINT32 a, UINT16 d)
 	pSekExt->WriteWord[(uintptr_t)pr](a, d);
 }
 
-unsigned int m68k_read32(unsigned int a)
+// be [3210] -> (r >> 16) | (r << 16) -> [1032] -> UINT32(le) = -> [0123]
+// le [0123]
+
+inline static UINT32 ReadLong(UINT32 a)
 {
 	UINT8* pr;
 
@@ -307,10 +312,10 @@ unsigned int m68k_read32(unsigned int a)
 
 		if (a & 1)
 		{
-			r  = m68k_read8((a + 0)) * 0x1000000;
-			r += m68k_read8((a + 1)) * 0x10000;
-			r += m68k_read8((a + 2)) * 0x100;
-			r += m68k_read8((a + 3));
+			r  = ReadByte((a + 0)) * 0x1000000;
+			r += ReadByte((a + 1)) * 0x10000;
+			r += ReadByte((a + 2)) * 0x100;
+			r += ReadByte((a + 3));
 
 			return BURN_ENDIAN_SWAP_INT32(r);
 		}
@@ -326,7 +331,7 @@ unsigned int m68k_read32(unsigned int a)
 	return pSekExt->ReadLong[(uintptr_t)pr](a);
 }
 
-unsigned int m68k_fetch32(unsigned int a)
+inline static UINT32 FetchLong(UINT32 a)
 {
 	UINT8* pr;
 
@@ -343,7 +348,7 @@ unsigned int m68k_fetch32(unsigned int a)
 	return pSekExt->ReadLong[(uintptr_t)pr](a);
 }
 
-void m68k_write32(unsigned int a, unsigned int d)
+inline static void WriteLong(UINT32 a, UINT32 d)
 {
 	UINT8* pr;
 
@@ -360,10 +365,10 @@ void m68k_write32(unsigned int a, unsigned int d)
 
 			d = BURN_ENDIAN_SWAP_INT32(d);
 
-			m68k_write8((a + 0), d / 0x1000000);
-			m68k_write8((a + 1), d / 0x10000);
-			m68k_write8((a + 2), d / 0x100);
-			m68k_write8((a + 3), d);
+			WriteByte((a + 0), d / 0x1000000);
+			WriteByte((a + 1), d / 0x10000);
+			WriteByte((a + 2), d / 0x100);
+			WriteByte((a + 3), d);
 
 			return;
 		}
@@ -392,38 +397,54 @@ inline static void WriteLongROM(UINT32 a, UINT32 d)
 	}
 	pSekExt->WriteLong[(uintptr_t)pr](a, d);
 }
+
+// Normal memory access functions
+#ifdef EMU_C68K
+extern "C" {
+UINT32 __fastcall m68k_read8(UINT32 a) { return (UINT32)ReadByte(a); }
+UINT32 __fastcall m68k_read16(UINT32 a) { return (UINT32)ReadWord(a); }
+UINT32 __fastcall m68k_read32(UINT32 a) { return               ReadLong(a); }
+
+UINT32 __fastcall m68k_fetch8(UINT32 a) { return (UINT32)FetchByte(a); }
+UINT32 __fastcall m68k_fetch16(UINT32 a) { return (UINT32)FetchWord(a); }
+UINT32 __fastcall m68k_fetch32(UINT32 a) { return               FetchLong(a); }
+
+void __fastcall m68k_write8(UINT32 a, UINT32 d) { WriteByte(a, d); }
+void __fastcall m68k_write16(UINT32 a, UINT32 d) { WriteWord(a, d); }
+void __fastcall m68k_write32(UINT32 a, UINT32 d) { WriteLong(a, d); }
 }
+#endif
 
 #ifdef EMU_M68K
 extern "C" {
-UINT32 __fastcall M68KReadByte(UINT32 a) { return (UINT32)m68k_read8(a); }
-UINT32 __fastcall M68KReadWord(UINT32 a) { return (UINT32)m68k_read16(a); }
-UINT32 __fastcall M68KReadLong(UINT32 a) { return m68k_read32(a); }
+UINT32 __fastcall M68KReadByte(UINT32 a) { return (UINT32)ReadByte(a); }
+UINT32 __fastcall M68KReadWord(UINT32 a) { return (UINT32)ReadWord(a); }
+UINT32 __fastcall M68KReadLong(UINT32 a) { return               ReadLong(a); }
 
-UINT32 __fastcall M68KFetchByte(UINT32 a) { return (UINT32)m68k_fetch8(a); }
-UINT32 __fastcall M68KFetchWord(UINT32 a) { return (UINT32)m68k_fetch16(a); }
-UINT32 __fastcall M68KFetchLong(UINT32 a) { return m68k_fetch32(a); }
+UINT32 __fastcall M68KFetchByte(UINT32 a) { return (UINT32)FetchByte(a); }
+UINT32 __fastcall M68KFetchWord(UINT32 a) { return (UINT32)FetchWord(a); }
+UINT32 __fastcall M68KFetchLong(UINT32 a) { return               FetchLong(a); }
 
-void __fastcall M68KWriteByte(UINT32 a, UINT32 d) { m68k_write8(a, d); }
-void __fastcall M68KWriteWord(UINT32 a, UINT32 d) { m68k_write16(a, d); }
-void __fastcall M68KWriteLong(UINT32 a, UINT32 d) { m68k_write32(a, d); }
+void __fastcall M68KWriteByte(UINT32 a, UINT32 d) { WriteByte(a, d); }
+void __fastcall M68KWriteWord(UINT32 a, UINT32 d) { WriteWord(a, d); }
+void __fastcall M68KWriteLong(UINT32 a, UINT32 d) { WriteLong(a, d); }
 }
 #endif
 
 // ----------------------------------------------------------------------------
 // Memory accesses (non-emu specific)
 
-UINT32 SekReadByte(UINT32 a) { return (UINT32)m68k_read8(a); }
-UINT32 SekReadWord(UINT32 a) { return (UINT32)m68k_read16(a); }
-UINT32 SekReadLong(UINT32 a) { return m68k_read32(a); }
+UINT32 SekReadByte(UINT32 a) { return (UINT32)ReadByte(a); }
+UINT32 SekReadWord(UINT32 a) { return (UINT32)ReadWord(a); }
+UINT32 SekReadLong(UINT32 a) { return ReadLong(a); }
 
-UINT32 SekFetchByte(UINT32 a) { return (UINT32)m68k_fetch8(a); }
-UINT32 SekFetchWord(UINT32 a) { return (UINT32)m68k_fetch16(a); }
-UINT32 SekFetchLong(UINT32 a) { return m68k_fetch32(a); }
+UINT32 SekFetchByte(UINT32 a) { return (UINT32)FetchByte(a); }
+UINT32 SekFetchWord(UINT32 a) { return (UINT32)FetchWord(a); }
+UINT32 SekFetchLong(UINT32 a) { return FetchLong(a); }
 
-void SekWriteByte(UINT32 a, UINT8 d) { m68k_write8(a, d); }
-void SekWriteWord(UINT32 a, UINT16 d) { m68k_write16(a, d); }
-void SekWriteLong(UINT32 a, UINT32 d) { m68k_write32(a, d); }
+void SekWriteByte(UINT32 a, UINT8 d) { WriteByte(a, d); }
+void SekWriteWord(UINT32 a, UINT16 d) { WriteWord(a, d); }
+void SekWriteLong(UINT32 a, UINT32 d) { WriteLong(a, d); }
 
 void SekWriteByteROM(UINT32 a, UINT8 d) { WriteByteROM(a, d); }
 void SekWriteWordROM(UINT32 a, UINT16 d) { WriteWordROM(a, d); }
@@ -834,6 +855,9 @@ INT32 SekInit(INT32 nCount, INT32 nCPUType)
 	nSekAddressMask[nCount] = 0xffffff;
 
 	nSekCycles[nCount] = 0;
+	nSekCyclesToDoCache[nCount] = 0;
+	nSekm68k_ICount[nCount] = 0;
+
 	nSekIRQPending[nCount] = 0;
 	nSekRESETLine[nCount] = 0;
 	nSekHALT[nCount] = 0;
@@ -899,11 +923,13 @@ INT32 SekExit()
 
 void SekReset()
 {
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_SekInitted) bprintf(PRINT_ERROR, _T("SekReset called without init\n"));
+	if (nSekActive == -1) bprintf(PRINT_ERROR, _T("SekReset called when no CPU open\n"));
+#endif
+
 #ifdef EMU_C68K
 	if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
-#if defined (FBNEO_DEBUG)
-		bprintf(PRINT_NORMAL, _T("EMU_C68K: SekReset\n"));
-#endif
 		memset(&c68k[nSekActive], 0, 22 * 4); // clear all regs
 		c68k[nSekActive].state_flags	= 0;
 		c68k[nSekActive].srh			= 0x27; // Supervisor mode
@@ -914,9 +940,6 @@ void SekReset()
 #endif
 
 #ifdef EMU_M68K
-#if defined (FBNEO_DEBUG)
-		bprintf(PRINT_NORMAL, _T("EMU_M68K: SekReset\n"));
-#endif
 		m68k_pulse_reset();
 #endif
 
@@ -973,6 +996,18 @@ void SekOpen(const INT32 i)
 #endif
 
 		nSekCyclesTotal = nSekCycles[nSekActive];
+
+		// Allow for SekRun() reentrance:
+		nSekCyclesToDo = nSekCyclesToDoCache[nSekActive];
+#ifdef EMU_C68K
+		if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
+			c68k[nSekActive].cycles = nSekm68k_ICount[nSekActive];
+		} else {
+#endif
+			m68k_ICount = nSekm68k_ICount[nSekActive];
+#ifdef EMU_C68K
+		}
+#endif
 	}
 }
 
@@ -994,6 +1029,18 @@ void SekClose()
 #endif
 
 	nSekCycles[nSekActive] = nSekCyclesTotal;
+
+	// Allow for SekRun() reentrance:
+	nSekCyclesToDoCache[nSekActive] = nSekCyclesToDo;
+#ifdef EMU_C68K
+	if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
+		nSekm68k_ICount[nSekActive] = c68k[nSekActive].cycles;
+	} else {
+#endif
+		nSekm68k_ICount[nSekActive] = m68k_ICount;
+#ifdef EMU_C68K
+	}
+#endif
 
 	nSekActive = -1;
 }
@@ -1428,23 +1475,6 @@ INT32 SekRun(INT32 nCPU, INT32 nCycles)
 
 void SekDbgDisableBreakpoints()
 {
-#if defined FBNEO_DEBUG && defined EMU_M68K
-		m68k_set_instr_hook_callback(NULL);
-
-		M68KReadByteDebug = M68KReadByte;
-		M68KReadWordDebug = M68KReadWord;
-		M68KReadLongDebug = M68KReadLong;
-
-		M68KWriteByteDebug = M68KWriteByte;
-		M68KWriteWordDebug = M68KWriteWord;
-		M68KWriteLongDebug = M68KWriteLong;
-#endif
-
-#ifdef EMU_A68K
-	a68k_memory_intf = a68k_inter_normal;
-#endif
-
-	//mame_debug = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -1626,9 +1656,18 @@ UINT32 SekGetPC(INT32 n)
 UINT32 SekGetPC(INT32)
 #endif
 {
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_SekInitted) bprintf(PRINT_ERROR, _T("SekGetPC called without init\n"));
+	if (nSekActive == -1) bprintf(PRINT_ERROR, _T("SekGetPC called when no CPU open\n"));
+#endif
+
 #ifdef EMU_C68K
 	if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
-		return c68k[nSekActive].pc-c68k[nSekActive].membase;
+		if (n < 0) {								// Currently active CPU
+		  return c68k[nSekActive].pc-c68k[nSekActive].membase;
+		} else {
+			return c68k[n].pc-c68k[n].membase;					// Any CPU
+		}
 	} else {
 #endif
 
@@ -1651,10 +1690,20 @@ UINT32 SekGetPPC(INT32)
 	if (nSekActive == -1) bprintf(PRINT_ERROR, _T("SekGetPC called when no CPU open\n"));
 #endif
 
+#ifdef EMU_C68K
+	if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
+		return c68k[nSekActive].prev_pc;
+	} else {
+#endif
+
 #ifdef EMU_M68K
 		return m68k_get_reg(NULL, M68K_REG_PPC);
 #else
 		return 0;
+#endif
+
+#ifdef EMU_C68K
+	}
 #endif
 }
 
@@ -1680,7 +1729,109 @@ INT32 SekDbgGetPendingIRQ()
 
 UINT32 SekDbgGetRegister(SekRegister nRegister)
 {
-	return 0;
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_SekInitted) bprintf(PRINT_ERROR, _T("SekDbgGetRegister called without init\n"));
+	if (nSekActive == -1) bprintf(PRINT_ERROR, _T("SekDbgGetRegister called when no CPU open\n"));
+#endif
+
+#if defined EMU_C68K
+	if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
+
+	switch (nRegister) {
+		case SEK_REG_A0:
+			return c68k[nSekActive].a[0];
+		case SEK_REG_A1:
+			return c68k[nSekActive].a[1];
+		case SEK_REG_A2:
+			return c68k[nSekActive].a[2];
+		case SEK_REG_A3:
+			return c68k[nSekActive].a[3];
+		case SEK_REG_A4:
+			return c68k[nSekActive].a[4];
+		case SEK_REG_A5:
+			return c68k[nSekActive].a[5];
+		case SEK_REG_A6:
+			return c68k[nSekActive].a[6];
+		case SEK_REG_A7:
+			return c68k[nSekActive].a[7];
+
+		case SEK_REG_PPC:
+			return c68k[nSekActive].prev_pc;
+
+		default:
+			return 0;
+	}
+	}
+#endif
+
+	switch (nRegister) {
+		case SEK_REG_D0:
+			return m68k_get_reg(NULL, M68K_REG_D0);
+		case SEK_REG_D1:
+			return m68k_get_reg(NULL, M68K_REG_D1);
+		case SEK_REG_D2:
+			return m68k_get_reg(NULL, M68K_REG_D2);
+		case SEK_REG_D3:
+			return m68k_get_reg(NULL, M68K_REG_D3);
+		case SEK_REG_D4:
+			return m68k_get_reg(NULL, M68K_REG_D4);
+		case SEK_REG_D5:
+			return m68k_get_reg(NULL, M68K_REG_D5);
+		case SEK_REG_D6:
+			return m68k_get_reg(NULL, M68K_REG_D6);
+		case SEK_REG_D7:
+			return m68k_get_reg(NULL, M68K_REG_D7);
+
+		case SEK_REG_A0:
+			return m68k_get_reg(NULL, M68K_REG_A0);
+		case SEK_REG_A1:
+			return m68k_get_reg(NULL, M68K_REG_A1);
+		case SEK_REG_A2:
+			return m68k_get_reg(NULL, M68K_REG_A2);
+		case SEK_REG_A3:
+			return m68k_get_reg(NULL, M68K_REG_A3);
+		case SEK_REG_A4:
+			return m68k_get_reg(NULL, M68K_REG_A4);
+		case SEK_REG_A5:
+			return m68k_get_reg(NULL, M68K_REG_A5);
+		case SEK_REG_A6:
+			return m68k_get_reg(NULL, M68K_REG_A6);
+		case SEK_REG_A7:
+			return m68k_get_reg(NULL, M68K_REG_A7);
+
+		case SEK_REG_PC:
+			return m68k_get_reg(NULL, M68K_REG_PC);
+		case SEK_REG_PPC:
+			return m68k_get_reg(NULL, M68K_REG_PPC);
+
+		case SEK_REG_SR:
+			return m68k_get_reg(NULL, M68K_REG_SR);
+
+		case SEK_REG_SP:
+			return m68k_get_reg(NULL, M68K_REG_SP);
+		case SEK_REG_USP:
+			return m68k_get_reg(NULL, M68K_REG_USP);
+		case SEK_REG_ISP:
+			return m68k_get_reg(NULL, M68K_REG_ISP);
+		case SEK_REG_MSP:
+			return m68k_get_reg(NULL, M68K_REG_MSP);
+
+		case SEK_REG_VBR:
+			return m68k_get_reg(NULL, M68K_REG_VBR);
+
+		case SEK_REG_SFC:
+			return m68k_get_reg(NULL, M68K_REG_SFC);
+		case SEK_REG_DFC:
+			return m68k_get_reg(NULL, M68K_REG_DFC);
+
+		case SEK_REG_CACR:
+			return m68k_get_reg(NULL, M68K_REG_CACR);
+		case SEK_REG_CAAR:
+			return m68k_get_reg(NULL, M68K_REG_CAAR);
+
+		default:
+			return 0;
+	}
 }
 
 bool SekDbgSetRegister(SekRegister nRegister, UINT32 nValue)

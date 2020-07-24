@@ -76,7 +76,7 @@
 #include "neocdlist.h"
 
 // #undef USE_SPEEDHACKS
-#define IRQ_TWEAK 3 // test-fix for Spin Master
+static INT32 NEO_RASTER_IRQ_TWEAK = 0; // spinmast prefers offset of 3 here.
 // #define LOG_IRQ
 // #define LOG_DRAW
 
@@ -1485,6 +1485,7 @@ INT32 NeoScan(INT32 nAction, INT32* pnMin)
 		SCAN_VAR(nNeoWatchdog);
 #endif
 
+		SCAN_VAR(bZ80BoardROMBankedIn);
 		SCAN_VAR(b68KBoardROMBankedIn);
 		if (nNeoSystemType & NEO_SYS_CART) {
 			SCAN_VAR(bBIOSTextROMEnabled);
@@ -4083,6 +4084,8 @@ static INT32 NeoInitCommon()
 	nScanlineOffset = 0xF8;									// correct as verified on MVS hardware
 #endif
 
+	NEO_RASTER_IRQ_TWEAK = 0;
+
 	// These games rely on reading the line counter for synchronising raster effects
 	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "mosyougi")) {
 		bRenderLineByLine = true;
@@ -4097,6 +4100,9 @@ static INT32 NeoInitCommon()
 	}
 	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "zedblade")) {
 		bRenderLineByLine = true;
+	}
+	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "spinmast")) {
+		NEO_RASTER_IRQ_TWEAK = 3; // fix glitches along the bottom of screen in the water level.
 	}
 
 	//if (!strcmp(BurnDrvGetTextA(DRV_NAME), "neocdz")) {
@@ -4857,7 +4863,7 @@ INT32 NeoFrame()
 			case 0x0061: bRenderMode = 1; break; // ssideki2 (cd)
 			case 0x0200: bRenderMode = 1; break; // turfmasters (cd)
 		}
-		bRenderLineByLine = (!bNeoCDIRQEnabled) && bRenderMode;
+		bRenderLineByLine = /*(!bNeoCDIRQEnabled) &&*/ bRenderMode;
 	}
 
 	bRenderImage = pBurnDraw != NULL && bNeoEnableGraphics;
@@ -4890,12 +4896,12 @@ INT32 NeoFrame()
 				bForcePartialRender = bRenderImage;
 				if (bForcePartialRender) {
 					nSliceStart = nSliceEnd;
-					nSliceEnd = SekCurrentScanline() - 5 + IRQ_TWEAK;
+					nSliceEnd = SekCurrentScanline() - 5 + NEO_RASTER_IRQ_TWEAK;
 				}
 			} else {
 				if (bForcePartialRender) {
 					nSliceStart = nSliceEnd;
-					nSliceEnd = SekCurrentScanline() - 6 + IRQ_TWEAK;
+					nSliceEnd = SekCurrentScanline() - 6 + NEO_RASTER_IRQ_TWEAK;
 				}
 			}
 
@@ -4956,7 +4962,7 @@ INT32 NeoFrame()
 				if (bForcePartialRender) {
 
 					nSliceStart = nSliceEnd;
-					nSliceEnd = SekCurrentScanline() - 5 + IRQ_TWEAK;
+					nSliceEnd = SekCurrentScanline() - 5 + NEO_RASTER_IRQ_TWEAK;
 
 					if (nSliceEnd > 240) {
 						nSliceEnd = 240;

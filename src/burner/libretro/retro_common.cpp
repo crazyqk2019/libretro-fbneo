@@ -57,10 +57,10 @@ bool is_neogeo_game = false;
 bool allow_neogeo_mode = true;
 bool neogeo_use_specific_default_bios = false;
 bool bAllowDepth32 = false;
-bool bLoadSubsystemByParent = true;
 UINT32 nVerticalMode = 0;
 UINT32 nFrameskip = 1;
 INT32 g_audio_samplerate = 48000;
+UINT32 nMemcardMode = 0;
 UINT8 *diag_input;
 neo_geo_modes g_opt_neo_geo_mode = NEO_GEO_MODE_MVS;
 
@@ -231,17 +231,17 @@ static const struct retro_core_option_definition var_fbneo_neogeo_mode = {
 	},
 	"DIP开关"
 };
-
-static const struct retro_core_option_definition var_fbneo_load_subsystem_from_parent = {
-	"fbneo-load-subsystem-from-parent",
-	"以父目录载入子系统",
-	"如果启用，将使用父目录名称来载入支持的子系统",
+static const struct retro_core_option_definition var_fbneo_memcard_mode = {
+	"fbneo-memcard-mode",
+	"记忆卡模式",
+	"更改记忆卡模式",
 	{
 		{ "disabled", "禁用" },
-		{ "enabled", "启用" },
+		{ "shared", "共享" },
+		{ "per-game", "每游戏独立" },
 		{ NULL, NULL },
 	},
-	"enabled"
+	"disabled"
 };
 
 #ifdef FBNEO_DEBUG
@@ -467,7 +467,7 @@ void evaluate_neogeo_bios_mode(const char* drvname)
 	// search the BIOS dipswitch
 	for (int dip_idx = 0; dip_idx < dipswitch_core_options.size(); dip_idx++)
 	{
-		if (dipswitch_core_options[dip_idx].friendly_name.compare("BIOS") == 0)
+		if (dipswitch_core_options[dip_idx].friendly_name.compare("[Dipswitch] BIOS") == 0)
 		{
 			is_bios_dipswitch_found = true;
 			if (dipswitch_core_options[dip_idx].values.size() > 0)
@@ -514,7 +514,6 @@ void set_environment()
 	vars_systems.push_back(&var_fbneo_frameskip);
 	vars_systems.push_back(&var_fbneo_cpu_speed_adjust);
 	vars_systems.push_back(&var_fbneo_hiscores);
-	vars_systems.push_back(&var_fbneo_load_subsystem_from_parent);
 	if (nGameType != RETRO_GAME_TYPE_NEOCD)
 		vars_systems.push_back(&var_fbneo_samplerate);
 	vars_systems.push_back(&var_fbneo_sample_interpolation);
@@ -549,16 +548,18 @@ void set_environment()
 		// Add the Neo Geo core options
 		if (allow_neogeo_mode)
 			vars_systems.push_back(&var_fbneo_neogeo_mode);
+		vars_systems.push_back(&var_fbneo_memcard_mode);
 	}
 
 	int nbr_vars = vars_systems.size();
 	int nbr_dips = dipswitch_core_options.size();
+	int nbr_cheats = cheat_core_options.size();
 
 #if 0
 	log_cb(RETRO_LOG_INFO, "set_environment: SYSTEM: %d, DIPSWITCH: %d\n", nbr_vars, nbr_dips);
 #endif
 
-	vars = (struct retro_core_option_definition*)calloc(nbr_vars + nbr_dips + 1, sizeof(struct retro_core_option_definition));
+	vars = (struct retro_core_option_definition*)calloc(nbr_vars + nbr_dips + nbr_cheats + 1, sizeof(struct retro_core_option_definition));
 
 	int idx_var = 0;
 
@@ -574,7 +575,7 @@ void set_environment()
 		vars[idx_var].key = dipswitch_core_options[dip_idx].option_name.c_str();
 		vars[idx_var].desc = dipswitch_core_options[dip_idx].friendly_name.c_str();
 		// Instead of filtering out the dips, make the description a warning if it's a neogeo game using a different default bios
-		if (neogeo_use_specific_default_bios && is_neogeo_game && dipswitch_core_options[dip_idx].friendly_name.compare("BIOS") == 0)
+		if (neogeo_use_specific_default_bios && is_neogeo_game && dipswitch_core_options[dip_idx].friendly_name.compare("[Dipswitch] BIOS") == 0)
 			vars[idx_var].info = "此NEOGEO游戏使用一个不同的缺省BIOS，更改设置风险自负";
 		else
 			vars[idx_var].info = "Dip开关设置, 只针对特定的正在运行的游戏";
@@ -584,6 +585,21 @@ void set_environment()
 		}
 		vars[idx_var].values[dipswitch_core_options[dip_idx].values.size()].value = NULL;
 		vars[idx_var].default_value = dipswitch_core_options[dip_idx].default_bdi.szText;
+		idx_var++;
+	}
+
+	// Add the DIP switches core options
+	for (int cheat_idx = 0; cheat_idx < nbr_cheats; cheat_idx++)
+	{
+		vars[idx_var].key = cheat_core_options[cheat_idx].option_name.c_str();
+		vars[idx_var].desc = cheat_core_options[cheat_idx].friendly_name.c_str();
+		vars[idx_var].info = "Specific to the running romset and your cheat database";
+		for (int cheat_value_idx = 0; cheat_value_idx < cheat_core_options[cheat_idx].values.size(); cheat_value_idx++)
+		{
+			vars[idx_var].values[cheat_value_idx].value = cheat_core_options[cheat_idx].values[cheat_value_idx].friendly_name.c_str();
+		}
+		vars[idx_var].values[cheat_core_options[cheat_idx].values.size()].value = NULL;
+		vars[idx_var].default_value = cheat_core_options[cheat_idx].default_value.c_str();
 		idx_var++;
 	}
 
@@ -818,15 +834,6 @@ void check_variables(void)
 			nVerticalMode = 0;
 	}
 
-	var.key = var_fbneo_load_subsystem_from_parent.key;
-	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
-	{
-		if (strcmp(var.value, "enabled") == 0)
-			bLoadSubsystemByParent = true;
-		else
-			bLoadSubsystemByParent = false;
-	}
-
 	var.key = var_fbneo_frameskip.key;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
 	{
@@ -920,6 +927,16 @@ void check_variables(void)
 				else if (strcmp(var.value, "DIPSWITCH") == 0)
 					g_opt_neo_geo_mode = NEO_GEO_MODE_DIPSWITCH;
 			}
+		}
+		var.key = var_fbneo_memcard_mode.key;
+		if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
+		{
+			if (strcmp(var.value, "disabled") == 0)
+				nMemcardMode = 0;
+			else if (strcmp(var.value, "shared") == 0)
+				nMemcardMode = 1;
+			else if (strcmp(var.value, "per-game") == 0)
+				nMemcardMode = 2;
 		}
 	}
 

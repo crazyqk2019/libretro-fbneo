@@ -65,8 +65,9 @@ static INT32 ConfigParseFile(TCHAR* pszFilename)
 		nLine++;
 
 		nLen = _tcslen(szLine);
+
 		// Get rid of the linefeed at the end
-		while (szLine[nLen - 1] == 0x0A || szLine[nLen - 1] == 0x0D) {
+		while ((nLen > 0) && (szLine[nLen - 1] == 0x0A || szLine[nLen - 1] == 0x0D)) {
 			szLine[nLen - 1] = 0;
 			nLen--;
 		}
@@ -494,7 +495,7 @@ static INT32 ConfigParseMAMEFile()
 				   //was x7f00
 		if (flags & 0x80007c00) continue;			// skip various cheats (unhandled methods at this time)
 
-		if ( flags & 0x00008000 || (flags & 0x0001000 && !menu)) {
+		if ( flags & 0x00008000 || (flags & 0x00010000 && !menu)) { // Linked cheat "(2/2) etc.."
 			if (nCurrentAddress < CHEAT_MAX_ADDRESS) {
 				AddressInfo();
 			}
