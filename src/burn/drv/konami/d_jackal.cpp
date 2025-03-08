@@ -1,4 +1,4 @@
-// FB Alpha Jackal driver module
+// FB Neo Jackal driver module
 // Based on MAME driver by Kenneth Lin
 
 #include "tiles_generic.h"
@@ -36,7 +36,7 @@ static UINT8 DrvJoy1[8];
 static UINT8 DrvJoy2[8];
 static UINT8 DrvJoy3[8];
 static UINT8 DrvInputs[3];
-static UINT8 DrvDips[3];
+static UINT8 DrvDips[4];
 static UINT8 DrvReset;
 
 static INT32 watchdog;
@@ -44,49 +44,51 @@ static INT32 layer_offset_x = 8;
 static INT32 layer_offset_y = 16;
 
 static INT32 bootleg = 0;
+static INT32 jackalr = 0;
 
 //static INT32 nRotate[2] = { 0, 0 };
 //static UINT32 nRotateTime[2] = { 0, 0 };
 //static UINT8 DrvFakeInput[4] = { 0, 0, 0, 0 };
 // Rotation stuff! -dink
-static UINT8  DrvFakeInput[6]       = {0, 0, 0, 0, 0, 0};
+static UINT8  DrvFakeInput[14]      = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // 0-5 legacy; 6-9 P1, 10-13 P2
 static UINT8  nRotateHoldInput[2]   = {0, 0};
 static INT32  nRotate[2]            = {0, 0};
 static INT32  nRotateTarget[2]      = {0, 0};
 static INT32  nRotateTry[2]         = {0, 0};
 static UINT32 nRotateTime[2]        = {0, 0};
 static UINT8  game_rotates = 0;
+static UINT8  nAutoFireCounter[2] 	= {0, 0};
 
 static struct BurnInputInfo DrvInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy3 + 0,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 0,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy3 + 3,	"p1 start"	},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 left"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 right"	},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 up"		},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 down"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 3,	"p1 down"	},
 	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
 	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy3 + 1,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy3 + 1,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy3 + 4,	"p2 start"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 left"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 0,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 right"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 down"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy2 + 2,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy2 + 3,	"p2 down"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Service",		BIT_DIGITAL,	DrvJoy3 + 2,	"service"	},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
-	{"Dip C",		BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy3 + 2,	"service"	},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Dip C",			BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
 };
 
 STDINPUTINFO(Drv)
 
 static struct BurnInputInfo DrvrotateInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy3 + 0,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 0,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy3 + 3,	"p1 start"	},
 	{"P1 Left",		    BIT_DIGITAL,	DrvJoy1 + 0,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 right"	},
@@ -97,24 +99,33 @@ static struct BurnInputInfo DrvrotateInputList[] = {
 	{"P1 Rotate Left",     BIT_DIGITAL, DrvFakeInput + 0, "p1 rotate left" },
 	{"P1 Rotate Right",    BIT_DIGITAL, DrvFakeInput + 1, "p1 rotate right" },
 	{"P1 Button 3 (rotate)" , BIT_DIGITAL  , DrvFakeInput + 4,  "p1 fire 3" },
+	{"P1 Shoot Up"       	, BIT_DIGITAL  , DrvFakeInput + 8,  "p1 up 2" }, // 6
+	{"P1 Shoot Down"      	, BIT_DIGITAL  , DrvFakeInput + 9,  "p1 down 2" }, // 7
+	{"P1 Shoot Left"       	, BIT_DIGITAL  , DrvFakeInput + 6,  "p1 left 2" }, // 8
+	{"P1 Shoot Right"      	, BIT_DIGITAL  , DrvFakeInput + 7,  "p1 right 2" }, // 9
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy3 + 1,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy3 + 1,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy3 + 4,	"p2 start"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 left"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 0,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 right"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 down"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy2 + 2,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy2 + 3,	"p2 down"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
 	{"P2 Rotate Left",     BIT_DIGITAL, DrvFakeInput + 2, "p2 rotate left" },
 	{"P2 Rotate Right",    BIT_DIGITAL, DrvFakeInput + 3, "p2 rotate right" },
 	{"P2 Button 3 (rotate)" , BIT_DIGITAL  , DrvFakeInput + 5,  "p2 fire 3" },
+	{"P2 Shoot Up"       	, BIT_DIGITAL  , DrvFakeInput + 12, "p2 up 2" },
+	{"P2 Shoot Down"      	, BIT_DIGITAL  , DrvFakeInput + 13, "p2 down 2" },
+	{"P2 Shoot Left"       	, BIT_DIGITAL  , DrvFakeInput + 10, "p2 left 2" },
+	{"P2 Shoot Right"      	, BIT_DIGITAL  , DrvFakeInput + 11, "p2 right 2" },
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Service",		BIT_DIGITAL,	DrvJoy3 + 2,	"service"	},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
-	{"Dip C",		BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy3 + 2,	"service"	},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Dip C",			BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
+	{"Dip D", 			BIT_DIPSWITCH, 	DrvDips + 3, 	"dip"       },
 };
 
 STDINPUTINFO(Drvrotate)
@@ -200,79 +211,87 @@ STDDIPINFO(Drv)
 
 static struct BurnDIPInfo DrvrotateDIPList[]=
 {
-	{0x18, 0xff, 0xff, 0xff, NULL					},
-	{0x19, 0xff, 0xff, 0xff, NULL					},
-	{0x1a, 0xff, 0xff, 0x20, NULL					},
+	DIP_OFFSET(0x20)
+
+	{0x00, 0xff, 0xff, 0xff, NULL					},
+	{0x01, 0xff, 0xff, 0xff, NULL					},
+	{0x02, 0xff, 0xff, 0x20, NULL					},
+	{0x03, 0xff, 0xff, 0x00, NULL                   },
 
 	{0   , 0xfe, 0   ,   16, "Coin A"				},
-	{0x18, 0x01, 0x0f, 0x02, "4 Coins 1 Credit"			},
-	{0x18, 0x01, 0x0f, 0x05, "3 Coins 1 Credit"			},
-	{0x18, 0x01, 0x0f, 0x06, "2 Coins 1 Credit"			},
-	{0x18, 0x01, 0x0f, 0x04, "3 Coins 2 Credits"			},
-	{0x18, 0x01, 0x0f, 0x01, "4 Coins 3 Credits"			},
-	{0x18, 0x01, 0x0f, 0x0f, "1 Coin  1 Credit"			},
-	{0x18, 0x01, 0x0f, 0x03, "3 Coins 4 Credits"			},
-	{0x18, 0x01, 0x0f, 0x07, "2 Coins 3 Credits"			},
-	{0x18, 0x01, 0x0f, 0x0e, "1 Coin  2 Credits"			},
-	{0x18, 0x01, 0x0f, 0x06, "2 Coins 5 Credits"			},
-	{0x18, 0x01, 0x0f, 0x0d, "1 Coin  3 Credits"			},
-	{0x18, 0x01, 0x0f, 0x0c, "1 Coin  4 Credits"			},
-	{0x18, 0x01, 0x0f, 0x0b, "1 Coin  5 Credits"			},
-	{0x18, 0x01, 0x0f, 0x0a, "1 Coin  6 Credits"			},
-	{0x18, 0x01, 0x0f, 0x09, "1 Coin  7 Credits"			},
-	{0x18, 0x01, 0x0f, 0x00, "Free Play"				},
+	{0x00, 0x01, 0x0f, 0x02, "4 Coins 1 Credit"			},
+	{0x00, 0x01, 0x0f, 0x05, "3 Coins 1 Credit"			},
+	{0x00, 0x01, 0x0f, 0x06, "2 Coins 1 Credit"			},
+	{0x00, 0x01, 0x0f, 0x04, "3 Coins 2 Credits"			},
+	{0x00, 0x01, 0x0f, 0x01, "4 Coins 3 Credits"			},
+	{0x00, 0x01, 0x0f, 0x0f, "1 Coin  1 Credit"			},
+	{0x00, 0x01, 0x0f, 0x03, "3 Coins 4 Credits"			},
+	{0x00, 0x01, 0x0f, 0x07, "2 Coins 3 Credits"			},
+	{0x00, 0x01, 0x0f, 0x0e, "1 Coin  2 Credits"			},
+	{0x00, 0x01, 0x0f, 0x06, "2 Coins 5 Credits"			},
+	{0x00, 0x01, 0x0f, 0x0d, "1 Coin  3 Credits"			},
+	{0x00, 0x01, 0x0f, 0x0c, "1 Coin  4 Credits"			},
+	{0x00, 0x01, 0x0f, 0x0b, "1 Coin  5 Credits"			},
+	{0x00, 0x01, 0x0f, 0x0a, "1 Coin  6 Credits"			},
+	{0x00, 0x01, 0x0f, 0x09, "1 Coin  7 Credits"			},
+	{0x00, 0x01, 0x0f, 0x00, "Free Play"				},
 
 	{0   , 0xfe, 0   ,   16, "Coin B"				},
-	{0x18, 0x01, 0xf0, 0x20, "4 Coins 1 Credit"			},
-	{0x18, 0x01, 0xf0, 0x50, "3 Coins 1 Credit"			},
-	{0x18, 0x01, 0xf0, 0x60, "2 Coins 1 Credit"			},
-	{0x18, 0x01, 0xf0, 0x40, "3 Coins 2 Credits"			},
-	{0x18, 0x01, 0xf0, 0x10, "4 Coins 3 Credits"			},
-	{0x18, 0x01, 0xf0, 0xf0, "1 Coin  1 Credit"			},
-	{0x18, 0x01, 0xf0, 0x30, "3 Coins 4 Credits"			},
-	{0x18, 0x01, 0xf0, 0x70, "2 Coins 3 Credits"			},
-	{0x18, 0x01, 0xf0, 0xe0, "1 Coin  2 Credits"			},
-	{0x18, 0x01, 0xf0, 0x60, "2 Coins 5 Credits"			},
-	{0x18, 0x01, 0xf0, 0xd0, "1 Coin  3 Credits"			},
-	{0x18, 0x01, 0xf0, 0xc0, "1 Coin  4 Credits"			},
-	{0x18, 0x01, 0xf0, 0xb0, "1 Coin  5 Credits"			},
-	{0x18, 0x01, 0xf0, 0xa0, "1 Coin  6 Credits"			},
-	{0x18, 0x01, 0xf0, 0x90, "1 Coin  7 Credits"			},
-	{0x18, 0x01, 0xf0, 0x00, "No Coin B"				},
+	{0x00, 0x01, 0xf0, 0x20, "4 Coins 1 Credit"			},
+	{0x00, 0x01, 0xf0, 0x50, "3 Coins 1 Credit"			},
+	{0x00, 0x01, 0xf0, 0x60, "2 Coins 1 Credit"			},
+	{0x00, 0x01, 0xf0, 0x40, "3 Coins 2 Credits"			},
+	{0x00, 0x01, 0xf0, 0x10, "4 Coins 3 Credits"			},
+	{0x00, 0x01, 0xf0, 0xf0, "1 Coin  1 Credit"			},
+	{0x00, 0x01, 0xf0, 0x30, "3 Coins 4 Credits"			},
+	{0x00, 0x01, 0xf0, 0x70, "2 Coins 3 Credits"			},
+	{0x00, 0x01, 0xf0, 0xe0, "1 Coin  2 Credits"			},
+	{0x00, 0x01, 0xf0, 0x60, "2 Coins 5 Credits"			},
+	{0x00, 0x01, 0xf0, 0xd0, "1 Coin  3 Credits"			},
+	{0x00, 0x01, 0xf0, 0xc0, "1 Coin  4 Credits"			},
+	{0x00, 0x01, 0xf0, 0xb0, "1 Coin  5 Credits"			},
+	{0x00, 0x01, 0xf0, 0xa0, "1 Coin  6 Credits"			},
+	{0x00, 0x01, 0xf0, 0x90, "1 Coin  7 Credits"			},
+	{0x00, 0x01, 0xf0, 0x00, "No Coin B"				},
 
 	{0   , 0xfe, 0   ,    4, "Lives"				},	
-	{0x19, 0x01, 0x03, 0x03, "2"					},
-	{0x19, 0x01, 0x03, 0x02, "3"					},
-	{0x19, 0x01, 0x03, 0x01, "4"					},
-	{0x19, 0x01, 0x03, 0x00, "7"					},
+	{0x01, 0x01, 0x03, 0x03, "2"					},
+	{0x01, 0x01, 0x03, 0x02, "3"					},
+	{0x01, 0x01, 0x03, 0x01, "4"					},
+	{0x01, 0x01, 0x03, 0x00, "7"					},
 
 	{0   , 0xfe, 0   ,    4, "Bonus Life"				},
-	{0x19, 0x01, 0x18, 0x18, "30k 150k"				},
-	{0x19, 0x01, 0x18, 0x10, "50k 200k"				},
-	{0x19, 0x01, 0x18, 0x08, "30k"					},
-	{0x19, 0x01, 0x18, 0x00, "50k"					},
+	{0x01, 0x01, 0x18, 0x18, "30k 150k"				},
+	{0x01, 0x01, 0x18, 0x10, "50k 200k"				},
+	{0x01, 0x01, 0x18, 0x08, "30k"					},
+	{0x01, 0x01, 0x18, 0x00, "50k"					},
 
 	{0   , 0xfe, 0   ,    4, "Difficulty"				},
-	{0x19, 0x01, 0x60, 0x60, "Easy"					},
-	{0x19, 0x01, 0x60, 0x40, "Normal"				},
-	{0x19, 0x01, 0x60, 0x20, "Difficult"				},
-	{0x19, 0x01, 0x60, 0x00, "Very Difficult"			},
+	{0x01, 0x01, 0x60, 0x60, "Easy"					},
+	{0x01, 0x01, 0x60, 0x40, "Normal"				},
+	{0x01, 0x01, 0x60, 0x20, "Difficult"				},
+	{0x01, 0x01, 0x60, 0x00, "Very Difficult"			},
 
 	{0   , 0xfe, 0   ,    2, "Demo Sounds"				},
-	{0x19, 0x01, 0x80, 0x80, "Off"					},
-	{0x19, 0x01, 0x80, 0x00, "On"					},
+	{0x01, 0x01, 0x80, 0x80, "Off"					},
+	{0x01, 0x01, 0x80, 0x00, "On"					},
 
 	{0   , 0xfe, 0   ,    2, "Flip Screen"				},
-	{0x1a, 0x01, 0x20, 0x20, "Off"					},
-	{0x1a, 0x01, 0x20, 0x00, "On"					},
+	{0x02, 0x01, 0x20, 0x20, "Off"					},
+	{0x02, 0x01, 0x20, 0x00, "On"					},
 
 	{0   , 0xfe, 0   ,    2, "Sound Adjustment"			},
-	{0x1a, 0x01, 0x40, 0x00, "Upright"				},
-	{0x1a, 0x01, 0x40, 0x40, "Cocktail"				},
+	{0x02, 0x01, 0x40, 0x00, "Upright"				},
+	{0x02, 0x01, 0x40, 0x40, "Cocktail"				},
 
 	{0   , 0xfe, 0   ,    2, "Sound Mode"				},
-	{0x1a, 0x01, 0x80, 0x00, "Stereo"				},
-	{0x1a, 0x01, 0x80, 0x80, "Mono"					},
+	{0x02, 0x01, 0x80, 0x00, "Stereo"				},
+	{0x02, 0x01, 0x80, 0x80, "Mono"					},
+
+	// Dip 4
+	{0   , 0xfe, 0   , 2   , "Second Stick"           },
+	{0x03, 0x01, 0x01, 0x00, "Moves & Shoots"         },
+	{0x03, 0x01, 0x01, 0x01, "Moves"                  },
 };
 
 STDDIPINFO(Drvrotate)
@@ -289,17 +308,17 @@ static void RotateReset() {
 }
 
 static UINT32 RotationTimer(void) {
-    return nCurrentFrame;
+	return nCurrentFrame;
 }
 
 static void RotateRight(INT32 *v) {
-    (*v)++;
-    if (*v > 7) *v = 0;
+	(*v)++;
+	if (*v > 7) *v = 0;
 }
 
 static void RotateLeft(INT32 *v) {
-    (*v)--;
-    if (*v < 0) *v = 7;
+	(*v)--;
+	if (*v < 0) *v = 7;
 }
 
 static UINT8 Joy2Rotate(UINT8 *joy) { // ugly code, but the effect is awesome. -dink
@@ -318,32 +337,32 @@ static UINT8 Joy2Rotate(UINT8 *joy) { // ugly code, but the effect is awesome. -
 }
 
 static int dialRotation(INT32 playernum) {
-    // p1 = 0, p2 = 1
+	// p1 = 0, p2 = 1
 	UINT8 player[2] = { 0, 0 };
 	static UINT8 lastplayer[2][2] = { { 0, 0 }, { 0, 0 } };
 
-    if ((playernum != 0) && (playernum != 1)) {
-        bprintf(PRINT_NORMAL, _T("Strange Rotation address => %06X\n"), playernum);
-        return 0;
-    }
-    if (playernum == 0) {
-        player[0] = DrvFakeInput[0]; player[1] = DrvFakeInput[1];
-    }
-    if (playernum == 1) {
-        player[0] = DrvFakeInput[2]; player[1] = DrvFakeInput[3];
-    }
+	if ((playernum != 0) && (playernum != 1)) {
+		bprintf(PRINT_NORMAL, _T("Strange Rotation address => %06X\n"), playernum);
+		return 0;
+	}
+	if (playernum == 0) {
+		player[0] = DrvFakeInput[0]; player[1] = DrvFakeInput[1];
+	}
+	if (playernum == 1) {
+		player[0] = DrvFakeInput[2]; player[1] = DrvFakeInput[3];
+	}
 
-    if (player[0] && (player[0] != lastplayer[playernum][0] || (RotationTimer() > nRotateTime[playernum]+0xf))) {
+	if (player[0] && (player[0] != lastplayer[playernum][0] || (RotationTimer() > nRotateTime[playernum]+0xf))) {
 		RotateLeft(&nRotate[playernum]);
-        //bprintf(PRINT_NORMAL, _T("Player %d Rotate Left => %06X\n"), playernum+1, nRotate[playernum]);
+		//bprintf(PRINT_NORMAL, _T("Player %d Rotate Left => %06X\n"), playernum+1, nRotate[playernum]);
 		nRotateTime[playernum] = RotationTimer();
 		nRotateTarget[playernum] = -1;
-    }
+	}
 
 	if (player[1] && (player[1] != lastplayer[playernum][1] || (RotationTimer() > nRotateTime[playernum]+0xf))) {
-        RotateRight(&nRotate[playernum]);
-        //bprintf(PRINT_NORMAL, _T("Player %d Rotate Right => %06X\n"), playernum+1, nRotate[playernum]);
-        nRotateTime[playernum] = RotationTimer();
+		RotateRight(&nRotate[playernum]);
+		//bprintf(PRINT_NORMAL, _T("Player %d Rotate Right => %06X\n"), playernum+1, nRotate[playernum]);
+		nRotateTime[playernum] = RotationTimer();
 		nRotateTarget[playernum] = -1;
 	}
 
@@ -420,8 +439,43 @@ static void RotateDoTick() {
 }
 
 static void SuperJoy2Rotate() {
+	UINT8 FakeDrvInputPort0[4] = {0, 0, 0, 0};
+	UINT8 FakeDrvInputPort1[4] = {0, 0, 0, 0};
+	UINT8 NeedsSecondStick[2] = {0, 0};
+
+	// prepare for right-stick rotation
+	// this is not especially readable though
+	for (INT32 i = 0; i < 2; i++) {
+		for (INT32 n = 0; n < 4; n++) {
+			UINT8* RotationInput = (!i) ? &FakeDrvInputPort0[0] : &FakeDrvInputPort1[0];
+			RotationInput[n] = DrvFakeInput[6 + i*4 + n];
+			NeedsSecondStick[i] |= RotationInput[n];
+		}
+	}
+
 	for (INT32 i = 0; i < 2; i++) { // p1 = 0, p2 = 1
-		if (DrvFakeInput[4 + i]) { //  rotate-button had been pressed
+		if (!NeedsSecondStick[i])
+			nAutoFireCounter[i] = 0;
+		if (NeedsSecondStick[i]) { // or using Second Stick
+			UINT8 rot = Joy2Rotate(((!i) ? &FakeDrvInputPort0[0] : &FakeDrvInputPort1[0]));
+			if (rot != 0xff) {
+				nRotateTarget[i] = rot * rotate_gunpos_multiplier;
+			}
+			nRotateTry[i] = 0;
+
+			if (~DrvDips[3] & 1) {
+				// fake auto-fire - there's probably a more elegant solution for this
+				if (nAutoFireCounter[i]++ & 0x4)
+				{
+					DrvInputs[i] &= 0xef; // remove the fire bit &= ~0x10; //
+				}
+				else
+				{
+					DrvInputs[i] |= 0x10; // turn on the fire bit
+				}
+			}
+		}
+		else if (DrvFakeInput[4 + i]) { //  rotate-button had been pressed
 			UINT8 rot = Joy2Rotate(((!i) ? &DrvJoy1[0] : &DrvJoy2[0]));
 			if (rot != 0xff) {
 				nRotateTarget[i] = rot * rotate_gunpos_multiplier;
@@ -626,8 +680,7 @@ static INT32 MemIndex()
 static INT32 DrvGfxDecode()
 {
 	INT32 Planes[8] = { STEP4(0,1), STEP4(0x40000*8, 1) };
-	INT32 XOffs[16] = {  0*4, 1*4, 2*4, 3*4, 4*4, 5*4, 6*4, 7*4, 32*8+0*4, 32*8+1*4, 32*8+2*4, 32*8+3*4, 32*8+4*4, 32*8+5*4, 32*8+6*4, 32*8+7*4 };
-	//STEP8(0,4), STEP8(32*8, ??)
+	INT32 XOffs[16] = { STEP8(0,4), STEP8(32*8, 4) };
 	INT32 YOffs[16] = { STEP8(0,32), STEP8(16*32,32) };
 
 	UINT8 *tmp = (UINT8*)BurnMalloc(0x80000);
@@ -661,27 +714,27 @@ static void DrvPaletteInit()
 
 static INT32 DrvInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	if (!bootleg) {
 		// Jackal
-		if (BurnLoadRom(DrvM6809ROM0 + 0x10000,   0, 1)) return 1;
-		if (BurnLoadRom(DrvM6809ROM0 + 0x0c000,   1, 1)) return 1;
 
-		if (BurnLoadRom(DrvM6809ROM1 + 0x08000,   2, 1)) return 1;
+		INT32 nIndex = 0;
+		INT32 nLen  = (jackalr) ? 0x20000 : 0x40000;
+		INT32 nLoop = (jackalr) ? 4 : 2;
 
-		if (BurnLoadRom(DrvGfxROM2   + 0x00000,   3, 2)) return 1;
-		if (BurnLoadRom(DrvGfxROM2   + 0x00001,   4, 2)) return 1;
-		if (BurnLoadRom(DrvGfxROM2   + 0x40000,   5, 2)) return 1;
-		if (BurnLoadRom(DrvGfxROM2   + 0x40001,   6, 2)) return 1;
+		if (BurnLoadRom(DrvM6809ROM0 + 0x10000, nIndex++, 1)) return 1;
+		if (BurnLoadRom(DrvM6809ROM0 + 0x0c000, nIndex++, 1)) return 1;
 
-		if (BurnLoadRom(DrvColPROM   + 0x00000,   7, 1)) return 1;
-		if (BurnLoadRom(DrvColPROM   + 0x00100,   8, 1)) return 1;
+		if (BurnLoadRom(DrvM6809ROM1 + 0x08000, nIndex++, 1)) return 1;
+
+		for (INT32 i = 0; i < nLoop; i++) {
+			if (BurnLoadRom(DrvGfxROM2 + 0x00000 + i * nLen, nIndex++, 2)) return 1;
+			if (BurnLoadRom(DrvGfxROM2 + 0x00001 + i * nLen, nIndex++, 2)) return 1;
+		}
+
+		if (BurnLoadRom(DrvColPROM   + 0x00000, nIndex++, 1)) return 1;
+		if (BurnLoadRom(DrvColPROM   + 0x00100, nIndex++, 1)) return 1;
 	} else {
 		// Bootleg
 		if (BurnLoadRom(DrvM6809ROM0 + 0x10000,   0, 1)) return 1;
@@ -734,9 +787,10 @@ static INT32 DrvInit()
 	M6809SetReadHandler(jackal_sub_read);
 	M6809Close();
 
-	BurnYM2151Init(3580000);
+	BurnYM2151InitBuffered(3580000, 1, NULL, 0);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 0.50, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 0.50, BURN_SND_ROUTE_RIGHT);
+	BurnTimerAttachM6809(1843200);
 
 	GenericTilesInit();
 	if (game_rotates)
@@ -754,9 +808,10 @@ static INT32 DrvExit()
 	
 	GenericTilesExit();
 	
-	BurnFree(AllMem);
+	BurnFreeMemIndex();
 
 	bootleg = 0;
+	jackalr = 0;
 	game_rotates = 1;
 
 	return 0;
@@ -823,19 +878,7 @@ static void draw_layer()
 		if (sy < -7) sy += 256;
 		if (sx < -7) sx += 256;
 
-		if (flipy) {
-			if (flipx) {
-				Render8x8Tile_FlipXY_Clip(pTransDraw, code, sx, sy, 0, 8, 0, DrvGfxROM0);
-			} else {
-				Render8x8Tile_FlipY_Clip(pTransDraw, code, sx, sy, 0, 8, 0, DrvGfxROM0);
-			}
-		} else {
-			if (flipx) {
-				Render8x8Tile_FlipX_Clip(pTransDraw, code, sx, sy, 0, 8, 0, DrvGfxROM0);
-			} else {
-				Render8x8Tile_Clip(pTransDraw, code, sx, sy, 0, 8, 0, DrvGfxROM0);
-			}
-		}
+		Draw8x8Tile(pTransDraw, code, sx, sy, flipx, flipy, 0, 8, 0, DrvGfxROM0);
 	}
 }
 
@@ -847,35 +890,11 @@ static void draw_sprite(INT32 bank, INT32 code, INT32 color, INT32 sx, INT32 sy,
 
 	if (bank & 8) // 8x8
 	{
-		if (flipy) {
-			if (flipx) {
-				Render8x8Tile_Mask_FlipXY_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM2);
-			} else {
-				Render8x8Tile_Mask_FlipY_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM2);
-			}
-		} else {
-			if (flipx) {
-				Render8x8Tile_Mask_FlipX_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM2);
-			} else {
-				Render8x8Tile_Mask_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM2);
-			}
-		}
+		Draw8x8MaskTile(pTransDraw, code, sx, sy, flipx, flipy, color, 4, 0, 0, DrvGfxROM2);
 	}
 	else // 16x16
 	{
-		if (flipy) {
-			if (flipx) {
-				Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM1);
-			} else {
-				Render16x16Tile_Mask_FlipY_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM1);
-			}
-		} else {
-			if (flipx) {
-				Render16x16Tile_Mask_FlipX_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM1);
-			} else {
-				Render16x16Tile_Mask_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM1);
-			}
-		}
+		Draw16x16MaskTile(pTransDraw, code, sx, sy, flipx, flipy, color, 4, 0, 0, DrvGfxROM1);
 	}
 }
 
@@ -1003,39 +1022,27 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = 100;
-	INT32 nCyclesTotal[2] = { 1536000 / 60, ((1536000 * 12) / 10) / 60 };
-	INT32 nSoundBufferPos = 0;
-
+	INT32 nCyclesTotal[2] = { 1536000 / 60, 1843200 / 60 };
+	INT32 nCyclesDone[2] = { 0, 0 };
 	M6809NewFrame();
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
 		M6809Open(0);
-		M6809Run(nCyclesTotal[0] / nInterleave);
+		CPU_RUN(0, M6809);
 		if (i == (nInterleave - 1) && DrvIRQEnable)
 			M6809SetIRQLine(0x00, CPU_IRQSTATUS_AUTO);
 		M6809Close();
 
 		M6809Open(1);
-		M6809Run(nCyclesTotal[1] / nInterleave);
+		CPU_RUN_TIMER(1);
 		if (i == (nInterleave - 1) && DrvIRQEnable)
 			M6809SetIRQLine(0x20, CPU_IRQSTATUS_AUTO); // nmi
 		M6809Close();
-
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
 	}
 
 	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		if (nSegmentLength) {
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-		}
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 	}
 
 	if (pBurnDraw) {
@@ -1069,6 +1076,12 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(DrvSprRAMBank);
 		SCAN_VAR(DrvROMBank);
 		SCAN_VAR(DrvIRQEnable);
+		SCAN_VAR(nRotate);
+		SCAN_VAR(nRotateTarget);
+		SCAN_VAR(nRotateTry);
+		SCAN_VAR(nRotateHoldInput);
+		SCAN_VAR(nAutoFireCounter);
+		SCAN_VAR(nRotateTime);
 	}
 
 	if (nAction & ACB_WRITE) {
@@ -1103,18 +1116,22 @@ STD_ROM_FN(jackal)
 // Jackal (World, Rotary Joystick)
 
 static struct BurnRomInfo jackalrRomDesc[] = {
-	{ "631_q02.15d",	0x10000, 0xed2a7d66, 0 | BRF_PRG | BRF_ESS }, // 0 - M6809 #0 Code
-	{ "631_q03.16d",	0x04000, 0xb9d34836, 0 | BRF_PRG | BRF_ESS }, // 1
+	{ "631_q02.15d",	0x10000, 0xed2a7d66, 0 | BRF_PRG | BRF_ESS }, //  0 - M6809 #0 Code
+	{ "631_q03.16d",	0x04000, 0xb9d34836, 0 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "631_q01.11d",	0x08000, 0x54aa2d29, 1 | BRF_PRG | BRF_ESS }, // 2 - M6809 #1 Code
+	{ "631_q01.11d",	0x08000, 0x54aa2d29, 1 | BRF_PRG | BRF_ESS }, //  2 - M6809 #1 Code
 
-	{ "631t04.7h",		0x20000, 0x457f42f0, 2 | BRF_GRA },           // 3 - Graphics Tiles
-	{ "631t05.8h",		0x20000, 0x732b3fc1, 2 | BRF_GRA },           // 4
-	{ "631t06.12h",		0x20000, 0x2d10e56e, 2 | BRF_GRA },           // 5
-	{ "631t07.13h",		0x20000, 0x4961c397, 2 | BRF_GRA },           // 6
+	{ "631_q05.7h",		0x10000, 0xbcf5d0a8, 2 | BRF_GRA },           //  3 - Graphics Tiles
+	{ "631_q06.8h",		0x10000, 0x4cb5df22, 2 | BRF_GRA },           //  4
+	{ "631_q04.7h",		0x10000, 0xe1e9aa42, 2 | BRF_GRA },           //  5
+	{ "631_q07.8h",		0x10000, 0xcc68c5b8, 2 | BRF_GRA },           //  6
+	{ "631_q09.12h",	0x10000, 0x55ea6852, 2 | BRF_GRA },           //  7
+	{ "631_q10.13h",	0x10000, 0xfe93e217, 2 | BRF_GRA },           //  8
+	{ "631_q08.12h",	0x10000, 0xd2492b8b, 2 | BRF_GRA },           //  9
+	{ "631_q11.13h",	0x10000, 0x563ae24c, 2 | BRF_GRA },           // 10
 
-	{ "631r08.9h",		0x00100, 0x7553a172, 3 | BRF_GRA },           // 7 - Color PROMs
-	{ "631r09.14h",		0x00100, 0xa74dd86c, 3 | BRF_GRA },           // 7 - Color PROMs
+	{ "631r08.9h",		0x00100, 0x7553a172, 3 | BRF_GRA },           // 11 - Color PROMs
+	{ "631r09.14h",		0x00100, 0xa74dd86c, 3 | BRF_GRA },           // 12
 };
 
 STD_ROM_PICK(jackalr)
@@ -1245,9 +1262,10 @@ INT32 DrvInitbl()
 	return DrvInit();
 }
 
-INT32 DrvInitRo()
+INT32 JackalrInit()
 {
 	game_rotates = 1;
+	jackalr = 1;
 
 	return DrvInit();
 }
@@ -1268,7 +1286,7 @@ struct BurnDriver BurnDrvJackalr = {
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
 	NULL, jackalrRomInfo, jackalrRomName, NULL, NULL, NULL, NULL, DrvrotateInputInfo, DrvrotateDIPInfo,
-	DrvInitRo, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x300,
+	JackalrInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x300,
 	224, 240, 3, 4
 };
 
@@ -1286,7 +1304,7 @@ struct BurnDriver BurnDrvJackalbl = {
 	"jackalbl", "jackal", NULL, NULL, "1986",
 	"Jackal (bootleg, Rotary Joystick)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
 	NULL, jackalblRomInfo, jackalblRomName, NULL, NULL, NULL, NULL, DrvrotateInputInfo, DrvrotateDIPInfo,
 	DrvInitbl, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x300,
 	224, 240, 3, 4
@@ -1306,7 +1324,7 @@ struct BurnDriver BurnDrvTopgunbl = {
 	"topgunbl", "jackal", NULL, NULL, "1986",
 	"Top Gunner (bootleg, Rotary Joystick)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
 	NULL, topgunblRomInfo, topgunblRomName, NULL, NULL, NULL, NULL, DrvrotateInputInfo, DrvrotateDIPInfo,
 	DrvInitbl, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x300,
 	224, 240, 3, 4

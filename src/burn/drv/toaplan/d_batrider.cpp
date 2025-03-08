@@ -3,6 +3,7 @@
 
 #include "toaplan.h"
 #include "nmk112.h"
+
 // Batrider
 
 static UINT8 drvButton[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -11,10 +12,10 @@ static UINT8 drvJoy2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 drvInput[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 static UINT8 drvRegion = 0;
 static UINT8 drvReset = 0;
-static UINT8 bDrawScreen;
+
+static HoldCoin<2> hold_coin;
 
 static UINT8 nIRQPending;
-static bool bVBlank;
 
 static INT32 nData;
 
@@ -24,35 +25,35 @@ static INT32 nTextROMStatus;
 static void Map68KTextROM(bool bMapTextROM);
 
 static struct BurnInputInfo batriderInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	drvButton + 3,	"p1 coin"},
-	{"P1 Start",	BIT_DIGITAL,	drvButton + 5,	"p1 start"},
+	{"P1 Coin",		BIT_DIGITAL,	drvButton + 3,	"p1 coin"	},
+	{"P1 Start",	BIT_DIGITAL,	drvButton + 5,	"p1 start"	},
 
-	{"P1 Up",		BIT_DIGITAL,	drvJoy1 + 0,	"p1 up"},
-	{"P1 Down",		BIT_DIGITAL,	drvJoy1 + 1,	"p1 down"},
-	{"P1 Left",		BIT_DIGITAL,	drvJoy1 + 2,	"p1 left"},
-	{"P1 Right",	BIT_DIGITAL,	drvJoy1 + 3,	"p1 right"},
-	{"P1 Shoot 1",	BIT_DIGITAL,	drvJoy1 + 4,	"p1 fire 1"},
-	{"P1 Shoot 2",	BIT_DIGITAL,	drvJoy1 + 5,	"p1 fire 2"},
-	{"P1 Shoot 3",	BIT_DIGITAL,	drvJoy1 + 6,	"p1 fire 3"},
+	{"P1 Up",		BIT_DIGITAL,	drvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",		BIT_DIGITAL,	drvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",		BIT_DIGITAL,	drvJoy1 + 2,	"p1 left"	},
+	{"P1 Right",	BIT_DIGITAL,	drvJoy1 + 3,	"p1 right"	},
+	{"P1 Shoot 1",	BIT_DIGITAL,	drvJoy1 + 4,	"p1 fire 1"	},
+	{"P1 Shoot 2",	BIT_DIGITAL,	drvJoy1 + 5,	"p1 fire 2"	},
+	{"P1 Shoot 3",	BIT_DIGITAL,	drvJoy1 + 6,	"p1 fire 3"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	drvButton + 4,	"p2 coin"},
-	{"P2 Start",	BIT_DIGITAL,	drvButton + 6,	"p2 start"},
+	{"P2 Coin",		BIT_DIGITAL,	drvButton + 4,	"p2 coin"	},
+	{"P2 Start",	BIT_DIGITAL,	drvButton + 6,	"p2 start"	},
 
-	{"P2 Up",		BIT_DIGITAL,	drvJoy2 + 0,	"p2 up"},
-	{"P2 Down",		BIT_DIGITAL,	drvJoy2 + 1,	"p2 down"},
-	{"P2 Left",		BIT_DIGITAL,	drvJoy2 + 2,	"p2 left"},
-	{"P2 Right",	BIT_DIGITAL,	drvJoy2 + 3,	"p2 right"},
-	{"P2 Shoot 1",	BIT_DIGITAL,	drvJoy2 + 4,	"p2 fire 1"},
-	{"P2 Shoot 2",	BIT_DIGITAL,	drvJoy2 + 5,	"p2 fire 2"},
-	{"P2 Shoot 3",	BIT_DIGITAL,	drvJoy2 + 6,	"p2 fire 3"},
+	{"P2 Up",		BIT_DIGITAL,	drvJoy2 + 0,	"p2 up"		},
+	{"P2 Down",		BIT_DIGITAL,	drvJoy2 + 1,	"p2 down"	},
+	{"P2 Left",		BIT_DIGITAL,	drvJoy2 + 2,	"p2 left"	},
+	{"P2 Right",	BIT_DIGITAL,	drvJoy2 + 3,	"p2 right"	},
+	{"P2 Shoot 1",	BIT_DIGITAL,	drvJoy2 + 4,	"p2 fire 1"	},
+	{"P2 Shoot 2",	BIT_DIGITAL,	drvJoy2 + 5,	"p2 fire 2"	},
+	{"P2 Shoot 3",	BIT_DIGITAL,	drvJoy2 + 6,	"p2 fire 3"	},
 
-	{"Reset",		BIT_DIGITAL,	  &drvReset,		"reset"},
-	{"Test",	  BIT_DIGITAL,	 drvButton + 2,	"diag"},
-	{"Service",	BIT_DIGITAL,	 drvButton + 0,	"service"},
-	{"Dip 1",		BIT_DIPSWITCH,	drvInput + 3,	"dip"},
-	{"Dip 2",		BIT_DIPSWITCH,	drvInput + 4,	"dip"},
-	{"Dip 3",		BIT_DIPSWITCH,	drvInput + 5,	"dip"},
-	{"Region",  BIT_DIPSWITCH,	&drvRegion  ,	"dip"},
+	{"Reset",		BIT_DIGITAL,	&drvReset,		"reset"		},
+	{"Test",	  	BIT_DIGITAL,	drvButton + 2,	"diag"		},
+	{"Service",		BIT_DIGITAL,	drvButton + 0,	"service"	},
+	{"Dip 1",		BIT_DIPSWITCH,	drvInput + 3,	"dip"		},
+	{"Dip 2",		BIT_DIPSWITCH,	drvInput + 4,	"dip"		},
+	{"Dip 3",		BIT_DIPSWITCH,	drvInput + 5,	"dip"		},
+	{"Region",  	BIT_DIPSWITCH,	&drvRegion  ,	"dip"		},
 };
 
 STDINPUTINFO(batrider)
@@ -254,11 +255,166 @@ STDDIPINFOEXT(batridk, batridkRegion, batrider)
 STDDIPINFOEXT(batridhk, batridhkRegion, batrider)
 STDDIPINFOEXT(batridta, batridtaRegion, batrider)
 
+static struct BurnDIPInfo batriderjDIPList[] = {
+	// Defaults
+	{0x15,	0xFF,  0xFF,	0x00,	  NULL},
+	{0x16,	0xFF,  0xFF,	0x00,	  NULL},
+	{0x17,	0xFF,  0xFF,	0xE0,	  NULL},
+
+	// DIP 1
+	{0,		0xFE, 0,	2,	  "Test mode"},
+	{0x15,	0x01, 0x01,	0x00, "Normal"},
+	{0x15,	0x01, 0x01,	0x01, "Test"},
+	// Normal
+	{0,		0xFE, 0,	2,	  "Starting coin"},
+	{0x15,	0x82, 0x02,	0x00, "1 credit"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0x02,	0x02, "2 credits"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	// Free play
+	{0,		0xFE, 0,	2,	  "Stick mode"},
+	{0x15,	0x02, 0x02,	0x00, "Normal"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x02, 0x02,	0x02, "Special"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	// Both
+	{0,		0xFE, 0,	8,	  "Coin 1"},
+	{0x15,	0x01, 0x1C, 0x00, "1 coin 1 credit"},
+	{0x15,	0x01, 0x1C, 0x04, "1 coin 2 credits"},
+	{0x15,	0x01, 0x1C, 0x08, "1 coin 3 credits"},
+	{0x15,	0x01, 0x1C, 0x0C, "1 coin 4 credits"},
+	{0x15,	0x01, 0x1C, 0x10, "2 coins 1 credit"},
+	{0x15,	0x01, 0x1C, 0x14, "3 coins 1 credit"},
+	{0x15,	0x01, 0x1C, 0x18, "4 coins 1 credit"},
+	{0x15,	0x01, 0x1C, 0x1C, "Free Play"},
+	// 0x1C: Free play settings active
+	// Normal
+	{0,		0xFE, 0,	7,	  "Coin 2"},
+	{0x15,	0x82, 0xE0,	0x00, "1 coin 1 credit"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0x20, "1 coin 2 credits"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0x40, "1 coin 3 credits"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0x60, "1 coin 4 credits"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0x80, "2 coins 1 credit"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0xA0, "3 coins 1 credit"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0xC0, "4 coins 1 credit"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x82, 0xE0,	0xE0, "1 coin 1 credit"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	// Free play
+	{0,		0xFE, 0,	2,	  "Hit score"},
+	{0x15,	0x02, 0x20, 0x00, "Off"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x02, 0x20, 0x20, "On"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0,		0xFE, 0,	2,	  "Sound effect"},
+	{0x15,	0x02, 0x40,	0x00, "Off"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x02, 0x40,	0x40, "On"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0,		0xFE, 0,	2,	  "Music"},
+	{0x15,	0x02, 0x80,	0x00, "Off"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x15,	0x02, 0x80,	0x80, "On"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+
+	// DIP 2
+	{0,		0xFE, 0,	4,	  "Start rank"},
+	{0x16,	0x01, 0x03, 0x00, "Normal"},
+	{0x16,	0x01, 0x03, 0x01, "Easy"},
+	{0x16,	0x01, 0x03, 0x02, "Hard"},
+	{0x16,	0x01, 0x03, 0x03, "Very hard"},
+	{0,		0xFE, 0,	4,	  "Timer rank"},
+	{0x16,	0x01, 0x0C, 0x00, "Normal"},
+	{0x16,	0x01, 0x0C, 0x04, "Low"},
+	{0x16,	0x01, 0x0C, 0x08, "High"},
+	{0x16,	0x01, 0x0C, 0x0C, "Highest"},
+	{0,		0xFE, 0,	4,	  "Player counts"},
+	{0x16,	0x01, 0x30, 0x00, "3"},
+	{0x16,	0x01, 0x30, 0x10, "4"},
+	{0x16,	0x01, 0x30, 0x20, "2"},
+	{0x16,	0x01, 0x30, 0x30, "1"},
+	{0,		0xFE, 0,	4,	  "Extra player"},
+	{0x16,	0x01, 0xC0, 0x00, "1500000 each"},
+	{0x16,	0x01, 0xC0, 0x40, "1000000 each"},
+	{0x16,	0x01, 0xC0, 0x80, "2000000 each"},
+	{0x16,	0x01, 0xC0, 0xC0, "No extra player"},
+
+	// DIP 3
+	{0,		0xFE, 0,	2,	  "Screen flip"},
+	{0x17,	0x01, 0x01, 0x00, "Off"},
+	{0x17,	0x01, 0x01, 0x01, "On"},
+	{0,		0xFE, 0,	2,	  "Demo sound"},
+	{0x17,	0x01, 0x02, 0x00, "On"},
+	{0x17,	0x01, 0x02, 0x02, "Off"},
+	{0,		0xFE, 0,	2,	  "Stage edit"},
+	{0x17,	0x01, 0x04, 0x00, "Disable"},
+	{0x17,	0x01, 0x04, 0x04, "Enable"},
+	{0,		0xFE, 0,	2,	  "Continue play"},
+	{0x17,	0x01, 0x08, 0x00, "Enable"},
+	{0x17,	0x01, 0x08, 0x08, "Disable"},
+	{0,		0xFE, 0,	2,	  "Invincible"},
+	{0x17,	0x01, 0x10, 0x00, "Off"},
+	{0x17,	0x01, 0x10, 0x10, "On"},
+	// Free play
+	{0,		0xFE, 0,	2,	  "Guest Players"},
+	{0x17,	0x02, 0x20, 0x00, "Disable"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x17,	0x02, 0x20, 0x20, "Enable"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0,		0xFE, 0,	2,	  "Player select"},
+	{0x17,	0x02, 0x40, 0x00, "Disable"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x17,	0x02, 0x40, 0x40, "Enable"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0,		0xFE, 0,	2,	  "Special Course"},
+	{0x17,	0x02, 0x80, 0x00, "Disable"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+	{0x17,	0x02, 0x80, 0x80, "Enable"},
+	{0x15,	0x00, 0x1C, 0x1C, NULL},
+
+	// Region
+	{0,		0xFD, 0,	26,	  "Region"},
+	{0x18,	0x01, 0x1F, 0x00, "Nippon"},
+	{0x18,	0x01, 0x1F, 0x01, "U.S.A."},
+	{0x18,	0x01, 0x1F, 0x02, "Europe"},
+	{0x18,	0x01, 0x1F, 0x03, "Asia"},
+	{0x18,	0x01, 0x1F, 0x04, "German"},
+	{0x18,	0x01, 0x1F, 0x05, "Austria"},
+	{0x18,	0x01, 0x1F, 0x06, "Belgium"},
+	{0x18,	0x01, 0x1F, 0x07, "Denmark"},
+	{0x18,	0x01, 0x1F, 0x08, "Finland"},
+	{0x18,	0x01, 0x1F, 0x09, "France"},
+	{0x18,	0x01, 0x1F, 0x0A, "Great Britain"},
+	{0x18,	0x01, 0x1F, 0x0B, "Greece"},
+	{0x18,	0x01, 0x1F, 0x0C, "Holland"},
+	{0x18,	0x01, 0x1F, 0x0D, "Italy"},
+	{0x18,	0x01, 0x1F, 0x0E, "Norway"},
+	{0x18,	0x01, 0x1F, 0x0F, "Portugal"},
+	{0x18,	0x01, 0x1F, 0x10, "Spain"},
+	{0x18,	0x01, 0x1F, 0x11, "Sweden"},
+	{0x18,	0x01, 0x1F, 0x12, "Switzerland"},
+	{0x18,	0x01, 0x1F, 0x13, "Australia"},
+	{0x18,	0x01, 0x1F, 0x14, "New Zealand"},
+	{0x18,	0x01, 0x1F, 0x15, "Taiwan"},
+	{0x18,	0x01, 0x1F, 0x16, "HongKong"},
+	{0x18,	0x01, 0x1F, 0x17, "Korea"},
+	{0x18,	0x01, 0x1F, 0x18, "China"},
+	{0x18,	0x01, 0x1F, 0x19, "World"},
+};
+
+STDDIPINFO(batriderj)
+
 static UINT8 *Mem = NULL, *MemEnd = NULL;
 static UINT8 *RamStart, *RamEnd;
 static UINT8 *Rom01;
 static UINT8 *Ram01, *Ram02, *RamPal;
-UINT8 *RamShared;
+static UINT8 *RamShared;
 static INT32 nColCount = 0x0800;
 
 static INT32 MemIndex()
@@ -300,8 +456,8 @@ static void drvZ80Bankswitch(INT32 nBank)
 	nBank &= 0x0F;
 	if (nBank != nCurrentBank) {
 		UINT8* nStartAddress = RomZ80 + (nBank << 14);
-		ZetMapArea(0x8000, 0xBFFF, 0, nStartAddress);
-		ZetMapArea(0x8000, 0xBFFF, 2, nStartAddress);
+
+		ZetMapMemory(nStartAddress, 0x8000, 0xbfff, MAP_ROM);
 
 		nCurrentBank = nBank;
 	}
@@ -325,17 +481,19 @@ static INT32 drvScan(INT32 nAction, INT32* pnMin)
 
 		SekScan(nAction);				// Scan 68000
 		ZetScan(nAction);				// Scan Z80
-		SCAN_VAR(nCurrentBank);
 
 		MSM6295Scan(nAction, pnMin);
 		BurnYM2151Scan(nAction, pnMin);
+		NMK112_Scan(nAction);
 
 		ToaScanGP9001(nAction, pnMin);
 
 		SCAN_VAR(nIRQPending);
 		SCAN_VAR(nTextROMStatus);
+		SCAN_VAR(nCurrentBank);
+		SCAN_VAR(nData);
 
-		SCAN_VAR(drvInput);
+		hold_coin.scan();
 
 		if (nAction & ACB_WRITE) {
 			INT32 n = nTextROMStatus;
@@ -377,7 +535,7 @@ static INT32 LoadRoms()
 	return 0;
 }
 
-UINT8 __fastcall batriderZIn(UINT16 nAddress)
+static UINT8 __fastcall batriderZIn(UINT16 nAddress)
 {
 	nAddress &= 0xFF;
 
@@ -400,7 +558,7 @@ UINT8 __fastcall batriderZIn(UINT16 nAddress)
 	return 0;
 }
 
-void __fastcall batriderZOut(UINT16 nAddress, UINT8 nValue)
+static void __fastcall batriderZOut(UINT16 nAddress, UINT8 nValue)
 {
 	nAddress &= 0xFF;
 
@@ -474,7 +632,7 @@ static INT32 drvZInit()
 	return 0;
 }
 
-UINT8 __fastcall batriderReadByte(UINT32 sekAddress)
+static UINT8 __fastcall batriderReadByte(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 
@@ -503,7 +661,7 @@ UINT8 __fastcall batriderReadByte(UINT32 sekAddress)
 	return 0;
 }
 
-UINT16 __fastcall batriderReadWord(UINT32 sekAddress)
+static UINT16 __fastcall batriderReadWord(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 		case 0x500006:
@@ -527,7 +685,7 @@ UINT16 __fastcall batriderReadWord(UINT32 sekAddress)
 	return 0;
 }
 
-void __fastcall batriderWriteByte(UINT32 sekAddress, UINT8)	// UINT8 byteValue
+static void __fastcall batriderWriteByte(UINT32 sekAddress, UINT8)	// UINT8 byteValue
 {
 	switch (sekAddress) {
 
@@ -539,7 +697,7 @@ void __fastcall batriderWriteByte(UINT32 sekAddress, UINT8)	// UINT8 byteValue
 	}
 }
 
-void __fastcall batriderWriteWord(UINT32 sekAddress, UINT16 wordValue)
+static void __fastcall batriderWriteWord(UINT32 sekAddress, UINT16 wordValue)
 {
 	switch (sekAddress) {
 		case 0x500020: {
@@ -608,7 +766,7 @@ void __fastcall batriderWriteWord(UINT32 sekAddress, UINT16 wordValue)
 	}
 }
 
-UINT16 __fastcall batriderReadWordGP9001(UINT32 sekAddress)
+static UINT16 __fastcall batriderReadWordGP9001(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 		case 0x400008:
@@ -621,7 +779,7 @@ UINT16 __fastcall batriderReadWordGP9001(UINT32 sekAddress)
 	return 0;
 }
 
-void __fastcall batriderWriteWordGP9001(UINT32 sekAddress, UINT16 wordValue)
+static void __fastcall batriderWriteWordGP9001(UINT32 sekAddress, UINT16 wordValue)
 {
 	switch (sekAddress) {
 
@@ -644,12 +802,12 @@ void __fastcall batriderWriteWordGP9001(UINT32 sekAddress, UINT16 wordValue)
 	}
 }
 
-UINT8 __fastcall batriderReadByteZ80ROM(UINT32 sekAddress)
+static UINT8 __fastcall batriderReadByteZ80ROM(UINT32 sekAddress)
 {
 	return RomZ80[(sekAddress & 0x7FFFF) >> 1];
 }
 
-UINT16 __fastcall batriderReadWordZ80ROM(UINT32 sekAddress)
+static UINT16 __fastcall batriderReadWordZ80ROM(UINT32 sekAddress)
 {
 	return RomZ80[(sekAddress & 0x7FFFF) >> 1];
 }
@@ -699,6 +857,8 @@ static INT32 drvDoReset()
 	MSM6295Reset();
 	BurnYM2151Reset();
 	NMK112Reset();
+
+	hold_coin.reset();
 
 	HiscoreReset();
 
@@ -771,12 +931,12 @@ static INT32 drvInit()
 	drvZInit();				// Initialize Z80
 
 	BurnYM2151Init(32000000 / 8);
-	BurnYM2151SetAllRoutes(1.00, BURN_SND_ROUTE_BOTH);
+	BurnYM2151SetAllRoutes(0.65, BURN_SND_ROUTE_BOTH);
 	
 	MSM6295Init(0, 32000000 / 10 / 132, 1);
 	MSM6295Init(1, 32000000 / 10 / 165, 1);
-	MSM6295SetRoute(0, 1.00, BURN_SND_ROUTE_BOTH);
-	MSM6295SetRoute(1, 1.00, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(0, 0.65, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(1, 0.65, BURN_SND_ROUTE_BOTH);
 
 	NMK112_init(0, MSM6295ROM, MSM6295ROM + 0x100000, 0x100000, 0x100000);
 
@@ -785,9 +945,9 @@ static INT32 drvInit()
 	ToaPalInit();
 
 	nTextROMStatus = -1;
-	bDrawScreen = true;
 
 	drvDoReset(); // Reset machine
+
 	return 0;
 }
 
@@ -811,13 +971,11 @@ static INT32 drvDraw()
 {
 	ToaClearScreen(0);
 
-	if (bDrawScreen) {
-		ToaGetBitmap();
-		ToaRenderGP9001();					// Render GP9001 graphics
-		ToaExtraTextLayer();				// Render extra text layer
-	}
+	ToaGetBitmap();
+	ToaRenderGP9001();					// Render GP9001 graphics
+	ToaExtraTextLayer();				// Render extra text layer
 
-	ToaPalUpdate();							// Update the palette
+	ToaPalUpdate();						// Update the palette
 
 	return 0;
 }
@@ -842,6 +1000,9 @@ static INT32 drvFrame()
 	ToaClearOpposites(&drvInput[0]);
 	ToaClearOpposites(&drvInput[1]);
 
+	hold_coin.check(0, drvInput[2], 1 << 3, 1);
+	hold_coin.check(1, drvInput[2], 1 << 4, 1);
+
 	SekNewFrame();
 
 	nCyclesTotal[0] = (INT32)((INT64)16000000 * nBurnCPUSpeedAdjust / (0x0100 * 60));
@@ -853,8 +1014,8 @@ static INT32 drvFrame()
 	SekSetCyclesScanline(nCyclesTotal[0] / 262);
 	nToaCyclesDisplayStart = nCyclesTotal[0] - ((nCyclesTotal[0] * (TOA_VBLANK_LINES + 240)) / 262);
 	nToaCyclesVBlankStart = nCyclesTotal[0] - ((nCyclesTotal[0] * TOA_VBLANK_LINES) / 262);
-	bVBlank = false;
 
+	bool bVBlank = false;
 	INT32 nSoundBufferPos = 0;
 
 	ZetOpen(0);
@@ -1157,7 +1318,7 @@ STD_ROM_FN(batridta)
 
 struct BurnDriver BurnDrvBatrid = {
 	"batrider", NULL, NULL, NULL, "1998",
-	"Armed Police Batrider (Europe) (Fri Feb 13 1998)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (Europe) (Fri Feb 13 1998)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, batridRomInfo, batridRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batridDIPInfo,
@@ -1167,7 +1328,7 @@ struct BurnDriver BurnDrvBatrid = {
 
 struct BurnDriver BurnDrvBatridu = {
 	"batrideru", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider (U.S.A.) (Fri Feb 13 1998)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (USA) (Fri Feb 13 1998)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, batriduRomInfo, batriduRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batriduDIPInfo,
@@ -1177,7 +1338,7 @@ struct BurnDriver BurnDrvBatridu = {
 
 struct BurnDriver BurnDrvBatridc = {
 	"batriderc", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider (China) (Fri Feb 13 1998)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (China) (Fri Feb 13 1998)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, batridcRomInfo, batridcRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batridcDIPInfo,
@@ -1187,7 +1348,7 @@ struct BurnDriver BurnDrvBatridc = {
 
 struct BurnDriver BurnDrvBatridhk = {
 	"batriderhk", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider - A Version (Hong Kong) (Mon Dec 22 1997)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (Hong Kong) (Mon Dec 22 1997)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, batridhkRomInfo, batridhkRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batridhkDIPInfo,
@@ -1197,17 +1358,17 @@ struct BurnDriver BurnDrvBatridhk = {
 
 struct BurnDriver BurnDrvBatridj = {
 	"batriderj", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider - B Version (Japan) (Fri Feb 13 1998)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (Japan, B version) (Fri Feb 13 1998)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
-	NULL, batridjRomInfo, batridjRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batriderDIPInfo,
+	NULL, batridjRomInfo, batridjRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batriderjDIPInfo,
 	drvInit, drvExit, drvFrame, drvDraw, drvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBatridk = {
 	"batriderk", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider (Korea) (Fri Feb 13 1998)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (Korea) (Fri Feb 13 1998)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, batridkRomInfo, batridkRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batridkDIPInfo,
@@ -1217,17 +1378,17 @@ struct BurnDriver BurnDrvBatridk = {
 
 struct BurnDriver BurnDrvBatridja = {
 	"batriderja", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider - A Version (Japan) (Mon Dec 22 1997)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (Japan, older version) (Mon Dec 22 1997)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
-	NULL, batridjaRomInfo, batridjaRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batriderDIPInfo,
+	NULL, batridjaRomInfo, batridjaRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batriderjDIPInfo,
 	drvInit, drvExit, drvFrame, drvDraw, drvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBatridta = {
 	"batridert", "batrider", NULL, NULL, "1998",
-	"Armed Police Batrider - A Version (Taiwan) (Mon Dec 22 1997)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Armed Police Batrider (Taiwan) (Mon Dec 22 1997)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, batridtaRomInfo, batridtaRomName, NULL, NULL, NULL, NULL, batriderInputInfo, batridtaDIPInfo,

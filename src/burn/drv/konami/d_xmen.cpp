@@ -422,6 +422,8 @@ static INT32 DrvDoReset()
 
 	memset(sbtn, 0, sizeof(sbtn));
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -492,12 +494,7 @@ static INT32 DrvInit()
 {
 	GenericTilesInit();
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(Drv68KROM  + 0x000001,  0, 2)) return 1;
@@ -564,7 +561,8 @@ static INT32 DrvInit()
 	K053247Init(DrvGfxROM1, DrvGfxROMExp1, 0x3fffff, XmenK053247Callback, 1);
 	K053247SetSpriteOffset(514, -158);
 
-	BurnYM2151Init(4000000);
+	BurnYM2151InitBuffered(4000000, 1, NULL, 0);
+	BurnTimerAttachZet(8000000);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 0.20, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 0.20, BURN_SND_ROUTE_RIGHT);
 
@@ -593,7 +591,7 @@ static INT32 DrvExit()
 
 	EEPROMExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -642,9 +640,9 @@ static INT32 draw_side(INT32 side)
 		{
 			// tilemap 0 (@ 0x18c000) is master, only it can control certain registers. -dink july 2020
 			if ((side == 1 || tilemap_select) && (i != 0x1c80 && i != 0x1e80)) {
-				K052109Write(i, *((UINT16*)(DrvTMapRAM[side+tilemap_select] + i * 2)) & 0xff);
+				K052109Write(i, BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvTMapRAM[side+tilemap_select] + i * 2))) & 0xff);
 			} else if (side == 0) {
-				K052109Write(i, *((UINT16*)(DrvTMapRAM[side] + i * 2)) & 0xff);
+				K052109Write(i, BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvTMapRAM[side] + i * 2))) & 0xff);
 			}
 		}
 	}
@@ -724,6 +722,8 @@ static INT32 DrvFrame()
 		DrvDoReset();
 	}
 
+	ZetNewFrame();
+
 	{
 		memset (DrvInputs, 0xff, sizeof(DrvInputs));
 		for (INT32 i = 0; i < 16; i++) {
@@ -771,7 +771,6 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = 256;
-	INT32 nSoundBufferPos = 0;
 	INT32 nCyclesTotal[2] = { 16000000 / 60, 8000000 / 60 };
 	INT32 nCyclesDone[2] = { 0, 0 };
 
@@ -782,27 +781,16 @@ static INT32 DrvFrame()
 		CPU_RUN(0, Sek);
 
 		if (i == 239) {
-			if (nScreenWidth != 288) interrupt_enable = *((UINT16*)(DrvTMapRAM[0] + 0x3a00)) & 0x0004;
+			if (nScreenWidth != 288) interrupt_enable = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvTMapRAM[0] + 0x3a00))) & 0x0004;
 			if (interrupt_enable) SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
 		}
 		if (i == 255) SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
 
-		CPU_RUN(1, Zet);
-
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
+		CPU_RUN_TIMER(1);
 	}
 
 	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-		if (nSegmentLength) {
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-		}
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 		K054539Update(0, pBurnSoundOut, nBurnSoundLen);
 	}
 
@@ -826,7 +814,6 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 	if (nAction & ACB_VOLATILE) {
 		memset(&ba, 0, sizeof(ba));
-
 		ba.Data	  = AllRam;
 		ba.nLen	  = RamEnd - AllRam;
 		ba.szName = "All Ram";
@@ -839,9 +826,9 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		K054539Scan(nAction, pnMin);
 
 		KonamiICScan(nAction);
-		EEPROMScan(nAction, pnMin);
 
 		SCAN_VAR(interrupt_enable);
+		SCAN_VAR(tilemap_select);
 
 		SCAN_VAR(sbtn);
 	}
@@ -887,7 +874,7 @@ struct BurnDriver BurnDrvXmen = {
 	"xmen", NULL, NULL, NULL, "1992",
 	"X-Men (4 Players ver EBA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenRomInfo, xmenRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -924,7 +911,7 @@ struct BurnDriver BurnDrvXmenu = {
 	"xmenu", "xmen", NULL, NULL, "1992",
 	"X-Men (4 Players ver UBB)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenuRomInfo, xmenuRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -961,7 +948,7 @@ struct BurnDriver BurnDrvXmenua = {
 	"xmenua", "xmen", NULL, NULL, "1992",
 	"X-Men (4 Players ver UEB)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenuaRomInfo, xmenuaRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -998,7 +985,7 @@ struct BurnDriver BurnDrvXmena = {
 	"xmena", "xmen", NULL, NULL, "1992",
 	"X-Men (4 Players ver AEA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenaRomInfo, xmenaRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1035,7 +1022,7 @@ struct BurnDriver BurnDrvXmenaa = {
 	"xmenaa", "xmen", NULL, NULL, "1992",
 	"X-Men (4 Players ver ADA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenaaRomInfo, xmenaaRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1072,7 +1059,7 @@ struct BurnDriver BurnDrvXmenj = {
 	"xmenj", "xmen", NULL, NULL, "1992",
 	"X-Men (4 Players ver JBA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenjRomInfo, xmenjRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1109,7 +1096,7 @@ struct BurnDriver BurnDrvXmenja = {
 	"xmenja", "xmen", NULL, NULL, "1992",
 	"X-Men (4 Players ver JEA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmenjaRomInfo, xmenjaRomName, NULL, NULL, NULL, NULL, XmenInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1146,7 +1133,7 @@ struct BurnDriver BurnDrvXmen2pe = {
 	"xmen2pe", "xmen", NULL, NULL, "1992",
 	"X-Men (2 Players ver EAA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmen2peRomInfo, xmen2peRomName, NULL, NULL, NULL, NULL, Xmen2pInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1183,7 +1170,7 @@ struct BurnDriver BurnDrvXmen2pu = {
 	"xmen2pu", "xmen", NULL, NULL, "1992",
 	"X-Men (2 Players ver UAB)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmen2puRomInfo, xmen2puRomName, NULL, NULL, NULL, NULL, Xmen2pInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1220,7 +1207,7 @@ struct BurnDriver BurnDrvXmen2pa = {
 	"xmen2pa", "xmen", NULL, NULL, "1992",
 	"X-Men (2 Players ver AAA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmen2paRomInfo, xmen2paRomName, NULL, NULL, NULL, NULL, Xmen2pInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1257,7 +1244,7 @@ struct BurnDriver BurnDrvXmen2pj = {
 	"xmen2pj", "xmen", NULL, NULL, "1992",
 	"X-Men (2 Players ver JAA)\0", NULL, "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmen2pjRomInfo, xmen2pjRomName, NULL, NULL, NULL, NULL, Xmen2pInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -1292,9 +1279,9 @@ STD_ROM_FN(xmen6p)
 
 struct BurnDriver BurnDrvXmen6p = {
 	"xmen6p", "xmen", NULL, NULL, "1992",
-	"X-Men (6 Players ver ECB)\0", NULL, "Konami", "GX065",
+	"X-Men (6 Players ver ECB)\0", "After leaving service mode, a reset is necessary", "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 6, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_RUNAHEAD_DRAWSYNC | BDF_CLONE | BDF_HISCORE_SUPPORTED, 6, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmen6pRomInfo, xmen6pRomName, NULL, NULL, NULL, NULL, Xmen6pInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288*2, 224, 8, 3
@@ -1329,9 +1316,9 @@ STD_ROM_FN(xmen6pu)
 
 struct BurnDriver BurnDrvXmen6pu = {
 	"xmen6pu", "xmen", NULL, NULL, "1992",
-	"X-Men (6 Players ver UCB)\0", NULL, "Konami", "GX065",
+	"X-Men (6 Players ver UCB)\0", "After leaving service mode, a reset is necessary", "Konami", "GX065",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 6, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_RUNAHEAD_DRAWSYNC | BDF_CLONE | BDF_HISCORE_SUPPORTED, 6, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, xmen6puRomInfo, xmen6puRomName, NULL, NULL, NULL, NULL, Xmen6pInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288*2, 224, 8, 3

@@ -3,25 +3,65 @@
 
 int nIniVersion = 0;
 
-#ifdef BUILD_SDL2
-static char* szSDLconfigPath = NULL;
+#if defined(BUILD_SDL2) && !defined(SDL_WINDOWS)
+void FixAndCreateSupportPath(TCHAR *pSupportFolderPath, TCHAR *pBaseFolderName)
+{
+	TCHAR *szSupportFolderFixedPath = NULL;
+
+	if (strstr(pSupportFolderPath, pBaseFolderName) == NULL) {
+		if (pSupportFolderPath[strlen(pSupportFolderPath) - 1] == '/') pSupportFolderPath[strlen(pSupportFolderPath) - 1] = '\0';
+		szSupportFolderFixedPath = SDL_GetPrefPath("fbneo", pSupportFolderPath);
+		_stprintf(pSupportFolderPath, _T("%s"), szSupportFolderFixedPath);
+		SDL_free(szSupportFolderFixedPath);
+	}
+}
+
+void InitSupportPaths()
+{
+	TCHAR *szBaseFolderName = NULL;
+	szBaseFolderName = SDL_GetPrefPath(NULL, "fbneo");
+	FixAndCreateSupportPath(szAppPreviewsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppTitlesPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppCheatsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppHiscorePath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppSamplesPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppHDDPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppIpsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppIconsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppBlendPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppSelectPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppVersusPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppHowtoPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppScoresPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppBossesPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppGameoverPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppFlyersPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppMarqueesPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppControlsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppCabinetsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppPCBsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppHistoryPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppEEPROMPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppListsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppDatListsPath, szBaseFolderName);
+	FixAndCreateSupportPath(szAppArchivesPath, szBaseFolderName);
+
+	TCHAR szAppPresets[MAX_PATH] = _T("config/presets/");
+	FixAndCreateSupportPath(szAppPresets, szBaseFolderName);
+
+	SDL_free(szBaseFolderName);
+}
 #endif
 
 static void CreateConfigName(char* szConfig)
 {
-#if defined(BUILD_SDL2) && !defined(SDL_WINDOWS)	
-	char cfgdir[MAX_PATH] = { 0 };
-
-	if (szSDLconfigPath == NULL)
-	{
-		szSDLconfigPath = SDL_GetPrefPath("fbneo", "config");
-	}
-
-	snprintf(cfgdir, MAX_PATH, "%sfbneo.ini", szSDLconfigPath);
-	memcpy(szConfig, cfgdir, sizeof(cfgdir));
-#else 
+#if defined(BUILD_SDL2) && !defined(SDL_WINDOWS)
+	TCHAR *szSDLconfigPath = NULL;
+	szSDLconfigPath = SDL_GetPrefPath("fbneo", "config");
+	_stprintf(szConfig, _T("%sfbneo.ini"), szSDLconfigPath);
+	SDL_free(szSDLconfigPath);
+#else
 	_stprintf(szConfig, _T("fbneo.ini"));
-
 #endif
 
 	return;
@@ -35,7 +75,7 @@ int ConfigAppLoad()
 
 	CreateConfigName(szConfig);
 
-	if ((f = fopen(szConfig, "rt")) == NULL)
+	if ((f = _tfopen(szConfig, _T("rt"))) == NULL)
 	{
 		return 1;
 	}
@@ -51,9 +91,14 @@ int ConfigAppLoad()
 	char szLine[256];
 	while (fgets(szLine, sizeof(szLine), f))
 	{
-		// Get rid of the linefeed at the end
+		// Get rid of the linefeed and carriage return at the end
 		int nLen = strlen(szLine);
-		if (szLine[nLen - 1] == 10)
+		if (nLen > 0 && szLine[nLen - 1] == 10)
+		{
+			szLine[nLen - 1] = 0;
+			nLen--;
+		}
+		if (nLen > 0 && szLine[nLen - 1] == 13)
 		{
 			szLine[nLen - 1] = 0;
 			nLen--;
@@ -64,6 +109,12 @@ int ConfigAppLoad()
 		VAR(nVidSelect);                           // video mode select
 		VAR(bVidFullStretch);
 		VAR(nAutoFireRate);
+		VAR(bAlwaysMenu);
+		VAR(nGameSelect);
+		VAR(nFilterSelect);
+		VAR(bShowAvailableOnly);
+		VAR(bShowClones);
+		VAR(gameSelectedFromFilter);
 #endif
 		VAR(bVidScanlines);
 		VAR(bDoGamma);
@@ -119,7 +170,7 @@ int ConfigAppLoad()
 		STR(szAppListsPath);
 		STR(szAppDatListsPath);
 		STR(szAppArchivesPath);
-	
+
 #undef STR
 #undef FLT
 #undef VAR
@@ -137,7 +188,7 @@ int ConfigAppSave()
 
 	CreateConfigName(szConfig);
 
-	if ((f = fopen(szConfig, "wt")) == NULL)
+	if ((f = _tfopen(szConfig, _T("wt"))) == NULL)
 	{
 		return 1;
 	}
@@ -152,12 +203,24 @@ int ConfigAppSave()
 	fprintf(f, "nIniVersion 0x%06X", nBurnVer);
 
 #ifndef BUILD_PI
-	fprintf(f, "\n// video mode 0 = standard SDL 1= (very expiermental) opengl\n");
+	fprintf(f, "\n// video mode 0 = standard SDL. 1 = SDL1 opengl (don't use on SDL2!!!!!!)\n");
 	VAR(nVidSelect);              // video mode select
 	fprintf(f, "\n// If non-zero, allow stretching of the image to any size\n");
 	VAR(bVidFullStretch);
 	fprintf(f, "\n// Auto-Fire Rate, non-linear - use the GUI to change this setting!\n");
 	VAR(nAutoFireRate);
+	fprintf(f, "\n// Automatically go to the menu\n");
+	VAR(bAlwaysMenu);
+	fprintf(f, "\n// Last game selection\n");
+	VAR(nGameSelect);
+	fprintf(f, "\n// Last filter selection\n");
+	VAR(nFilterSelect);
+	fprintf(f, "\n// show available game only filter\n");
+	VAR(bShowAvailableOnly);
+	fprintf(f, "\n// show clones game filter\n");
+	VAR(bShowClones);
+	fprintf(f, "\n// Last game selected from filter\n");
+	VAR(gameSelectedFromFilter);
 #endif
 	fprintf(f, "\n// If non-zero, enable scanlines\n");
 	VAR(bVidScanlines);
@@ -165,6 +228,7 @@ int ConfigAppSave()
 	VAR(bDoGamma);
 	_ftprintf(f, _T("\n// Gamma to correct with\n"));
 	FLT(nGamma);
+	fprintf(f, "\n// Audio sample rate\n");
 	VAR(nAudSampleRate[0]);
 	fprintf(f, "\n// If non-zero, enable DSP filter\n");
 	VAR(nAudDSPModule[0]);
@@ -200,7 +264,7 @@ int ConfigAppSave()
 	STR(szAppPreviewsPath);
 	fprintf(f, "\n// Path to titlescreen images for use on the menu (include trailing slash)\n");
 	STR(szAppTitlesPath);
-	fprintf(f, "\n// UNUSED CURRENTLY (include trailing slash)\n");
+	fprintf(f, "\n// Cheat files path (include trailing slash)\n");
 	STR(szAppCheatsPath);
 	fprintf(f, "\n// Hiscore save path (include trailing slash)\n");
 	STR(szAppHiscorePath);
@@ -208,6 +272,8 @@ int ConfigAppSave()
 	STR(szAppSamplesPath);
 	fprintf(f, "\n// HDD image path (include trailing slash)\n");
 	STR(szAppHDDPath);
+	fprintf(f, "\n// EEPROM save path (include trailing slash)\n");
+	STR(szAppEEPROMPath);
 	fprintf(f, "\n// UNUSED CURRENTLY (include trailing slash)\n");
 	STR(szAppIpsPath);
 	fprintf(f, "\n// UNUSED CURRENTLY (include trailing slash)\n");
@@ -238,8 +304,6 @@ int ConfigAppSave()
 	STR(szAppPCBsPath);
 	fprintf(f, "\n// UNUSED CURRENTLY (include trailing slash)\n");
 	STR(szAppHistoryPath);
-	fprintf(f, "\n// EEPROM save path (include trailing slash)\n");
-	STR(szAppEEPROMPath);
 	fprintf(f, "\n// UNUSED CURRENTLY (include trailing slash)\n");
 	STR(szAppListsPath);
 	fprintf(f, "\n// UNUSED CURRENTLY (include trailing slash)\n");

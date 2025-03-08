@@ -5,24 +5,16 @@ Discord: https://discord.gg/8EGVd9v
 
 This is the official repository of FinalBurn Neo, an Emulator for Arcade Games & Select Consoles. It is based on the emulators FinalBurn and old versions of [MAME](https://www.mamedev.org)
 
+FBNeo, or FinalBurn Neo, is a multi-system arcade emulator designed for retro gaming enthusiasts. It emulates a wide range of classic arcade games and consoles, such as Capcom CPS-1, CPS-2, CPS-3, Neo Geo, and Sega System 16, among others. FBNeo focuses on accurate emulation and high performance, supporting advanced features like netplay, rewinding, and shader effects. It's a continuation of the FinalBurn and FinalBurn Alpha projects, aiming to provide a comprehensive and user-friendly platform for preserving and enjoying vintage games on modern systems.
+
 Use of this program and its source code is subject to the license conditions provided in the [license.txt](/src/license.txt) file in the src folder.
 
 # Work in Progress builds
-If the below build status badge is green, you can download the latest builds from [this repository](https://github.com/finalburnneo/FBNeo-WIP-Storage-Facility/releases/tag/appveyor-build). Please note that if the below build status badge is not green then the build will be out of date. As this build is of the last commit occasionally you might run into incomplete code, crashes or other issues that [official releases](https://github.com/finalburnneo/FBNeo/releases) will not have. Also note that the dates might be wrong against the downloads, but if the badge is green the downloads *will* be of the latest commit. 
+You can download the latest builds by clicking on the badge below. Please note that the downloads might not be available immediately after a new commit. As this build is of the last commit occasionally you might run into incomplete code, crashes or other issues that [official releases](https://github.com/finalburnneo/FBNeo/releases) will not have.
 
-[![Build status](https://ci.appveyor.com/api/projects/status/8rkefxtvxd3cllag/branch/master?svg=true)](https://ci.appveyor.com/project/tmaul/fbneo-kbhgd/branch/master)
-
-Here is the build status of the other versions for which we don't supply a binary directly. A red badge against a platform will indicate that something is wrong with that build. Currenty Raspberry Pi builds are missing from CI, but will one day be added:
-
-![SDL2](https://github.com/finalburnneo/FBNeo/workflows/SDL2%20CI/badge.svg)
-![SDL1.2](https://github.com/finalburnneo/FBNeo/workflows/SDL1.2%20CI/badge.svg)
-![macOS](https://github.com/finalburnneo/FBNeo/workflows/macOS%20CI/badge.svg)
-![VS X64](https://github.com/finalburnneo/FBNeo/workflows/VS2019%20x64%20CI/badge.svg)
-![VS win32](https://github.com/finalburnneo/FBNeo/workflows/VS2019%20win32%20CI/badge.svg)
+[![nightly-release](https://github.com/finalburnneo/FBNeo/actions/workflows/nightly-release.yml/badge.svg)](https://github.com/finalburnneo/FBNeo/releases/tag/latest)
 
 # Ports
-
-Raspberry Pi [build instructions](README-PI.md).
 
 macOS [build instructions](README-macOS.md) and [releases](https://github.com/fbn-mac/FBNeo/releases).
 
@@ -31,6 +23,8 @@ macOS [build instructions](README-macOS.md) and [releases](https://github.com/fb
 For SDL1.2 builds just type `make sdl` (requires SDL1.2 and GCC, make, perl and nasm) [instructions](README-SDL.md)
 
 For SDL2 builds just type `make sdl2` (requires SDL2, SDL2_image, gcc, make, perl and nasm) [instructions](README-SDL.md)
+
+~~Raspberry Pi [build instructions](README-PI.md).~~
 
 # Reporting Issues
 
@@ -85,7 +79,6 @@ src/
 ## Porting FBNeo to different systems
 
 In the main source tree, you will see in the intf directory various implementations for different platforms. You should look in here when porting to new platforms. We also encourage new ports, and are happy to have them merged in to the main sourcetree. There is probably a project there for someone to re-implement some of the older ports using the intf standard, should they want to.
-
 
 For portability we define the following types
 ```

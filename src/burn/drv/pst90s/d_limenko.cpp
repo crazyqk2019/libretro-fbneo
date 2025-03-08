@@ -194,7 +194,7 @@ static void sprite_buffer()
 {
 	spriteram_bit ^= 1;
 	limenko_draw_sprites();
-	prev_sprites_count = (video_regs[0] >> 0) & 0x1ff; // reg0
+	prev_sprites_count = (BURN_ENDIAN_SWAP_INT32(video_regs[0]) >> 0) & 0x1ff; // reg0
 }
 
 static void limenko_write_long(UINT32 address, UINT32 data)
@@ -240,7 +240,7 @@ static UINT32 limenko_read_long(UINT32 address)
 {
 	if (address < 0x200000) {
 		speedhack_callback(address);
-		UINT32 ret = *((UINT32*)(DrvMainRAM + address));
+		UINT32 ret = BURN_ENDIAN_SWAP_INT32(*((UINT32*)(DrvMainRAM + address)));
 		return (ret << 16) | (ret >> 16);
 	}
 
@@ -251,7 +251,7 @@ static UINT16 limenko_read_word(UINT32 address)
 {
 	if (address < 0x200000) {
 		speedhack_callback(address);
-		return *((UINT16*)(DrvMainRAM + address));
+		return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvMainRAM + address)));
 	}
 
 	return 0;
@@ -331,7 +331,7 @@ static UINT32 limenko_io_read(UINT32 address)
 
 static tilemap_callback( bg )
 {
-	UINT32 attr = *((UINT32*)(DrvBgRAM + offs * 4));
+	UINT32 attr = BURN_ENDIAN_SWAP_INT32(*((UINT32*)(DrvBgRAM + offs * 4)));
 	attr = (attr << 16) | (attr >> 16);
 
 	TILE_SET_INFO(0, attr & 0x7ffff, attr >> 28, 0);
@@ -339,7 +339,7 @@ static tilemap_callback( bg )
 
 static tilemap_callback( md )
 {
-	UINT32 attr = *((UINT32*)(DrvMdRAM + offs * 4));
+	UINT32 attr = BURN_ENDIAN_SWAP_INT32(*((UINT32*)(DrvMdRAM + offs * 4)));
 	attr = (attr << 16) | (attr >> 16);
 
 	TILE_SET_INFO(0, attr & 0x7ffff, attr >> 28, 0);
@@ -347,7 +347,7 @@ static tilemap_callback( md )
 
 static tilemap_callback( fg )
 {
-	UINT32 attr = *((UINT32*)(DrvFgRAM + offs * 4));
+	UINT32 attr = BURN_ENDIAN_SWAP_INT32(*((UINT32*)(DrvFgRAM + offs * 4)));
 	attr = (attr << 16) | (attr >> 16);
 
 	TILE_SET_INFO(0, attr & 0x7ffff, attr >> 28, 0);
@@ -427,6 +427,8 @@ static INT32 DrvDoReset()
 	spriteram_bit = 1;
 	prev_sprites_count = 0;
 	memset (audiocpu_data, 0, sizeof(audiocpu_data)); // spotty
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -737,7 +739,7 @@ static void draw_single_sprite(UINT8 width, UINT8 height, UINT32 code, UINT32 co
 				{
 						if (pri[x] < priority)
 						{
-							dest[x] = pal + c;
+							dest[x] = BURN_ENDIAN_SWAP_INT16(pal + c);
 							pri[x] = priority;
 						}
 				}
@@ -757,8 +759,8 @@ void limenko_draw_sprites()
 
 	for (UINT32 i = 0; i <= prev_sprites_count * 2; i += 2)
 	{
-		UINT32 sprites0 = sprites[i + 0];
-		UINT32 sprites1 = sprites[i + 1];
+		UINT32 sprites0 = BURN_ENDIAN_SWAP_INT32(sprites[i + 0]);
+		UINT32 sprites1 = BURN_ENDIAN_SWAP_INT32(sprites[i + 1]);
 		
 		sprites0 = (sprites0 << 16) | (sprites0 >> 16);
 		sprites1 = (sprites1 << 16) | (sprites1 >> 16);
@@ -815,7 +817,7 @@ static void copy_sprites()
 			if (source[x] != 0)
 			{
 				if (dest_pri[x] < source_pri[x])
-					dest[x] = source[x];
+					dest[x] = BURN_ENDIAN_SWAP_INT16(source[x]);
 			}
 		}
 	}
@@ -828,16 +830,16 @@ static INT32 DrvDraw()
 		DrvRecalc = 1; // force update
 	}
 
-	GenericTilemapSetEnable(0, (video_regs[0] >> 16) & 0x04);
-	GenericTilemapSetEnable(1, (video_regs[0] >> 16) & 0x02);
-	GenericTilemapSetEnable(2, (video_regs[0] >> 16) & 0x01);
+	GenericTilemapSetEnable(0, (BURN_ENDIAN_SWAP_INT32(video_regs[0]) >> 16) & 0x04);
+	GenericTilemapSetEnable(1, (BURN_ENDIAN_SWAP_INT32(video_regs[0]) >> 16) & 0x02);
+	GenericTilemapSetEnable(2, (BURN_ENDIAN_SWAP_INT32(video_regs[0]) >> 16) & 0x01);
 
-	GenericTilemapSetScrollX(0, video_regs[3] >> 0);
-	GenericTilemapSetScrollX(1, video_regs[2] >> 0);
-	GenericTilemapSetScrollX(2, video_regs[1] >> 0);
-	GenericTilemapSetScrollY(0, video_regs[3] >> 16);
-	GenericTilemapSetScrollY(1, video_regs[2] >> 16);
-	GenericTilemapSetScrollY(2, video_regs[1] >> 16);
+	GenericTilemapSetScrollX(0, BURN_ENDIAN_SWAP_INT32(video_regs[3]) >> 0);
+	GenericTilemapSetScrollX(1, BURN_ENDIAN_SWAP_INT32(video_regs[2]) >> 0);
+	GenericTilemapSetScrollX(2, BURN_ENDIAN_SWAP_INT32(video_regs[1]) >> 0);
+	GenericTilemapSetScrollY(0, BURN_ENDIAN_SWAP_INT32(video_regs[3]) >> 16);
+	GenericTilemapSetScrollY(1, BURN_ENDIAN_SWAP_INT32(video_regs[2]) >> 16);
+	GenericTilemapSetScrollY(2, BURN_ENDIAN_SWAP_INT32(video_regs[1]) >> 16);
 
 	BurnTransferClear();
 
@@ -845,7 +847,7 @@ static INT32 DrvDraw()
 	if (nBurnLayer & 2) GenericTilemapDraw(1, pTransDraw, 0);
 	if (nBurnLayer & 4) GenericTilemapDraw(2, pTransDraw, 1);
 
-	if ((video_regs[0] >> 16) & 0x08)
+	if ((BURN_ENDIAN_SWAP_INT32(video_regs[0]) >> 16) & 0x08)
 		if (nSpriteEnable & 1) copy_sprites();
 
 	BurnTransferCopy(BurnPalette);
@@ -976,14 +978,18 @@ static INT32 DynabombInit()
 	eeprom_bit_config		= 0x00800000;
 	spriteram_bit_config	= 0x80000000;
 
-	return LimenkoCommonInit(TYPE_E132XN, 80000000, DynabombLoadCallback, 0x800000, 0);
+	INT32 rc = LimenkoCommonInit(TYPE_E132XN, 80000000, DynabombLoadCallback, 0x800000, 0);
+	if (!rc) {
+		qs1000_set_volume(8.00);
+	}
+	return rc;
 }
 
 struct BurnDriver BurnDrvDynabomb = {
 	"dynabomb", NULL, NULL, NULL, "2000",
 	"Dynamite Bomber (Korea, Rev 1.5)\0", NULL, "Limenko", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
 	NULL, dynabombRomInfo, dynabombRomName, NULL, NULL, NULL, NULL, Sb2003InputInfo, Sb2003DIPInfo,
 	DynabombInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 240, 4, 3

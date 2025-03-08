@@ -1,5 +1,10 @@
 #include "burner.h"
 
+// GameGenie stuff is handled a little differently..
+#define HW_NES ( ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_NES) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_FDS) )
+#define HW_SNES ( ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNES) )
+#define HW_GGENIE ( HW_NES || HW_SNES )
+
 static bool SkipComma(TCHAR** s)
 {
 	while (**s && **s != _T(',')) {
@@ -36,6 +41,22 @@ static void CheatError(TCHAR* pszFilename, INT32 nLineNumber, CheatInfo* pCheat,
 
 	FBAPopupDisplay(PUF_TYPE_ERROR);
 #endif
+
+#if defined(BUILD_SDL2)
+	printf("Cheat file %s is malformed.\nPlease remove or repair the file.\n\n", pszFilename);
+	if (pCheat) {
+		printf("Parse error at line %i, in cheat \"%s\".\n", nLineNumber, pCheat->szCheatName);
+	} else {
+		printf("Parse error at line %i.\n", nLineNumber);
+	}
+
+	if (pszInfo) {
+		printf("Problem:\t%s.\n", pszInfo);
+	}
+	if (pszLine) {
+		printf("Text:\t%s\n", pszLine);
+	}
+#endif
 }
 
 static INT32 ConfigParseFile(TCHAR* pszFilename)
@@ -58,7 +79,7 @@ static INT32 ConfigParseFile(TCHAR* pszFilename)
 	}
 
 	while (1) {
-		if (_fgetts(szLine, sizeof(szLine), h) == NULL) {
+		if (_fgetts(szLine, 8192, h) == NULL) {
 			break;
 		}
 
@@ -210,29 +231,46 @@ static INT32 ConfigParseFile(TCHAR* pszFilename)
 					INT32 nCPU = 0, nAddress = 0, nValue = 0;
 
 					if (SkipComma(&s)) {
-						nCPU = _tcstol(s, &t, 0);		// CPU number
-						if (t == s) {
-							CheatError(pszFilename, nLine, pCurrentCheat, _T("CPU number omitted"), szLine);
-							bOK = false;
-							break;
-						}
-						s = t;
+						if (HW_GGENIE) {
+							t = s;
+							INT32 newlen = 0;
+#if defined(BUILD_WIN32)
+							for (INT32 z = 0; z < lstrlen(t); z++) {
+#else
+							for (INT32 z = 0; z < strlen(t); z++) {
+#endif
+								char c = toupper((char)*s);
+								if ( ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == '-' || c == ':')) && newlen < 10)
+									pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].szGenieCode[newlen++] = c;
+								s++;
+								if (*s == _T(',')) break;
+							}
+							nAddress = 0xffff; // nAddress not used, but needs to be nonzero (NES/Game Genie)
+						} else {
+							nCPU = _tcstol(s, &t, 0);		// CPU number
+							if (t == s) {
+								CheatError(pszFilename, nLine, pCurrentCheat, _T("CPU number omitted"), szLine);
+								bOK = false;
+								break;
+							}
+							s = t;
 
-						SkipComma(&s);
-						nAddress = _tcstol(s, &t, 0);	// Address
-						if (t == s) {
-							bOK = false;
-							CheatError(pszFilename, nLine, pCurrentCheat, _T("address omitted"), szLine);
-							break;
-						}
-						s = t;
+							SkipComma(&s);
+							nAddress = _tcstol(s, &t, 0);	// Address
+							if (t == s) {
+								bOK = false;
+								CheatError(pszFilename, nLine, pCurrentCheat, _T("address omitted"), szLine);
+								break;
+							}
+							s = t;
 
-						SkipComma(&s);
-						nValue = _tcstol(s, &t, 0);		// Value
-						if (t == s) {
-							bOK = false;
-							CheatError(pszFilename, nLine, pCurrentCheat, _T("value omitted"), szLine);
-							break;
+							SkipComma(&s);
+							nValue = _tcstol(s, &t, 0);		// Value
+							if (t == s) {
+								bOK = false;
+								CheatError(pszFilename, nLine, pCurrentCheat, _T("value omitted"), szLine);
+								break;
+							}
 						}
 					} else {
 						if (nCurrentAddress) {			// Only the first option is allowed no address
@@ -291,8 +329,6 @@ static INT32 ConfigParseFile(TCHAR* pszFilename)
 //TODO: make cross platform
 static INT32 ConfigParseNebulaFile(TCHAR* pszFilename)
 {
-
-#if defined (BUILD_WIN32)
 	FILE *fp = _tfopen(pszFilename, _T("rt"));
 	if (fp == NULL) {
 		return 1;
@@ -346,7 +382,11 @@ static INT32 ConfigParseNebulaFile(TCHAR* pszFilename)
 		{
 			_tcsncpy (tmp, szLine + 8, nLen-9);
 			tmp[nLen-9] = '\0';
+#if defined(BUILD_WIN32)
 			_stscanf (tmp, _T("%d"), &(pCurrentCheat->nDefault));
+#else
+			sscanf (tmp, _T("%d"), &(pCurrentCheat->nDefault));
+#endif
 			continue;
 		}
 
@@ -355,7 +395,7 @@ static INT32 ConfigParseNebulaFile(TCHAR* pszFilename)
 		while (i < nLen)
 		{
 			if (szLine[i] == '=' && i < 4) j = i+1;
-			if (szLine[i] == ',' || szLine[i] == '\n')
+			if (szLine[i] == ',' || szLine[i] == '\r' || szLine[i] == '\n')
 			{
 				if (pCurrentCheat->pOption[n] == NULL) {
 					pCurrentCheat->pOption[n] = (CheatOption*)malloc(sizeof(CheatOption));
@@ -376,15 +416,23 @@ static INT32 ConfigParseNebulaFile(TCHAR* pszFilename)
 		{
 			if (i == nLen) break;
 
-			if (szLine[i] == ',' || szLine[i] == '\n')
+			if (szLine[i] == ',' || szLine[i] == '\r' || szLine[i] == '\n')
 			{
 				_tcsncpy (tmp, szLine + j, i-j);
 				tmp[i-j] = '\0';
 
 				if (nAddress == -1) {
+#if defined(BUILD_WIN32)
 					_stscanf (tmp, _T("%x"), &nAddress);
+#else
+					sscanf (tmp, _T("%x"), &nAddress);
+#endif
 				} else {
+#if defined(BUILD_WIN32)
 					_stscanf (tmp, _T("%x"), &nValue);
+#else
+					sscanf (tmp, _T("%x"), &nValue);
+#endif
 
 					pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nCPU = 0; 	// Always
 					pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nAddress = nAddress ^ 1;
@@ -402,24 +450,40 @@ static INT32 ConfigParseNebulaFile(TCHAR* pszFilename)
 	}
 
 	fclose (fp);
-#endif
+
 	return 0;
 }
 
+#define IS_MIDWAY ((BurnDrvGetHardwareCode() & HARDWARE_PREFIX_MIDWAY) == HARDWARE_PREFIX_MIDWAY)
 
-//TODO: make cross platform
-static INT32 ConfigParseMAMEFile()
+static INT32 ConfigParseMAMEFile_internal(FILE *fz, const TCHAR *name)
 {
-#if defined (BUILD_WIN32)
-
 #define AddressInfo()	\
 	INT32 k = (flags >> 20) & 3;	\
+	INT32 cpu = (flags >> 24) & 0x1f; \
+	if (cpu > 3) cpu = 0; \
 	for (INT32 i = 0; i < k+1; i++) {	\
-		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nCPU = 0;	\
-		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nAddress = nAddress + i;	\
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nCPU = cpu;	\
+		if ((flags & 0xf0000000) == 0x80000000) { \
+			pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].bRelAddress = 1; \
+			pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nRelAddressOffset = nAttrib; \
+			pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nRelAddressBits = (flags & 0x3000000) >> 24; \
+		} \
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nAddress = (pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].bRelAddress) ? nAddress : nAddress + i;	\
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nExtended = nAttrib; \
 		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nValue = (nValue >> ((k*8)-(i*8))) & 0xff;	\
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nMask = (nAttrib >> ((k*8)-(i*8))) & 0xff;	\
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nMultiByte = i;	\
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nTotalByte = k+1;	\
 		nCurrentAddress++;	\
 	}	\
+
+#define AddressInfoGameGenie() { \
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nTotalByte = 1;	\
+		pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].nAddress = 0xffff; \
+		strcpy(pCurrentCheat->pOption[n]->AddressInfo[nCurrentAddress].szGenieCode, szGGenie); \
+		nCurrentAddress++;	\
+	}
 
 #define OptionName(a)	\
 	if (pCurrentCheat->pOption[n] == NULL) {						\
@@ -432,18 +496,11 @@ static INT32 ConfigParseMAMEFile()
 	_tcsncpy (tmp, szLine + c0[a] + 1, c0[a+1] - (c0[a]+1));	\
 	tmp[c0[a+1] - (c0[a]+1)] = '\0';				\
 
-	TCHAR szFileName[MAX_PATH] = _T("");
-	_stprintf(szFileName, _T("%scheat.dat"), szAppCheatsPath);
-
-	FILE *fz = _tfopen(szFileName, _T("rt"));
-	if (fz == NULL) {
-		return 1;
-	}
-
 	TCHAR tmp[256];
 	TCHAR tmp2[256];
 	TCHAR gName[64];
 	TCHAR szLine[1024];
+	char szGGenie[128] = { 0, };
 
 	INT32 nLen;
 	INT32 n = 0;
@@ -456,7 +513,7 @@ static INT32 ConfigParseMAMEFile()
 	UINT32 nAttrib = 0;
 
 	CheatInfo* pCurrentCheat = NULL;
-	_stprintf(gName, _T(":%s:"), BurnDrvGetText(DRV_NAME));
+	_stprintf(gName, _T(":%s:"), name);
 
 	while (1)
 	{
@@ -467,37 +524,87 @@ static INT32 ConfigParseMAMEFile()
 
 		if (szLine[0] == ';') continue;
 
+		/*
+		 // find the cheat flags & 0x80000000 cheats (for debugging) -dink
+		 int derpy = 0;
+		 for (INT32 i = 0; i < nLen; i++) {
+		 	if (szLine[i] == ':') {
+		 		derpy++;
+		 		if (derpy == 2 && szLine[i+1] == '8') {
+					bprintf(0, _T("%s\n"), szLine);
+				}
+			}
+		}
+		*/
+
+#if defined(BUILD_WIN32)
 		if (_tcsncmp (szLine, gName, lstrlen(gName))) {
+#else
+		if (_tcsncmp (szLine, gName, strlen(gName))) {
+#endif
 			if (nFound) break;
 			else continue;
+		}
+
+		if (_tcsstr(szLine, _T("----:REASON"))) {
+			// reason to leave!
+			break;
 		}
 
 		nFound = 1;
 
 		INT32 c0[16], c1 = 0;					// find colons / break
 		for (INT32 i = 0; i < nLen; i++)
-			if (szLine[i] == ':' || szLine[i] == '\n')
+			if (szLine[i] == ':' || szLine[i] == '\r' || szLine[i] == '\n')
 				c0[c1++] = i;
 
 		tmpcpy(1);						// control flags
+#if defined(BUILD_WIN32)
 		_stscanf (tmp, _T("%x"), &flags);
+#else
+		sscanf (tmp, _T("%x"), &flags);
+#endif
 
 		tmpcpy(2);						// cheat address
+#if defined(BUILD_WIN32)
 		_stscanf (tmp, _T("%x"), &nAddress);
+		strcpy(szGGenie, TCHARToANSI(tmp, NULL, 0));
+#else
+		sscanf (tmp, _T("%x"), &nAddress);
+		strcpy(szGGenie, tmp);
+#endif
 
 		tmpcpy(3);						// cheat value
+#if defined(BUILD_WIN32)
 		_stscanf (tmp, _T("%x"), &nValue);
+#else
+		sscanf (tmp, _T("%x"), &nValue);
+#endif
 
 		tmpcpy(4);						// cheat attribute
+#if defined(BUILD_WIN32)
 		_stscanf (tmp, _T("%x"), &nAttrib);
+#else
+		sscanf (tmp, _T("%x"), &nAttrib);
+#endif
 
 		tmpcpy(5);						// cheat name
-				   //was x7f00
-		if (flags & 0x80007c00) continue;			// skip various cheats (unhandled methods at this time)
+
+		// & 0x4000 = don't add to list
+		// & 0x0800 = BCD
+		if (flags & 0x00004800) continue;			// skip various cheats (unhandled methods at this time)
+
+		if ((flags & 0xff000000) == 0x39000000 && IS_MIDWAY) {
+			nAddress |= 0xff800000 >> 3; // 0x39 = address is relative to system's ROM block, only midway uses this kinda cheats
+		}
 
 		if ( flags & 0x00008000 || (flags & 0x00010000 && !menu)) { // Linked cheat "(2/2) etc.."
 			if (nCurrentAddress < CHEAT_MAX_ADDRESS) {
-				AddressInfo();
+				if (HW_GGENIE) {
+					AddressInfoGameGenie();
+				} else {
+					AddressInfo();
+				}
 			}
 
 			continue;
@@ -530,43 +637,69 @@ static INT32 ConfigParseMAMEFile()
 
 			_tcsncpy (pCurrentCheat->szCheatName, tmp, QUOTE_MAX);
 
+#if defined(BUILD_WIN32)
 			if (lstrlen(tmp) <= 0 || flags == 0x60000000) {
+#else
+			if (strlen(tmp) <= 0 || flags == 0x60000000) {
+#endif
 				n++;
 				continue;
 			}
 
 			OptionName(_T("Disabled"));
 
-			if (nAddress) {
+			if (nAddress || HW_GGENIE) {
+				if ((flags & 0x80018) == 0 && nAttrib != 0xffffffff) {
+					pCurrentCheat->bWriteWithMask = 1; // nAttrib field is the mask
+				}
 				if (flags & 0x1) {
 					pCurrentCheat->bOneShot = 1; // apply once and stop
 				}
 				if (flags & 0x2) {
 					pCurrentCheat->bWaitForModification = 1; // wait for modification before changing
 				}
+				if (flags & 0x80000) {
+					pCurrentCheat->bWaitForModification = 2; // check address against extended field before changing
+				}
 				if (flags & 0x800000) {
 					pCurrentCheat->bRestoreOnDisable = 1; // restore previous value on disable
+				}
+				if (flags & 0x3000) {
+					pCurrentCheat->nPrefillMode = (flags & 0x3000) >> 12;
 				}
 				if ((flags & 0x6) == 0x6) {
 					pCurrentCheat->bWatchMode = 1; // display value @ address
 				}
 				if (flags & 0x100) { // add options
 					INT32 nTotal = nValue + 1;
-					INT32 nPlus1 = (flags & 0x300) ? 1 : 0; // displayed value +1?
+					INT32 nPlus1 = (flags & 0x200) ? 1 : 0; // displayed value +1?
+					INT32 nStartValue = (flags & 0x400) ? 1 : 0; // starting value
 
 					//bprintf(0, _T("adding .. %X. options\n"), nTotal);
 					if (nTotal > 0xff) continue; // bad entry (roughrac has this)
-					for (nValue = 0; nValue < nTotal; nValue++) {
+					for (nValue = nStartValue; nValue < nTotal; nValue++) {
+#if defined(UNICODE)
 						swprintf(tmp2, L"# %d.", nValue + nPlus1);
+#else
+						sprintf(tmp2, _T("# %d."), nValue + nPlus1);
+#endif
 						n++;
 						nCurrentAddress = 0;
 						OptionName(tmp2);
-						AddressInfo();
+						if (HW_GGENIE) {
+							AddressInfoGameGenie();
+						} else {
+							AddressInfo();
+						}
 					}
 				} else {
 					n++;
 					OptionName(tmp);
-					AddressInfo();
+					if (HW_GGENIE) {
+						AddressInfoGameGenie();
+					} else {
+						AddressInfo();
+					}
 				}
 			} else {
 				menu = 1;
@@ -579,29 +712,72 @@ static INT32 ConfigParseMAMEFile()
 			n++;
 			nCurrentAddress = 0;
 
+			if ((flags & 0x80018) == 0 && nAttrib != 0xffffffff) {
+				pCurrentCheat->bWriteWithMask = 1; // nAttrib field is the mask
+			}
 			if (flags & 0x1) {
 				pCurrentCheat->bOneShot = 1; // apply once and stop
 			}
 			if (flags & 0x2) {
 				pCurrentCheat->bWaitForModification = 1; // wait for modification before changing
 			}
-			if ((flags & 0x6) == 0x6) {
-				pCurrentCheat->bWatchMode = 1; // display value @ address
+			if (flags & 0x80000) {
+				pCurrentCheat->bWaitForModification = 2; // check address against extended field before changing
 			}
 			if (flags & 0x800000) {
 				pCurrentCheat->bRestoreOnDisable = 1; // restore previous value on disable
 			}
+			if (flags & 0x3000) {
+				pCurrentCheat->nPrefillMode = (flags & 0x3000) >> 12;
+			}
+			if ((flags & 0x6) == 0x6) {
+				pCurrentCheat->bWatchMode = 1; // display value @ address
+			}
 
 			OptionName(tmp);
-			AddressInfo();
+			if (HW_GGENIE) {
+				AddressInfoGameGenie();
+			} else {
+				AddressInfo();
+			}
 
 			continue;
 		}
 	}
 
-	fclose (fz);
-#endif
+	// if no cheat was found, don't return success code
+	if (pCurrentCheat == NULL) return 1;
+
 	return 0;
+}
+
+static INT32 ConfigParseMAMEFile()
+{
+	TCHAR szFileName[MAX_PATH] = _T("");
+	if (HW_NES) {
+		_stprintf(szFileName, _T("%scheatnes.dat"), szAppCheatsPath);
+	} else if (HW_SNES) {
+		_stprintf(szFileName, _T("%scheatsnes.dat"), szAppCheatsPath);
+	} else {
+		_stprintf(szFileName, _T("%scheat.dat"), szAppCheatsPath);
+	}
+
+	FILE *fz = _tfopen(szFileName, _T("rt"));
+
+	INT32 ret = 1;
+
+	if (fz) {
+		ret = ConfigParseMAMEFile_internal(fz, BurnDrvGetText(DRV_NAME));
+		// let's try using parent entry as a fallback if no cheat was found for this romset
+		if (ret && (BurnDrvGetFlags() & BDF_CLONE) && BurnDrvGetText(DRV_PARENT)) {
+			fseek(fz, 0, SEEK_SET);
+			ret = ConfigParseMAMEFile_internal(fz, BurnDrvGetText(DRV_PARENT));
+		}
+
+		fclose(fz);
+	}
+
+	return ret;
 }
 
 
@@ -609,11 +785,11 @@ INT32 ConfigCheatLoad()
 {
 	TCHAR szFilename[MAX_PATH] = _T("");
 
-	_stprintf(szFilename, _T("%s%s.ini"), szAppCheatsPath, BurnDrvGetText(DRV_NAME));
-	if (ConfigParseFile(szFilename)) {
-		_stprintf(szFilename, _T("%s%s.dat"), szAppCheatsPath, BurnDrvGetText(DRV_NAME));
-		if (ConfigParseNebulaFile(szFilename)) {
-			if (ConfigParseMAMEFile()) {
+	if (ConfigParseMAMEFile()) {
+		_stprintf(szFilename, _T("%s%s.ini"), szAppCheatsPath, BurnDrvGetText(DRV_NAME));
+		if (ConfigParseFile(szFilename)) {
+			_stprintf(szFilename, _T("%s%s.dat"), szAppCheatsPath, BurnDrvGetText(DRV_NAME));
+			if (ConfigParseNebulaFile(szFilename)) {
 				return 1;
 			}
 		}
@@ -630,5 +806,3 @@ INT32 ConfigCheatLoad()
 
 	return 0;
 }
-
-

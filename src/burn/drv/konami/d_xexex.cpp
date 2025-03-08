@@ -103,7 +103,7 @@ static void xexex_objdma()
 
 	do
 	{
-		if (*src & 0x8000)
+		if (BURN_ENDIAN_SWAP_INT16(*src) & 0x8000)
 		{
 			dst[0] = src[0x0];  dst[1] = src[0x2];
 			dst[2] = src[0x4];  dst[3] = src[0x6];
@@ -472,6 +472,8 @@ static INT32 DrvDoReset()
 	z80_bank = 0;
 
 	nExtraCycles[0] = nExtraCycles[1] = 0;
+	
+	HiscoreReset();
 
 	return 0;
 }
@@ -599,7 +601,8 @@ static INT32 DrvInit()
 
 	EEPROMInit(&xexex_eeprom_interface);
 
-	BurnYM2151Init(4000000);
+	BurnYM2151InitBuffered(4000000, 1, NULL, 0);
+	BurnTimerAttachZet(8000000);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 0.50, BURN_SND_ROUTE_BOTH);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 0.50, BURN_SND_ROUTE_BOTH);
 
@@ -638,7 +641,7 @@ static void DrvPaletteRecalc()
 	UINT16 *pal = (UINT16*)DrvPalRAM;
 
 	for (INT32 i = 0; i < 0x2000/2; i+=2) {
-		DrvPalette[i/2] = ((pal[i+0] & 0xff) << 16) + pal[i+1];
+		DrvPalette[i/2] = ((BURN_ENDIAN_SWAP_INT16(pal[i+0]) & 0xff) << 16) + BURN_ENDIAN_SWAP_INT16(pal[i+1]);
 	}
 }
 
@@ -714,6 +717,8 @@ static INT32 DrvFrame()
 		DrvDoReset();
 	}
 
+	ZetNewFrame();
+
 	{
 		memset (DrvInputs, 0xff, 3 * sizeof(INT16));
 		for (INT32 i = 0; i < 8; i++) {
@@ -726,7 +731,6 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = 120;
-	INT32 nSoundBufferPos = 0;
 	INT32 nCyclesTotal[2] = { (16000000 * 100) / 5425, (8000000 * 100) / 5425 };
 	INT32 nCyclesDone[2] = { nExtraCycles[0], nExtraCycles[1] };
 
@@ -765,23 +769,14 @@ static INT32 DrvFrame()
 			}
 		}
 
-		CPU_RUN(1, Zet);
-
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
+		CPU_RUN_TIMER(1);
 	}
-	
+
 	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-		if (nSegmentLength) {
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-		}
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 		K054539Update(0, pBurnSoundOut, nBurnSoundLen);
+
+		BurnSoundTweakVolume(pBurnSoundOut, nBurnSoundLen, 0.65);
 	}
 
 	ZetClose();
@@ -874,7 +869,7 @@ struct BurnDriver BurnDrvXexex = {
 	"xexex", NULL, NULL, NULL, "1991",
 	"Xexex (ver EAA)\0", NULL, "Konami", "GX067",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, xexexRomInfo, xexexRomName, NULL, NULL, NULL, NULL, XexexInputInfo, XexexDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	384, 256, 4, 3
@@ -954,7 +949,7 @@ struct BurnDriver BurnDrvXexexa = {
 	"xexexa", "xexex", NULL, NULL, "1991",
 	"Xexex (ver AAA)\0", NULL, "Konami", "GX067",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, xexexaRomInfo, xexexaRomName, NULL, NULL, NULL, NULL, XexexInputInfo, XexexDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	384, 256, 4, 3
@@ -994,7 +989,7 @@ struct BurnDriver BurnDrvXexexj = {
 	"xexexj", "xexex", NULL, NULL, "1991",
 	"Xexex (ver JAA)\0", NULL, "Konami", "GX067",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, xexexjRomInfo, xexexjRomName, NULL, NULL, NULL, NULL, XexexInputInfo, XexexDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	384, 256, 4, 3

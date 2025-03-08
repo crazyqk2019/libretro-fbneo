@@ -7,6 +7,8 @@
 
 int nIniVersion = 0;
 
+extern bool bBurnGunPositionalMode;
+
 struct VidPresetData VidPreset[4] = {
 	{ 640, 480},
 	{ 1024, 768},
@@ -20,6 +22,15 @@ struct VidPresetDataVer VidPresetVer[4] = {
 	{ 1280, 960},
 	// last one set at desktop resolution
 };
+
+static void HardFXLoadDefaults()
+{
+	int totalHardFX = MENU_DX9_ALT_HARD_FX_LAST - MENU_DX9_ALT_HARD_FX_NONE;
+
+	for (int thfx = 0; thfx < totalHardFX; thfx++) {
+		HardFXConfigs[thfx].hardfx_config_load_defaults();
+	}
+}
 
 static void CreateConfigName(TCHAR* szConfig)
 {
@@ -38,6 +49,8 @@ int ConfigAppLoad()
 	setlocale(LC_ALL, "");
 #endif
 
+	HardFXLoadDefaults();
+
 	CreateConfigName(szConfig);
 
 	if ((h = _tfopen(szConfig, _T("rt"))) == NULL) {
@@ -45,11 +58,11 @@ int ConfigAppLoad()
 	}
 
 	// Go through each line of the config file
-	while (_fgetts(szLine, sizeof(szLine), h)) {
+	while (_fgetts(szLine, 1024, h)) {
 		int nLen = _tcslen(szLine);
 
 		// Get rid of the linefeed at the end
-		if (szLine[nLen - 1] == 10) {
+		if (nLen > 0 && szLine[nLen - 1] == 10) {
 			szLine[nLen - 1] = 0;
 			nLen--;
 		}
@@ -118,6 +131,7 @@ int ConfigAppLoad()
 		STR(VerScreen);
 
 		VAR(bVidTripleBuffer);
+		VAR(bVidDX9WinFullscreen);
 		VAR(bVidVSync);
 		VAR(bVidDWMSync);
 
@@ -126,6 +140,7 @@ int ConfigAppLoad()
 		VAR(bMonitorAutoCheck);
 		VAR(bForce60Hz);
 		VAR(bAlwaysDrawFrames);
+		VAR(bRunAhead);
 
 		VAR(nVidSelect);
 		VAR(nVidBlitterOpt[0]);
@@ -156,12 +171,29 @@ int ConfigAppLoad()
 
 		// DirectX Graphics 9 Alt blitter
 		VAR(bVidDX9Bilinear);
+		VAR(nVidDX9HardFX);
 		VAR(bVidHardwareVertex);
 		VAR(bVidMotionBlur);
 		VAR(bVidForce16bitDx9Alt);
 
+		{
+			int totalHardFX = MENU_DX9_ALT_HARD_FX_LAST - MENU_DX9_ALT_HARD_FX_NONE;
+
+			for (int thfx = 0; thfx < totalHardFX; thfx++) {
+				// for each fx, check if it has settings that needs to be saved
+				for (int thfx_option = 0; thfx_option < HardFXConfigs[thfx].nOptions; thfx_option++) {
+					TCHAR szLabel[64];
+					_stprintf(szLabel, _T("HardFXOption[%d][%d]"), thfx, thfx_option);
+
+					TCHAR* szValue = LabelCheck(szLine, szLabel);
+					if (szValue) HardFXConfigs[thfx].fOptions[thfx_option] = _tcstod(szValue, NULL);
+				}
+			}
+		}
+
 		// Sound
 		VAR(nAudSelect);
+		VAR(nAudVolume);
 		VAR(nAudSegCount);
 		VAR(nInterpolation);
 		VAR(nFMInterpolation);
@@ -189,7 +221,7 @@ int ConfigAppLoad()
 #endif
 
 		VAR(bDrvSaveAll);
-		VAR(nAppThreadPriority);
+		VAR(nAppProcessPriority);
 		VAR(bAlwaysProcessKeyboardInput);
 		VAR(bAutoPause);
 		VAR(bSaveInputs);
@@ -260,10 +292,17 @@ int ConfigAppLoad()
 
 		VAR(nAutoFireRate);
 
+		VAR(bRewindEnabled);
+		VAR(nRewindMemory);
+
 		VAR(EnableHiscores);
 		VAR(bBurnUseBlend);
 		VAR(BurnShiftEnabled);
+		VAR(bBurnGunDrawReticles);
+		VAR(bBurnGunPositionalMode);
 		VAR(bSkipStartupCheck);
+
+		VAR(nSlowMo);
 
 #ifdef INCLUDE_AVI_RECORDING
 		VAR(nAvi3x);
@@ -431,6 +470,8 @@ int ConfigAppSave()
 	VAR(bVidCorrectAspect);
 	_ftprintf(h, _T("\n// If non-zero, try to use a triple buffer in fullscreen\n"));
 	VAR(bVidTripleBuffer);
+	_ftprintf(h, _T("\n// If non-zero, use a windowed fullscreen mode in DX9\n"));
+	VAR(bVidDX9WinFullscreen);
 	_ftprintf(h, _T("\n// If non-zero, try to synchronise blits with the display\n"));
 	VAR(bVidVSync);
 	_ftprintf(h, _T("\n// If non-zero, try to synchronise to DWM on Windows 7+, this fixes frame stuttering problems.\n"));
@@ -459,6 +500,8 @@ int ConfigAppSave()
 	VAR(bForce60Hz);
 	_ftprintf(h, _T("\n// If zero, skip frames when needed to keep the emulation running at full speed\n"));
 	VAR(bAlwaysDrawFrames);
+	_ftprintf(h, _T("\n// If non-zero, enable run-ahead mode for the reduction of input lag\n"));
+	VAR(bRunAhead);
 
 	_ftprintf(h, _T("\n"));
 	_ftprintf(h, _T("// --- DirectDraw blitter module settings -------------------------------------\n"));
@@ -493,6 +536,8 @@ int ConfigAppSave()
 	_ftprintf(h, _T("// --- DirectX Graphics 9 Alt blitter module settings -------------------------\n"));
 	_ftprintf(h, _T("\n// If non-zero, use bi-linear filtering to display the image\n"));
 	VAR(bVidDX9Bilinear);
+	_ftprintf(h, _T("\n// Active HardFX shader effect\n"));
+	VAR(nVidDX9HardFX);
 	_ftprintf(h, _T("\n// If non-zero, use hardware vertex to display the image\n"));
 	VAR(bVidHardwareVertex);
 	_ftprintf(h, _T("\n// If non-zero, use motion blur to display the image\n"));
@@ -500,10 +545,25 @@ int ConfigAppSave()
 	_ftprintf(h, _T("\n// If non-zero, force 16 bit emulation even in 32-bit screenmodes\n"));
 	VAR(bVidForce16bitDx9Alt);
 
+	_ftprintf(h, _T("\n// HardFX shader options\n"));
+
+	{
+		int totalHardFX = MENU_DX9_ALT_HARD_FX_LAST - MENU_DX9_ALT_HARD_FX_NONE;
+
+		for (int thfx = 0; thfx < totalHardFX; thfx++) {
+			// for each fx, check if it has settings that needs to be saved
+			for (int thfx_option = 0; thfx_option < HardFXConfigs[thfx].nOptions; thfx_option++) {
+				_ftprintf(h, _T("HardFXOption[%d][%d] %lf\n"), thfx, thfx_option, HardFXConfigs[thfx].fOptions[thfx_option]);
+			}
+		}
+	}
+
 	_ftprintf(h, _T("\n\n\n"));
 	_ftprintf(h, _T("// --- Sound ------------------------------------------------------------------\n"));
 	_ftprintf(h, _T("\n// The selected audio plugin\n"));
 	VAR(nAudSelect);
+	_ftprintf(h, _T("\n// Audio Volume\n"));
+	VAR(nAudVolume);
 	_ftprintf(h, _T("\n// Number of frames in sound buffer (= sound lag)\n"));
 	VAR(nAudSegCount);
 	_ftprintf(h, _T("\n// The order of PCM/ADPCM interpolation\n"));
@@ -558,8 +618,8 @@ int ConfigAppSave()
 
 	_ftprintf(h, _T("\n// If non-zero, load and save all ram (the state)\n"));
 	VAR(bDrvSaveAll);
-	_ftprintf(h, _T("\n// The thread priority for the application. Do *NOT* edit this manually\n"));
-	VAR(nAppThreadPriority);
+	_ftprintf(h, _T("\n// The process priority for the application. Do *NOT* edit this manually\n"));
+	VAR(nAppProcessPriority);
 	_ftprintf(h, _T("\n// If non-zero, process keyboard input even when the application loses focus\n"));
 	VAR(bAlwaysProcessKeyboardInput);
 	_ftprintf(h, _T("\n// If non-zero, pause when the application loses focus\n"));
@@ -676,6 +736,12 @@ int ConfigAppSave()
 	_ftprintf(h, _T("\n// Auto-Fire Rate, non-linear - use the GUI to change this setting!\n"));
 	VAR(nAutoFireRate);
 
+	_ftprintf(h, _T("\n// Rewind, If non-zero, enable rewind feature.\n"));
+	VAR(bRewindEnabled);
+
+	_ftprintf(h, _T("\n// Memory allocated to the Rewind feature, in MegaBytes\n"));
+	VAR(nRewindMemory);
+
 	_ftprintf(h, _T("\n// If non-zero, enable high score saving support.\n"));
 	VAR(EnableHiscores);
 
@@ -685,8 +751,17 @@ int ConfigAppSave()
 	_ftprintf(h, _T("\n// If non-zero, enable gear shifter display support.\n"));
 	VAR(BurnShiftEnabled);
 
+	_ftprintf(h, _T("\n// If non-zero, enable lightgun reticle display support.\n"));
+	VAR(bBurnGunDrawReticles);
+
+	_ftprintf(h, _T("\n// If non-zero, enable lightgun positional mode (Sinden or real lightgun HW).\n"));
+	VAR(bBurnGunPositionalMode);
+
 	_ftprintf(h, _T("\n// If non-zero, DISABLE start-up rom scan (if needed).\n"));
 	VAR(bSkipStartupCheck);
+
+	_ftprintf(h, _T("\n// If non-zero, enable SlowMo T.A. [0 - 4]\n"));
+	VAR(nSlowMo);
 
 #ifdef INCLUDE_AVI_RECORDING
 	_ftprintf(h, _T("\n// If non-zero, enable 1x - 3x pixel output for the AVI writer.\n"));

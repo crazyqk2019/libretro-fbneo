@@ -210,8 +210,9 @@ static const UINT16 MSM5232_ROM[88]={
  */
 
 
-#define R51 1400    /* charge resistance */
-#define R52 28750   /* discharge resistance */
+static const double R51 =    870;    /* attack resistance */
+static const double R52 =  17400;    /* decay 1 resistance */
+static const double R53 = 101000;    /* decay 2 resistance */
 
 static void init_tables()
 {
@@ -231,14 +232,17 @@ static void init_tables()
 	for (i=0; i<8; i++)
 	{
 		double clockscale = (double)m_chip_clock / 2119040.0;
-		m_ar_tbl[i]   = ((1<<i) / clockscale) * (double)R51;
+		int rcp_duty_cycle = 1 << ( i<6 ? i : i-2 );
+		m_ar_tbl[i]   = (rcp_duty_cycle / clockscale) * (double)R51;
+
 	}
 
 	for (i=0; i<8; i++)
 	{
 		double clockscale = (double)m_chip_clock / 2119040.0;
-		m_dr_tbl[i]   = (     (1<<i) / clockscale) * (double)R52;
-		m_dr_tbl[i+8] = (6.25*(1<<i) / clockscale) * (double)R52;
+		int rcp_duty_cycle = 1 << ( i<6 ? i : i-2 );
+		m_dr_tbl[i]   = (rcp_duty_cycle / clockscale) * (double)R52;
+		m_dr_tbl[i+8] = (rcp_duty_cycle / clockscale) * (double)R53;
 	}
 }
 
@@ -414,9 +418,11 @@ void MSM5232Write(INT32 offset, UINT8 data)
 		case 0x0c:  /* group1 control */
 			m_control1 = data;
 
-			for (i=0; i<4; i++)
+			for (i=0; i<4; i++) {
+				if (data & 0x10 && m_voi[i].eg_sect == 1)
+					m_voi[i].eg_sect = 0;
 				m_voi[i].eg_arm = data&0x10;
-
+			}
 			m_EN_out16[0] = (data&1) ? ~0:0;
 			m_EN_out8[0]  = (data&2) ? ~0:0;
 			m_EN_out4[0]  = (data&4) ? ~0:0;
@@ -428,9 +434,11 @@ void MSM5232Write(INT32 offset, UINT8 data)
 			m_control2 = data;
 			gate_update();
 
-			for (i=0; i<4; i++)
+			for (i=0; i<4; i++) {
+				if (data & 0x10 && m_voi[i+4].eg_sect == 1)
+					m_voi[i+4].eg_sect = 0;
 				m_voi[i+4].eg_arm = data&0x10;
-
+			}
 			m_EN_out16[1] = (data&1) ? ~0:0;
 			m_EN_out8[1]  = (data&2) ? ~0:0;
 			m_EN_out4[1]  = (data&4) ? ~0:0;

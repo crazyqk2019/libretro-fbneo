@@ -633,6 +633,7 @@ $$DRV_PRE90S {
 	    ../../src/burn/drv/pre90s/d_srumbler.cpp \
 	    ../../src/burn/drv/pre90s/d_tail2nose.cpp \
 	    ../../src/burn/drv/pre90s/d_tecmo.cpp \
+	    ../../src/burn/drv/pre90s/d_tehkanwc.cpp \
 	    ../../src/burn/drv/pre90s/d_terracre.cpp \
 	    ../../src/burn/drv/pre90s/d_tigeroad.cpp \
 	    ../../src/burn/drv/pre90s/d_toki.cpp \
@@ -734,7 +735,6 @@ $$DRV_PST90S {
 	    ../../src/burn/drv/pst90s/d_tecmosys.cpp \
 	    ../../src/burn/drv/pst90s/d_tumbleb.cpp \
 	    ../../src/burn/drv/pst90s/d_unico.cpp \
-	    ../../src/burn/drv/pst90s/d_vmetal.cpp \
 	    ../../src/burn/drv/pst90s/d_welltris.cpp \
 	    ../../src/burn/drv/pst90s/d_wwfwfest.cpp \
 	    ../../src/burn/drv/pst90s/d_xorworld.cpp \

@@ -1,21 +1,27 @@
 // Cheat module
+// Cheat file parser @ burner/conc.cpp
 
 #include "burnint.h"
 
 #define CHEAT_MAXCPU	8 // enough?
 
+// any system that uses Game Genie/Pro Action Replay codes can be defined as HW_NES...
+#define HW_NES ( ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNES) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_NES) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_FDS) )
+
+void (*nes_add_cheat)(char *) = NULL;
+void (*nes_remove_cheat)(char *) = NULL;
+
+void nes_init_cheat_functions(void (*func1)(char*), void (*func2)(char*))
+{
+	nes_add_cheat = func1;
+	nes_remove_cheat = func2;
+}
 
 bool bCheatsAllowed;
 CheatInfo* pCheatInfo = NULL;
 
 static bool bCheatsEnabled = false;
 static INT32 cheat_core_init_pointer = 0;
-
-struct cheat_core {
-	cpu_core_config *cpuconfig;
-
-	INT32 nCPU;			// which cpu
-};
 
 static struct cheat_core cpus[CHEAT_MAXCPU];
 static cheat_core *cheat_ptr;
@@ -33,6 +39,8 @@ static void dummy_irq(INT32, INT32, INT32) {}
 static INT32 dummy_run(INT32) { return 0; }
 static void dummy_runend() {}
 static void dummy_reset() {}
+static INT32 dummy_scan(INT32) { return 0; }
+static void dummy_exit() {}
 
 static cpu_core_config dummy_config  = {
 	"dummy",
@@ -48,6 +56,8 @@ static cpu_core_config dummy_config  = {
 	dummy_run,
 	dummy_runend,
 	dummy_reset,
+	dummy_scan,
+	dummy_exit,
 	~0UL,
 	0
 };
@@ -55,6 +65,12 @@ static cpu_core_config dummy_config  = {
 cheat_core *GetCpuCheatRegister(INT32 nCPU)
 {
 	return &cpus[nCPU];
+}
+
+cpu_core_config *GetCpuCoreConfig(INT32 nCPU)
+{
+	cheat_core *s_ptr = &cpus[nCPU];
+	return s_ptr->cpuconfig;
 }
 
 void CpuCheatRegister(INT32 nCPU, cpu_core_config *config)
@@ -105,6 +121,21 @@ INT32 CheatUpdate()
 	return 0;
 }
 
+static void NESCheatDisable(CheatInfo* pCurrentCheat, INT32 nCheat)
+{
+	// Deactivate old option (if any)
+	CheatAddressInfo* pAddressInfo = pCurrentCheat->pOption[pCurrentCheat->nCurrent]->AddressInfo;
+
+	while (pAddressInfo->nAddress) {
+		if (HW_NES) {
+			// Disable Game Genie code
+			bprintf(0, _T("NES-Cheat #%d, option #%d: "), nCheat, pCurrentCheat->nCurrent);
+			if (nes_remove_cheat) nes_remove_cheat(pAddressInfo->szGenieCode);
+		}
+		pAddressInfo++;
+	}
+}
+
 INT32 CheatEnable(INT32 nCheat, INT32 nOption) // -1 / 0 - disable
 {
 	INT32 nCurrentCheat = 0;
@@ -137,9 +168,15 @@ INT32 CheatEnable(INT32 nCheat, INT32 nOption) // -1 / 0 - disable
 				return 0;
 			}
 
+			if (HW_NES && pCurrentCheat->nCurrent != nOption) {
+				// NES: going from one option to the next in a list, must deactivate
+				// previous option before selecting the next, unless we're coming from default.
+				NESCheatDisable(pCurrentCheat, nCheat);
+			}
+
 			if (deactivate) { // disable cheat option
 				if (pCurrentCheat->nType != 1) {
-					nOption = 1; // Set to the first option as there is no addressinfo associated with default (disabled) cheat entry. -dink
+					nOption = pCurrentCheat->nCurrent; // Set to the first option as there is no addressinfo associated with default (disabled) cheat entry. -dink
 
 					// Deactivate old option (if any)
 					pAddressInfo = pCurrentCheat->pOption[nOption]->AddressInfo;
@@ -157,7 +194,7 @@ INT32 CheatEnable(INT32 nCheat, INT32 nOption) // -1 / 0 - disable
 							cheat_subptr->open(cheat_ptr->nCPU);
 						}
 
-						if (pCurrentCheat->bRestoreOnDisable) {
+						if (pCurrentCheat->bRestoreOnDisable && !pAddressInfo->bRelAddress) {
 							// Write back original values to memory
 							bprintf(0, _T("Cheat #%d, option #%d. action: "), nCheat, nOption);
 							bprintf(0, _T("Undo cheat @ 0x%X -> 0x%X.\n"), pAddressInfo->nAddress, pAddressInfo->nOriginalValue);
@@ -184,37 +221,66 @@ INT32 CheatEnable(INT32 nCheat, INT32 nOption) // -1 / 0 - disable
 
 					pCurrentCheat->bModified = 0;
 
-					// Copy the original values
-					pAddressInfo->nOriginalValue = cheat_subptr->read(pAddressInfo->nAddress);
-
-					bprintf(0, _T("Cheat #%d, option #%d. action: "), nCheat, nOption);
-					if (pCurrentCheat->bWatchMode) {
-						bprintf(0, _T("Watch memory @ 0x%X (0x%X)\n"), pAddressInfo->nAddress, pAddressInfo->nOriginalValue);
-					} else
-					if (pCurrentCheat->bOneShot) {
-						bprintf(0, _T("Apply cheat @ 0x%X -> 0x%X. (Before 0x%X - One-Shot mode)\n"), pAddressInfo->nAddress, pAddressInfo->nValue, pAddressInfo->nOriginalValue);
-						pCurrentCheat->bOneShot = 3; // re-load the one-shot frame counter
+					if (HW_NES) {
+						bprintf(0, _T("NES-Cheat #%d, option #%d: "), nCheat, nOption);
+						if (nes_add_cheat) nes_add_cheat(pAddressInfo->szGenieCode);
 					} else {
-						bprintf(0, _T("Apply cheat @ 0x%X -> 0x%X. (Undo 0x%X)\n"), pAddressInfo->nAddress, pAddressInfo->nValue, pAddressInfo->nOriginalValue);
-					}
-					if (pCurrentCheat->bWaitForModification)
-						bprintf(0, _T(" - Triggered by: Waiting for modification!\n"));
-
-					if (pCurrentCheat->nType != 0) {
-						if (pAddressInfo->nCPU != nOpenCPU) {
-							if (nOpenCPU != -1) {
-								cheat_subptr->close();
+						// Prefill data
+						if (pCurrentCheat->nPrefillMode) {
+							UINT8 nPrefill = 0x00;
+							switch (pCurrentCheat->nPrefillMode) {
+								case 1: nPrefill = 0xff; break;
+								case 2: nPrefill = 0x00; break;
+								case 3: nPrefill = 0x01; break;
 							}
-
-							nOpenCPU = pAddressInfo->nCPU;
-							cheat_ptr = &cpus[nOpenCPU];
-							cheat_subptr = cheat_ptr->cpuconfig;
-							cheat_subptr->open(cheat_ptr->nCPU);
+							cheat_subptr->write(pAddressInfo->nAddress, nPrefill);
 						}
 
-						if (!pCurrentCheat->bWatchMode && !pCurrentCheat->bWaitForModification) {
-							// Activate the cheat
-							cheat_subptr->write(pAddressInfo->nAddress, pAddressInfo->nValue);
+						// Copy the original values
+						pAddressInfo->nOriginalValue = cheat_subptr->read(pAddressInfo->nAddress);
+
+						bprintf(0, _T("Cheat #%d, option #%d. action: "), nCheat, nOption);
+
+						if (pCurrentCheat->bWatchMode) {
+							bprintf(0, _T("Watch memory @ 0x%X (0x%X)\n"), pAddressInfo->nAddress, pAddressInfo->nOriginalValue);
+						} else
+							if (pCurrentCheat->bOneShot) {
+								bprintf(0, _T("Apply cheat @ 0x%X -> 0x%X. (Before 0x%X - One-Shot mode)\n"), pAddressInfo->nAddress, pAddressInfo->nValue, pAddressInfo->nOriginalValue);
+								pCurrentCheat->bOneShot = 3; // re-load the one-shot frame counter
+							} else {
+								if (pAddressInfo->bRelAddress) {
+									const TCHAR nBits[4][8] = { { _T("8-bit") }, { _T("16-bit") }, { _T("24-bit") }, { _T("32-bit") } };
+									if (pAddressInfo->nMultiByte) {
+										bprintf(0, _T("Apply cheat @ %s pointer ([0x%X] + 0x%x + %x) -> 0x%X.\n"), nBits[pAddressInfo->nRelAddressBits & 3], pAddressInfo->nAddress, pAddressInfo->nRelAddressOffset, pAddressInfo->nMultiByte, pAddressInfo->nValue);
+									} else {
+										bprintf(0, _T("Apply cheat @ %s pointer ([0x%X] + 0x%x) -> 0x%X.\n"), nBits[pAddressInfo->nRelAddressBits & 3], pAddressInfo->nAddress, pAddressInfo->nRelAddressOffset, pAddressInfo->nValue);
+									}
+								} else {
+									// normal cheat
+									bprintf(0, _T("Apply cheat @ 0x%X -> 0x%X. (Undo 0x%X)\n"), pAddressInfo->nAddress, pAddressInfo->nValue, pAddressInfo->nOriginalValue);
+								}
+							}
+						if (pCurrentCheat->bWaitForModification == 1)
+							bprintf(0, _T(" - Triggered by: Waiting for modification!\n"));
+						if (pCurrentCheat->bWaitForModification == 2)
+							bprintf(0, _T(" - Triggered by: Waiting for Match memory with extended!\n"));
+
+						if (pCurrentCheat->nType != 0) { // not cheat.dat
+							if (pAddressInfo->nCPU != nOpenCPU) {
+								if (nOpenCPU != -1) {
+									cheat_subptr->close();
+								}
+
+								nOpenCPU = pAddressInfo->nCPU;
+								cheat_ptr = &cpus[nOpenCPU];
+								cheat_subptr = cheat_ptr->cpuconfig;
+								cheat_subptr->open(cheat_ptr->nCPU);
+							}
+
+							if (!pCurrentCheat->bWatchMode && !pCurrentCheat->bWaitForModification && !pAddressInfo->bRelAddress) {
+								// Activate the cheat
+								cheat_subptr->write(pAddressInfo->nAddress, pAddressInfo->nValue);
+							}
 						}
 					}
 
@@ -258,7 +324,7 @@ extern INT32 VidSNewTinyMsg(const TCHAR* pText, INT32 nRGB = 0, INT32 nDuration 
 
 INT32 CheatApply()
 {
-	if (!bCheatsEnabled) {
+	if (!bCheatsEnabled || HW_NES || bBurnRunAheadFrame) { // NES cheats use Game Genie codes
 		return 0;
 	}
 
@@ -294,17 +360,63 @@ INT32 CheatApply()
 #endif
 				} else {
 					// update the cheat
-					if (pCurrentCheat->bWaitForModification) {
+					if (pCurrentCheat->bWaitForModification == 1 && pCurrentCheat->bModified == 0) {
 						UINT32 nValNow = cheat_subptr->read(pAddressInfo->nAddress);
 						if (nValNow != pAddressInfo->nOriginalValue) {
-							bprintf(0, _T(" - Address modified! old = %X new = %X\n"),pAddressInfo->nOriginalValue, nValNow);
-							cheat_subptr->write(pAddressInfo->nAddress, pAddressInfo->nValue);
+							bprintf(0, _T(" - Address modified! previous = %X now = %X\n"),pAddressInfo->nOriginalValue, nValNow);
+							// the write happens next iteration of CheatApply();
+							pCurrentCheat->bModified = 1;
+							pAddressInfo->nOriginalValue = pAddressInfo->nValue;
+						}
+					} else
+					if (pCurrentCheat->bWaitForModification == 2 && pCurrentCheat->bModified == 0) {
+						UINT32 nValNow = cheat_subptr->read(pAddressInfo->nAddress);
+						if (nValNow == pAddressInfo->nExtended) {
+							bprintf(0, _T(" - Address Matched! previous = %X now = %X\n"),pAddressInfo->nOriginalValue, nValNow);
+							// the write happens next iteration of CheatApply();
 							pCurrentCheat->bModified = 1;
 							pAddressInfo->nOriginalValue = pAddressInfo->nValue;
 						}
 					} else {
 						// Write the value.
-						cheat_subptr->write(pAddressInfo->nAddress, pAddressInfo->nValue);
+						if (pAddressInfo->bRelAddress) {
+							// Cheat with relative address (pointer @ address + offset)  see cheat.dat entries ":rdft2:" or ":dreamwld:")
+							UINT32 addr = 0;
+
+							for (INT32 i = 0; i < (pAddressInfo->nRelAddressBits + 1); i++) {
+								if (cheat_subptr->nAddressFlags & 3) { // big endian
+									addr |= cheat_subptr->read(pAddressInfo->nAddress + (pAddressInfo->nRelAddressBits - i)) << (i * 8);
+								} else {
+									addr |= cheat_subptr->read(pAddressInfo->nAddress + i) << (i * 8);
+								}
+							}
+							//bprintf(0, _T("relative cheat write %x -> %x\n"), addr + pAddressInfo->nMultiByte + pAddressInfo->nRelAddressOffset, pAddressInfo->nValue);
+							cheat_subptr->write(addr + pAddressInfo->nMultiByte + pAddressInfo->nRelAddressOffset, pAddressInfo->nValue);
+						} else {
+							// Normal cheat write
+							INT32 addressXor = 0;
+							if (cheat_subptr->nAddressFlags & MB_CHEAT_ENDI_SWAP) {
+								// LE CPU's Require address swaps with multi-byte writes (tms34xxx, v60)
+								// (because cheat loader (burner/conc.cpp) stores everything in BE format)
+								if (pAddressInfo->nTotalByte > 1) {
+									addressXor = ((cheat_subptr->nAddressFlags & 0x30) == 32) ? 3 : 1;
+								}
+							}
+
+							//bprintf(0, _T("byte size %x  byte number %x.\n"), pAddressInfo->nTotalByte, pAddressInfo->nMultiByte);
+							//bprintf(0, _T("address/value:  %x  %x  (xor: %x)\n"), pAddressInfo->nAddress, pAddressInfo->nValue, addressXor);
+
+							UINT8 byteToWrite = pAddressInfo->nValue;
+
+							if (pCurrentCheat->bWriteWithMask) {
+								//bprintf(0, _T("write with mask!  %x\n"), pAddressInfo->nMask);
+								byteToWrite =  (byteToWrite & pAddressInfo->nMask);
+								byteToWrite |= (cheat_subptr->read(pAddressInfo->nAddress ^ addressXor) & ~pAddressInfo->nMask);
+							}
+
+							cheat_subptr->write(pAddressInfo->nAddress ^ addressXor, byteToWrite);
+							//bprintf(0, _T("normal cheat write %x -> %x\n"), pAddressInfo->nAddress, pAddressInfo->nValue);
+						}
 						pCurrentCheat->bModified = 1;
 					}
 				}
@@ -335,7 +447,6 @@ INT32 CheatApply()
 
 INT32 CheatInit()
 {
-	CheatExit();
 	CpuCheatRegisterInit();
 
 	bCheatsEnabled = false;
@@ -367,6 +478,8 @@ void CheatExit()
 	pCheatInfo = NULL;
 	
 	CheatSearchInitCallbackFunction = NULL;
+
+	nes_init_cheat_functions(NULL, NULL);
 }
 
 // Cheat search
@@ -398,13 +511,18 @@ void CheatSearchExit()
 	memset(CheatSearchShowResultValues, 0, sizeof(CheatSearchShowResultValues));
 }
 
-void CheatSearchStart()
+int CheatSearchStart()
 {
 	UINT32 nAddress;
 	
 	INT32 nActiveCPU = 0;
 	cheat_ptr = &cpus[nActiveCPU];
 	cheat_subptr = cheat_ptr->cpuconfig;
+
+	if (cheat_subptr->nMemorySize & 0x80000000 || cheat_subptr->nMemorySize >= 0x20000000) {
+		bprintf(0, _T("*  CPU memory range too huge, can't cheat search.\n"));
+		return 1; // fail
+	}
 
 	nActiveCPU = cheat_subptr->active();
 	if (nActiveCPU >= 0) {
@@ -433,6 +551,8 @@ void CheatSearchStart()
 		// re-open cpu which was open when cheatsearch started.
 		cheat_subptr->open(nActiveCPU);
 	}
+
+	return 0; // success
 }
 
 static void CheatSearchGetResults()
@@ -596,3 +716,132 @@ void CheatSearchExcludeAddressRange(UINT32 nStart, UINT32 nEnd)
 
 #undef NOT_IN_RESULTS
 #undef IN_RESULTS
+
+extern int bDrvOkay;
+
+HWAddressType GetMemorySize()
+{
+	if (!bDrvOkay)
+		return 0;
+
+	cheat_ptr = &cpus[0]; // first cpu only (ok?)
+	return cheat_ptr->cpuconfig->nMemorySize;
+}
+
+bool IsHardwareAddressValid(HWAddressType address)
+{
+	if (!bDrvOkay)
+		return false;
+
+	cheat_ptr = &cpus[0]; // first cpu only (ok?)
+
+	if (address <= cheat_ptr->cpuconfig->nMemorySize)
+		return true;
+	else
+		return false;
+}
+
+unsigned int ReadValueAtHardwareAddress_audio(HWAddressType address, unsigned int size, int isLittleEndian)
+{
+	unsigned int value = 0;
+
+	if (!bDrvOkay)
+		return 0;
+
+	cheat_ptr = &cpus[1]; // first cpu only (ok?)
+
+	INT32 nActiveCPU = cheat_ptr->cpuconfig->active();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->close();
+	cheat_ptr->cpuconfig->open(cheat_ptr->nCPU);
+
+	for (unsigned int i = 0; i < size; i++)
+	{
+		value <<= 8;
+		value |= cheat_ptr->cpuconfig->read(address);
+		if (isLittleEndian)
+			address--;
+		else
+			address++;
+	}
+
+	cheat_ptr->cpuconfig->close();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->open(nActiveCPU);
+
+	return value;
+}
+
+unsigned int ReadValueAtHardwareAddress(HWAddressType address, unsigned int size, int isLittleEndian)
+{
+	unsigned int value = 0;
+
+	if (!bDrvOkay)
+		return 0;
+
+	cheat_ptr = &cpus[0]; // first cpu only (ok?)
+
+	INT32 nActiveCPU = cheat_ptr->cpuconfig->active();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->close();
+	cheat_ptr->cpuconfig->open(cheat_ptr->nCPU);
+
+	for(unsigned int i = 0; i < size; i++)
+	{
+		value <<= 8;
+		value |= cheat_ptr->cpuconfig->read(address);
+		if(isLittleEndian)
+			address--;
+		else
+			address++;
+	}
+
+	cheat_ptr->cpuconfig->close();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->open(nActiveCPU);
+
+	return value;
+}
+bool WriteValueAtHardwareAddress_audio(HWAddressType address, unsigned int value, unsigned int size, int isLittleEndian)
+{
+	cheat_ptr = &cpus[1]; // first cpu only (ok?)
+
+	INT32 nActiveCPU = cheat_ptr->cpuconfig->active();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->close();
+	cheat_ptr->cpuconfig->open(cheat_ptr->nCPU);
+
+	for (int i = (int)size - 1; i >= 0; i--) {
+		unsigned char memByte = (value >> (8 * i)) & 0xFF;
+		cheat_ptr->cpuconfig->write(address, memByte);
+
+		if (isLittleEndian)
+			address--;
+		else
+			address++;
+	}
+
+	cheat_ptr->cpuconfig->close();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->open(nActiveCPU);
+
+	return value;
+}
+
+bool WriteValueAtHardwareAddress(HWAddressType address, unsigned int value, unsigned int size, int isLittleEndian)
+{
+	cheat_ptr = &cpus[0]; // first cpu only (ok?)
+
+	INT32 nActiveCPU = cheat_ptr->cpuconfig->active();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->close();
+	cheat_ptr->cpuconfig->open(cheat_ptr->nCPU);
+
+	for(int i = (int)size-1; i >= 0; i--) {
+		unsigned char memByte = (value >> (8*i))&0xFF;
+		cheat_ptr->cpuconfig->write(address,memByte);
+
+		if(isLittleEndian)
+			address--;
+		else
+			address++;
+	}
+
+	cheat_ptr->cpuconfig->close();
+	if (nActiveCPU >= 0) cheat_ptr->cpuconfig->open(nActiveCPU);
+
+	return value;
+}

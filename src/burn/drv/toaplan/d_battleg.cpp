@@ -3,6 +3,7 @@
 
 #include "toaplan.h"
 #include "nmk112.h"
+
 // Battle Garegga
 
 static UINT8 DrvButton[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -11,8 +12,8 @@ static UINT8 DrvJoy2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInput[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static UINT8 DrvReset = 0;
-static UINT8 bDrawScreen;
-static bool bVBlank;
+
+static HoldCoin<2> hold_coin;
 
 static UINT8 nIRQPending;
 
@@ -21,151 +22,206 @@ static INT32 nSoundCommand;
 // Z80 ROM bank
 static INT32 nCurrentBank;
 
-INT32 Bgareggabl = 0;
+INT32 Bgareggabl = 0; // used by toa_extratext.cpp
 static INT32 Bgareggabla = 0;
+static INT32 location_test = 0;
 
 // Rom information
+
+// Battle Garegga (Europe / USA / Japan / Asia) (Sat Feb 3 1996)
 static struct BurnRomInfo bgareggaRomDesc[] = {
-	{ "prg0.bin",     0x080000, 0xF80C2FC2, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
-	{ "prg1.bin",     0x080000, 0x2CCFDD1E, BRF_ESS | BRF_PRG }, //  1				(odd)
+	{ "prg0.bin",     0x080000, 0xf80c2fc2, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
+	{ "prg1.bin",     0x080000, 0x2ccfdd1e, BRF_ESS | BRF_PRG }, //  1				(odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+	{ "rom4.bin",     0x200000, 0xb333d81f, BRF_GRA },			 //  2 GP9001 Tile data
+	{ "rom3.bin",     0x200000, 0x51b9ebfb, BRF_GRA },			 //  3
+	{ "rom2.bin",     0x200000, 0xb330e5e2, BRF_GRA },			 //  4
+	{ "rom1.bin",     0x200000, 0x7eafdd70, BRF_GRA },			 //  5
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "text.u81",     0x008000, 0xe67fd534, BRF_GRA },			 //  6 Extra text layer tile data
 
 	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "rom5.bin",     0x100000, 0xf6d49863, BRF_SND },			 //  8 MSM6295 ADPCM data
 };
-
 
 STD_ROM_PICK(bgaregga)
 STD_ROM_FN(bgaregga)
 
-static struct BurnRomInfo bgareggazRomDesc[] = {
-	{ "garegga-prg0.bin",     0x080000, 0x6F4AF466, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
-	{ "garegga-prg1.bin",     0x080000, 0xB4DC9A48, BRF_ESS | BRF_PRG }, //  1				(odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+// Battle Garegga (location test) (Wed Jan 17 1996)
+static struct BurnRomInfo bgareggatRomDesc[] = {
+	{ "battlegaregga-prg0-8-1-17.bin",	0x080000, 0xc032176f, BRF_PRG | BRF_ESS }, 			//  0 CPU #0 code (even)
+	{ "battlegaregga-prg1-8-1-17.bin",	0x080000, 0x3822f375, BRF_PRG | BRF_ESS }, 			//  1			 (odd)
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "rom4.bin",						0x200000, 0xb333d81f, BRF_GRA },		   			//  2 GP9001 Tile data
+	{ "rom3.bin",						0x200000, 0x51b9ebfb, BRF_GRA },           			//  3
+	{ "rom2.bin",						0x200000, 0xb330e5e2, BRF_GRA },           			//  4
+	{ "rom1.bin",						0x200000, 0x7eafdd70, BRF_GRA },           			//  5
 
-	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
+	{ "text.u81",						0x008000, 0xe67fd534, BRF_GRA },           			//  6 Extra text layer tile data
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "battlegaregga-snd-8-1-18-loke-ver.bin",	0x020000, 0xf5ea56f7, BRF_ESS | BRF_PRG }, 	//  7 Z80 program
+
+	{ "rom5.bin",						0x100000, 0xf6d49863, BRF_SND },           			//  8 MSM6295 ADPCM data
 };
 
+STD_ROM_PICK(bgareggat)
+STD_ROM_FN(bgareggat)
+
+
+// Battle Garegga Zakk version (Europe / USA / Japan / Asia) (Sat Feb 3 1996)
+static struct BurnRomInfo bgareggazRomDesc[] = {
+	{ "garegga-prg0.bin",     	0x080000, 0xec2f86d0, BRF_ESS | BRF_PRG }, 	//  0 CPU #0 code (even)
+	{ "garegga-prg1.bin",     	0x080000, 0x371a0e42, BRF_ESS | BRF_PRG }, 	//  1				(odd)
+
+	{ "rom4.bin",     			0x200000, 0xb333d81f, BRF_GRA },			//  2 GP9001 Tile data
+	{ "rom3.bin",     			0x200000, 0x51b9ebfb, BRF_GRA },			//  3
+	{ "rom2.bin",     			0x200000, 0xb330e5e2, BRF_GRA },			//  4
+	{ "rom1.bin",     			0x200000, 0x7eafdd70, BRF_GRA },			//  5
+
+	{ "text.u81",     			0x008000, 0xe67fd534, BRF_GRA },			//  6 Extra text layer tile data
+
+	{ "snd.bin",      			0x020000, 0x68632952, BRF_ESS | BRF_PRG }, 	//  7 Z80 program
+
+	{ "rom5.bin",     			0x100000, 0xf6d49863, BRF_SND },			//  8 MSM6295 ADPCM data
+};
 
 STD_ROM_PICK(bgareggaz)
 STD_ROM_FN(bgareggaz)
 
+
+// Battle Garegga (Austria / Hong Kong) (Sat Feb 3 1996)
 static struct BurnRomInfo bgareghkRomDesc[] = {
-	{ "prg_0.rom",    0x080000, 0x26E0019E, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
-	{ "prg_1.rom",    0x080000, 0x2CCFDD1E, BRF_ESS | BRF_PRG }, //  1				(odd)
+	{ "prg_0.rom",    0x080000, 0x26e0019e, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
+	{ "prg_1.rom",    0x080000, 0x2ccfdd1e, BRF_ESS | BRF_PRG }, //  1				(odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+	{ "rom4.bin",     0x200000, 0xb333d81f, BRF_GRA },			 //  2 GP9001 Tile data
+	{ "rom3.bin",     0x200000, 0x51b9ebfb, BRF_GRA },			 //  3
+	{ "rom2.bin",     0x200000, 0xb330e5e2, BRF_GRA },			 //  4
+	{ "rom1.bin",     0x200000, 0x7eafdd70, BRF_GRA },			 //  5
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "text.u81",     0x008000, 0xe67fd534, BRF_GRA },			 //  6 Extra text layer tile data
 
 	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "rom5.bin",     0x100000, 0xf6d49863, BRF_SND },			 //  8 MSM6295 ADPCM data
 };
-
 
 STD_ROM_PICK(bgareghk)
 STD_ROM_FN(bgareghk)
 
+
+// Battle Garegga (Korea / Greece) (Wed Feb 7 1996)
+// only the program ROMs' dumps were provided for this set.
+// According to the dumper: 'In the Korea Region Setting, DIP SWITCH's 'STAGE EDIT' does not work and
+// the C button (formation change) function in the in-game is also deleted.'
+static struct BurnRomInfo bgareggakRomDesc[] = {
+	
+	{ "prg0.bin",     	0x080000, 0x40a108a7, BRF_ESS | BRF_PRG }, 	//  0 CPU #0 code (even)
+	{ "prg1.bin",    	0x080000, 0x45a6e48a, BRF_ESS | BRF_PRG }, 	//  1			  (odd)
+
+	{ "rom4.bin",     	0x200000, 0xb333d81f, BRF_GRA },			//  2 GP9001 Tile data
+	{ "rom3.bin",     	0x200000, 0x51b9ebfb, BRF_GRA },			//  3
+	{ "rom2.bin",     	0x200000, 0xb330e5e2, BRF_GRA },			//  4
+	{ "rom1.bin",     	0x200000, 0x7eafdd70, BRF_GRA },			//  5
+
+	{ "text.u81",     	0x008000, 0xe67fd534, BRF_GRA },			//  6 Extra text layer tile data
+
+	{ "snd.bin",      	0x020000, 0x68632952, BRF_ESS | BRF_PRG }, 	//  7 Z80 program
+
+	{ "rom5.bin",     	0x100000, 0xf6d49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+};
+
+STD_ROM_PICK(bgareggak)
+STD_ROM_FN(bgareggak)
+
+
+// Battle Garegga - New Version (Austria / Hong Kong) (Sat Mar 2 1996)
 static struct BurnRomInfo bgaregnvRomDesc[] = {
-	{ "prg_0.bin",    0x080000, 0x951ECC07, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
-	{ "prg_1.bin",    0x080000, 0x729A60C6, BRF_ESS | BRF_PRG }, //  1				(odd)
+	{ "prg_0.bin",    0x080000, 0x951ecc07, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
+	{ "prg_1.bin",    0x080000, 0x729a60c6, BRF_ESS | BRF_PRG }, //  1			   (odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+	{ "rom4.bin",     0x200000, 0xb333d81f, BRF_GRA },			 //  2 GP9001 Tile data
+	{ "rom3.bin",     0x200000, 0x51b9ebfb, BRF_GRA },			 //  3
+	{ "rom2.bin",     0x200000, 0xb330e5e2, BRF_GRA },			 //  4
+	{ "rom1.bin",     0x200000, 0x7eafdd70, BRF_GRA },			 //  5
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "text.u81",     0x008000, 0xe67fd534, BRF_GRA },			 //  6 Extra text layer tile data
 
 	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "rom5.bin",     0x100000, 0xf6d49863, BRF_SND },			 //  8 MSM6295 ADPCM data
 };
-
 
 STD_ROM_PICK(bgaregnv)
 STD_ROM_FN(bgaregnv)
 
+
+// Battle Garegga - Type 2 (Europe / USA / Japan / Asia) (Sat Mar 2 1996)
 static struct BurnRomInfo bgaregt2RomDesc[] = {
 	{ "prg0",         0x080000, 0x84094099, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
 	{ "prg1",         0x080000, 0x46f92fe4, BRF_ESS | BRF_PRG }, //  1				(odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+	{ "rom4.bin",     0x200000, 0xb333d81f, BRF_GRA },			 //  2 GP9001 Tile data
+	{ "rom3.bin",     0x200000, 0x51b9ebfb, BRF_GRA },			 //  3
+	{ "rom2.bin",     0x200000, 0xb330e5e2, BRF_GRA },			 //  4
+	{ "rom1.bin",     0x200000, 0x7eafdd70, BRF_GRA },			 //  5
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "text.u81",     0x008000, 0xe67fd534, BRF_GRA },			 //  6 Extra text layer tile data
 
 	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "rom5.bin",     0x100000, 0xf6d49863, BRF_SND },			 //  8 MSM6295 ADPCM data
 };
-
 
 STD_ROM_PICK(bgaregt2)
 STD_ROM_FN(bgaregt2)
 
+
+// Battle Garegga - Type 2 (Denmark / China) (Tue Apr 2 1996)
 static struct BurnRomInfo bgaregcnRomDesc[] = {
-	{ "u123",         0x080000, 0x88A4E66A, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
-	{ "u65",          0x080000, 0x5DEA32A3, BRF_ESS | BRF_PRG }, //  1				(odd)
+	{ "u123",         0x080000, 0x88a4e66a, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
+	{ "u65",          0x080000, 0x5dea32a3, BRF_ESS | BRF_PRG }, //  1				(odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+	{ "rom4.bin",     0x200000, 0xb333d81f, BRF_GRA },			 //  2 GP9001 Tile data
+	{ "rom3.bin",     0x200000, 0x51b9ebfb, BRF_GRA },			 //  3
+	{ "rom2.bin",     0x200000, 0xb330e5e2, BRF_GRA },			 //  4
+	{ "rom1.bin",     0x200000, 0x7eafdd70, BRF_GRA },			 //  5
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "text.u81",     0x008000, 0xe67fd534, BRF_GRA },			 //  6 Extra text layer tile data
 
 	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "rom5.bin",     0x100000, 0xf6d49863, BRF_SND },			 //  8 MSM6295 ADPCM data
 };
-
 
 STD_ROM_PICK(bgaregcn)
 STD_ROM_FN(bgaregcn)
 
+
+// Battle Garegga (Taiwan / Germany) (Thu Feb 1 1996)
 static struct BurnRomInfo bgaregtwRomDesc[] = {
-	{ "garegga_prg0.u123",0x080000, 0x235b7405, BRF_ESS | BRF_PRG }, //  0 CPU #0 code (even)
-	{ "garegga_prg1.u65", 0x080000, 0xc29ccf6a, BRF_ESS | BRF_PRG }, //  1				(odd)
+	{ "garegga_prg0.u123",	0x080000, 0x235b7405, BRF_ESS | BRF_PRG }, 	//  0 CPU #0 code (even)
+	{ "garegga_prg1.u65", 	0x080000, 0xc29ccf6a, BRF_ESS | BRF_PRG }, 	//  1				(odd)
 
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  2 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  3
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  4
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  5
+	{ "rom4.bin",     		0x200000, 0xb333d81f, BRF_GRA },			//  2 GP9001 Tile data
+	{ "rom3.bin",     		0x200000, 0x51b9ebfb, BRF_GRA },			//  3
+	{ "rom2.bin",     		0x200000, 0xb330e5e2, BRF_GRA },			//  4
+	{ "rom1.bin",     		0x200000, 0x7eafdd70, BRF_GRA },			//  5
 
-	{ "text.u81",     0x008000, 0xE67FD534, BRF_GRA },			 //  6 Extra text layer tile data
+	{ "text.u81",     		0x008000, 0xe67fd534, BRF_GRA },			//  6 Extra text layer tile data
 
-	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  7 Z80 program
+	{ "snd.bin",      		0x020000, 0x68632952, BRF_ESS | BRF_PRG }, 	//  7 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  8 MSM6295 ADPCM data
+	{ "rom5.bin",     		0x100000, 0xf6d49863, BRF_SND },			//  8 MSM6295 ADPCM data
 };
-
 
 STD_ROM_PICK(bgaregtw)
 STD_ROM_FN(bgaregtw)
 
 
+// 1945 Part-2 (Chinese hack of Battle Garegga)
 static struct BurnRomInfo bgareggablRomDesc[] = {
 	{ "xt-8m.bin",    0x100000, 0x4a6657cb, BRF_ESS | BRF_PRG }, //  0 CPU #0 code
 
@@ -176,65 +232,85 @@ static struct BurnRomInfo bgareggablRomDesc[] = {
 
 	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  4 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  5 MSM6295 ADPCM data
+	{ "rom5.bin",     0x100000, 0xf6d49863, BRF_SND },			 //  5 MSM6295 ADPCM data
 	
 	{ "2@-256",       0x008000, 0x456dd16e, BRF_GRA },			 //  6 (looks like garbage)
 };
-
 
 STD_ROM_PICK(bgareggabl)
 STD_ROM_FN(bgareggabl)
 
 
+// Lei Shen Zhuan Thunder Deity Biography (Chinese hack of Battle Garegga)
 static struct BurnRomInfo bgareggablaRomDesc[] = {
-	{ "27c8100.mon-sys",    0x100000, 0xD334E5AA, BRF_ESS | BRF_PRG }, //  0 CPU #0 code
+	{ "27c8100.mon-sys",    0x100000, 0xd334e5aa, BRF_ESS | BRF_PRG }, 	//  0 CPU #0 code
 	
-	{ "rom4.bin",     0x200000, 0xB333D81F, BRF_GRA },			 //  1 GP9001 Tile data
-	{ "rom3.bin",     0x200000, 0x51B9EBFB, BRF_GRA },			 //  2
-	{ "rom2.bin",     0x200000, 0xB330E5E2, BRF_GRA },			 //  3
-	{ "rom1.bin",     0x200000, 0x7EAFDD70, BRF_GRA },			 //  4
+	{ "rom4.bin",     		0x200000, 0xb333d81f, BRF_GRA },			//  1 GP9001 Tile data
+	{ "rom3.bin",     		0x200000, 0x51b9ebfb, BRF_GRA },			//  2
+	{ "rom2.bin",     		0x200000, 0xb330e5e2, BRF_GRA },			//  3
+	{ "rom1.bin",     		0x200000, 0x7eafdd70, BRF_GRA },			//  4
 
-	{ "text.bin",     0x008000, 0x00D100BD, BRF_GRA },			 //  5 Extra text layer tile data
+	{ "text.bin",     		0x008000, 0x00d100bd, BRF_GRA },			//  5 Extra text layer tile data
 
-	{ "snd.bin",      0x020000, 0x68632952, BRF_ESS | BRF_PRG }, //  6 Z80 program
+	{ "snd.bin",      		0x020000, 0x68632952, BRF_ESS | BRF_PRG }, 	//  6 Z80 program
 
-	{ "rom5.bin",     0x100000, 0xF6D49863, BRF_SND },			 //  7 MSM6295 ADPCM data
+	{ "rom5.bin",     		0x100000, 0xf6d49863, BRF_SND },			//  7 MSM6295 ADPCM data
 	
-	{ "base.bin",     0x008000, 0x456dd16e, BRF_GRA },			 //  8 (looks like garbage)
+	{ "base.bin",     		0x008000, 0x456dd16e, BRF_GRA },			//  8 (looks like garbage)
 };
-
 
 STD_ROM_PICK(bgareggabla)
 STD_ROM_FN(bgareggabla)
 
+
+// Battle Garegga (Japan, bootleg) (Sat Feb 3 1996)
+static struct BurnRomInfo bgareggabljRomDesc[] = {
+	{ "sys.bin",      	0x200000, 0xb2a1225f, BRF_ESS | BRF_PRG }, 	//  0 CPU #0 code
+
+	{ "322_2.bin",      0x400000, 0x37fe48ed, BRF_GRA },			//  1 GP9001 Tile data // rom4.bin + rom3.bin
+	{ "322_1.bin",      0x400000, 0x5a06c031, BRF_GRA },			//  2					// rom2.bin + rom1.bin
+
+	{ "text.bin",       0x008000, 0xe67fd534, BRF_GRA },			//  3 Extra text layer tile data
+
+	{ "snd.bin",      	0x020000, 0x68632952, BRF_ESS | BRF_PRG }, 	//  4 Z80 program
+
+	{ "rom5.bin",     	0x100000, 0xf6d49863, BRF_SND },			 //  5 MSM6295 ADPCM data
+	
+	{ "base.bin",       0x008000, 0x456dd16e, BRF_GRA },			 //  6 (looks like garbage)
+};
+
+STD_ROM_PICK(bgareggablj)
+STD_ROM_FN(bgareggablj)
+
+
 static struct BurnInputInfo battlegInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvButton + 3,	"p1 coin"},
-	{"P1 Start",	BIT_DIGITAL,	DrvButton + 5,	"p1 start"},
+	{"P1 Coin",		BIT_DIGITAL,	DrvButton + 3,	"p1 coin"	},
+	{"P1 Start",	BIT_DIGITAL,	DrvButton + 5,	"p1 start"	},
 
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"},
-	{"P1 Right",	BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"},
-	{"P1 Button 1",	BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"},
-	{"P1 Button 2",	BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"},
-	{"P1 Button 3",	BIT_DIGITAL,	DrvJoy1 + 6,	"p1 fire 3"},
+	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Right",	BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
+	{"P1 Button 1",	BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
+	{"P1 Button 2",	BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
+	{"P1 Button 3",	BIT_DIGITAL,	DrvJoy1 + 6,	"p1 fire 3"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvButton + 4,	"p2 coin"},
-	{"P2 Start",	BIT_DIGITAL,	DrvButton + 6,	"p2 start"},
+	{"P2 Coin",		BIT_DIGITAL,	DrvButton + 4,	"p2 coin"	},
+	{"P2 Start",	BIT_DIGITAL,	DrvButton + 6,	"p2 start"	},
 
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"},
-	{"P2 Right",	BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"},
-	{"P2 Button 1",	BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"},
-	{"P2 Button 2",	BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"},
-	{"P2 Button 3",	BIT_DIGITAL,	DrvJoy2 + 6,	"p2 fire 3"},
+	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
+	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
+	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
+	{"P2 Right",	BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"	},
+	{"P2 Button 1",	BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
+	{"P2 Button 2",	BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
+	{"P2 Button 3",	BIT_DIGITAL,	DrvJoy2 + 6,	"p2 fire 3"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,		"reset"},
-	{"Diagnostics",	BIT_DIGITAL,	DrvButton + 0,	"diag"},
-	{"Dip A",		BIT_DIPSWITCH,	DrvInput + 3,	"dip"},
-	{"Dip B",		BIT_DIPSWITCH,	DrvInput + 4,	"dip"},
-	{"Dip C",		BIT_DIPSWITCH,	DrvInput + 5,	"dip"},
+	{"Reset",		BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",		BIT_DIGITAL,	DrvButton + 0,	"service"	},
+	{"Dip A",		BIT_DIPSWITCH,	DrvInput + 3,	"dip"		},
+	{"Dip B",		BIT_DIPSWITCH,	DrvInput + 4,	"dip"		},
+	{"Dip C",		BIT_DIPSWITCH,	DrvInput + 5,	"dip"		},
 };
 
 STDINPUTINFO(battleg)
@@ -337,7 +413,7 @@ static struct BurnDIPInfo bgareggaDIPList[] = {
 	{0x16,	0x01, 0x04, 0x04, "Off"},
 };
 
-static struct BurnDIPInfo bgaregcnRegionDIPList[] = {
+static struct BurnDIPInfo bgareggacnRegionDIPList[] = {
 	// DIP 3
 	{0,		0xFE, 0,	2,	  "Stage edit"},
 	{0x16,	0x01, 0x08, 0x00, "Disable"},
@@ -367,7 +443,20 @@ static struct BurnDIPInfo bgareggaRegionDIPList[] = {
 	{0x16,	0x01, 0x03, 0x03, "Asia"},
 };
 
-static struct BurnDIPInfo bgareghkRegionDIPList[] = {
+static struct BurnDIPInfo bgareggakRegionDIPList[] = {
+	// DIP 3
+	{0,		0xFE, 0,	2,	  "Stage edit"},
+	{0x16,	0x01, 0x08, 0x00, "Disable"},
+	{0x16,	0x01, 0x08, 0x08, "Enable"},
+
+	// Region
+	{0x16,	0xFF, 0x0F,	0x01, NULL},
+	{0,		0xFE, 0,	2,	  "Region"},
+	{0x16,	0x01, 0x03, 0x01, "Greece"},
+	{0x16,	0x01, 0x03, 0x03, "Korea"},
+};
+
+static struct BurnDIPInfo bgareggahkRegionDIPList[] = {
 	// DIP 3
 	{0,		0xFE, 0,	2,	  "Stage edit"},
 	{0x16,	0x01, 0x08, 0x00, "Disable"},
@@ -382,7 +471,7 @@ static struct BurnDIPInfo bgareghkRegionDIPList[] = {
 	{0x16,	0x01, 0x03, 0x02, "U.S.A. (Fabtek license) [illegal setting]"},
 };
 
-static struct BurnDIPInfo bgaregtwRegionDIPList[] = {
+static struct BurnDIPInfo bgareggatwRegionDIPList[] = {
 	// DIP 3
 	{0,		0xFE, 0,	2,	  "Stage edit"},
 	{0x16,	0x01, 0x08, 0x00, "Disable"},
@@ -398,9 +487,10 @@ static struct BurnDIPInfo bgaregtwRegionDIPList[] = {
 };
 
 STDDIPINFOEXT(bgaregga, bgaregga, bgareggaRegion)
-STDDIPINFOEXT(bgaregcn, bgaregga, bgaregcnRegion)
-STDDIPINFOEXT(bgareghk, bgaregga, bgareghkRegion)
-STDDIPINFOEXT(bgaregtw, bgaregga, bgaregtwRegion)
+STDDIPINFOEXT(bgareggacn, bgaregga, bgareggacnRegion)
+STDDIPINFOEXT(bgareggak, bgaregga, bgareggakRegion)
+STDDIPINFOEXT(bgareggahk, bgaregga, bgareggahkRegion)
+STDDIPINFOEXT(bgareggatw, bgaregga, bgareggatwRegion)
 
 static UINT8 *Mem = NULL, *MemEnd = NULL;
 static UINT8 *RamStart, *RamEnd;
@@ -467,16 +557,18 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 		SekScan(nAction);				// scan 68000 states
 		ZetScan(nAction);				// Scan Z80
-		SCAN_VAR(nCurrentBank);
 
 		MSM6295Scan(nAction, pnMin);
 		BurnYM2151Scan(nAction, pnMin);
+		NMK112_Scan(nAction);
 
 		ToaScanGP9001(nAction, pnMin);
 
-		SCAN_VAR(DrvInput);
+		SCAN_VAR(nCurrentBank);
 		SCAN_VAR(nSoundCommand);
 		SCAN_VAR(nIRQPending);
+
+		hold_coin.scan();
 
 		if (nAction & ACB_WRITE) {
 			INT32 nBank = nCurrentBank;
@@ -556,7 +648,7 @@ static INT32 LoadRomsBla()
 	return 0;
 }
 
-UINT8 __fastcall battlegZ80Read(UINT16 nAddress)
+static UINT8 __fastcall battlegZ80Read(UINT16 nAddress)
 {
 //	bprintf(0, _T("z80 read %4X\n"), nAddress);
 	switch (nAddress) {
@@ -576,7 +668,7 @@ UINT8 __fastcall battlegZ80Read(UINT16 nAddress)
 	return 0;
 }
 
-void __fastcall battlegZ80Write(UINT16 nAddress, UINT8 nValue)
+static void __fastcall battlegZ80Write(UINT16 nAddress, UINT8 nValue)
 {
 //	bprintf(0, _T("z80 wrote %4X with %2X\n"), nAddress, nValue);
 	switch (nAddress) {
@@ -639,7 +731,7 @@ static INT32 DrvZ80Init()
 	return 0;
 }
 
-UINT8 __fastcall battlegReadByte(UINT32 sekAddress)
+static UINT8 __fastcall battlegReadByte(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 
@@ -667,12 +759,13 @@ UINT8 __fastcall battlegReadByte(UINT32 sekAddress)
 	return 0;
 }
 
-UINT16 __fastcall battlegReadWord(UINT32 sekAddress)
+static UINT16 __fastcall battlegReadWord(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 
 		case 0x21C03C:
 			return ToaScanlineRegister();
+			//return (location_test) ? ToaScanlineRegisterLoctest() : ToaScanlineRegister();
 
 		case 0x300004:
 			return ToaGP9001ReadRAM_Hi(0);
@@ -685,7 +778,7 @@ UINT16 __fastcall battlegReadWord(UINT32 sekAddress)
 	return 0;
 }
 
-void __fastcall battlegWriteByte(UINT32 sekAddress, UINT8 byteValue)
+static void __fastcall battlegWriteByte(UINT32 sekAddress, UINT8 byteValue)
 {
 	switch (sekAddress) {
 
@@ -709,7 +802,7 @@ void __fastcall battlegWriteByte(UINT32 sekAddress, UINT8 byteValue)
 	}
 }
 
-void __fastcall battlegWriteWord(UINT32 sekAddress, UINT16 wordValue)
+static void __fastcall battlegWriteWord(UINT32 sekAddress, UINT16 wordValue)
 {
 	switch (sekAddress) {
 
@@ -751,6 +844,8 @@ static INT32 DrvDoReset()
 	MSM6295Reset(0);
 	BurnYM2151Reset();
 	NMK112Reset();
+
+	hold_coin.reset();
 
 	HiscoreReset();
 
@@ -832,7 +927,7 @@ static INT32 battlegInit()
 	DrvZ80Init();												// Initialize Z80
 
 	BurnYM2151Init(32000000 / 8);
-	BurnYM2151SetAllRoutes(1.00, BURN_SND_ROUTE_BOTH);
+	BurnYM2151SetAllRoutes(0.50, BURN_SND_ROUTE_BOTH);
 	MSM6295Init(0, 32000000 / 16 / 132, 1);
 	MSM6295SetRoute(0, 1.00, BURN_SND_ROUTE_BOTH);
 
@@ -842,14 +937,19 @@ static INT32 battlegInit()
 	ToaPalSrc = RamPal;
 	ToaPalInit();
 
-	bDrawScreen = true;
-
 	// mar 2 1996 & apr 2 1996 ver:	0x0009AC - 0x0009B8 & 0x001F5E - 0x001F64 & 0x003A1C - 0x003A22
 	// feb 2 1996 ver:				0x0009AC - 0x0009B8 & 0x001F2E - 0x001F34 & 0x0039EC - 0x0039F2
 
 	DrvDoReset();												// Reset machine
 
 	return 0;
+}
+
+static INT32 BgareggatInit()
+{
+	location_test = 1;
+
+	return battlegInit();
 }
 
 static INT32 BgareggablInit()
@@ -882,6 +982,7 @@ static INT32 DrvExit()
 	
 	Bgareggabl = 0;
 	Bgareggabla = 0;
+	location_test = 0;
 
 	return 0;
 }
@@ -890,11 +991,9 @@ static INT32 DrvDraw()
 {
 	ToaClearScreen(0);
 
-	if (bDrawScreen) {
-		ToaGetBitmap();
-		ToaRenderGP9001();					// Render GP9001 graphics
-		ToaExtraTextLayer();				// Render extra text layer
-	}
+	ToaGetBitmap();
+	ToaRenderGP9001();						// Render GP9001 graphics
+	ToaExtraTextLayer();					// Render extra text layer
 
 	ToaPalUpdate();							// Update the palette
 
@@ -921,6 +1020,9 @@ static INT32 DrvFrame()
 	ToaClearOpposites(&DrvInput[0]);
 	ToaClearOpposites(&DrvInput[1]);
 
+	hold_coin.check(0, DrvInput[2], 1 << 3, 1);
+	hold_coin.check(1, DrvInput[2], 1 << 4, 1);
+
 	SekNewFrame();
 
 	nCyclesTotal[0] = (INT32)((INT64)16000000 * nBurnCPUSpeedAdjust / (0x0100 * 60));
@@ -928,11 +1030,12 @@ static INT32 DrvFrame()
 	nCyclesDone[0] = nCyclesDone[1] = 0;
 
 	SekOpen(0);
-	
+
 	SekSetCyclesScanline(nCyclesTotal[0] / 262);
+
 	nToaCyclesDisplayStart = nCyclesTotal[0] - ((nCyclesTotal[0] * (TOA_VBLANK_LINES + 240)) / 262); // 0
 	nToaCyclesVBlankStart = nCyclesTotal[0] - ((nCyclesTotal[0] * TOA_VBLANK_LINES) / 262);
-	bVBlank = false;
+	bool bVBlank = false;
 
 	INT32 nSoundBufferPos = 0;
 
@@ -992,6 +1095,7 @@ static INT32 DrvFrame()
 				BurnYM2151Render(pSoundBuf, nSegmentLength);
 				MSM6295Render(0, pSoundBuf, nSegmentLength);
 			}
+			BurnSoundTweakVolume(pBurnSoundOut, nBurnSoundLen, 0.65);
 		}
 	}
 	
@@ -1002,7 +1106,7 @@ static INT32 DrvFrame()
 
 struct BurnDriver BurnDrvBgaregga = {
 	"bgaregga", NULL, NULL, NULL, "1996",
-	"Battle Garegga (Europe / USA / Japan / Asia) (Sat Feb 3 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Battle Garegga (Europe / USA / Japan / Asia) (Sat Feb 3 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, bgareggaRomInfo, bgareggaRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
@@ -1010,9 +1114,19 @@ struct BurnDriver BurnDrvBgaregga = {
 	240, 320, 3, 4
 };
 
+struct BurnDriver BurnDrvBgareggat = {
+	"bgareggat", "bgaregga", NULL, NULL, "1996",
+	"Battle Garegga (location test) (Wed Jan 17 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	NULL, bgareggatRomInfo, bgareggatRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
+	BgareggatInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
+	240, 320, 3, 4
+};
+
 struct BurnDriver BurnDrvBgareggaz = {
-	"bgareggaz", "bgaregga", NULL, NULL, "2008",
-	"Battle Garegga Zakk version (Europe / USA / Japan / Asia) (Sat Feb 3 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"bgareggaz", "bgaregga", NULL, NULL, "2019",
+	"Battle Garegga Zakk version (Europe / USA / Japan / Asia) (Sat Feb 3 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, bgareggazRomInfo, bgareggazRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
@@ -1022,17 +1136,17 @@ struct BurnDriver BurnDrvBgareggaz = {
 
 struct BurnDriver BurnDrvBgaregcn = {
 	"bgareggacn", "bgaregga", NULL, NULL, "1996",
-	"Battle Garegga - Type 2 (Denmark / China) (Tue Apr 2 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Battle Garegga - Type 2 (Denmark / China) (Tue Apr 2 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
-	NULL, bgaregcnRomInfo, bgaregcnRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgaregcnDIPInfo,
+	NULL, bgaregcnRomInfo, bgaregcnRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggacnDIPInfo,
 	battlegInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBgaregt2 = {
 	"bgareggat2", "bgaregga", NULL, NULL, "1996",
-	"Battle Garegga - Type 2 (Europe / USA / Japan / Asia) (Sat Mar 2 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Battle Garegga - Type 2 (Europe / USA / Japan / Asia) (Sat Mar 2 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, bgaregt2RomInfo, bgaregt2RomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
@@ -1042,50 +1156,70 @@ struct BurnDriver BurnDrvBgaregt2 = {
 
 struct BurnDriver BurnDrvBgaregnv = {
 	"bgaregganv", "bgaregga", NULL, NULL, "1996",
-	"Battle Garegga - New Version (Austria / Hong Kong) (Sat Mar 2 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Battle Garegga - New Version (Austria / Hong Kong) (Sat Mar 2 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
-	NULL, bgaregnvRomInfo, bgaregnvRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareghkDIPInfo,
+	NULL, bgaregnvRomInfo, bgaregnvRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggahkDIPInfo,
+	battlegInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
+	240, 320, 3, 4
+};
+
+struct BurnDriver BurnDrvBgareggak = {
+	"bgareggak", "bgaregga", NULL, NULL, "1996",
+	"Battle Garegga (Korea / Greece) (Wed Feb 7 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	NULL, bgareggakRomInfo, bgareggakRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggakDIPInfo,
 	battlegInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBgareghk = {
 	"bgareggahk", "bgaregga", NULL, NULL, "1996",
-	"Battle Garegga (Austria / Hong Kong) (Sat Feb 3 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Battle Garegga (Austria / Hong Kong) (Sat Feb 3 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
-	NULL, bgareghkRomInfo, bgareghkRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareghkDIPInfo,
+	NULL, bgareghkRomInfo, bgareghkRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggahkDIPInfo,
 	battlegInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBgaregtw = {
 	"bgareggatw", "bgaregga", NULL, NULL, "1996",
-	"Battle Garegga (Taiwan / Germany) (Thu Feb 1 1996)\0", NULL, "Raizing / 8ing", "Toaplan GP9001 based",
+	"Battle Garegga (Taiwan / Germany) (Thu Feb 1 1996)\0", NULL, "Raizing / Eighting", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
-	NULL, bgaregtwRomInfo, bgaregtwRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgaregtwDIPInfo,
+	NULL, bgaregtwRomInfo, bgaregtwRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggatwDIPInfo,
 	battlegInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBgareggabl = {
-	"bgareggabl", "bgaregga", NULL, NULL, "1996",
-	"1945 Part 2 (Chinese hack of Battle Garegga)\0", NULL, "hack", "Toaplan GP9001 based",
+	"bgareggabl", "bgaregga", NULL, NULL, "1998",
+	"1945 Er Dai / 1945 Part-2 (Chinese hack of Battle Garegga)\0", NULL, "bootleg (Melody)", "Toaplan GP9001 based",
 	L"1945 Part 2\0\uFF11\uFF19\uFF14\uFF15\u4E8C\u4EE3 (Chinese hack of Battle Garegga)\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HACK | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, bgareggablRomInfo, bgareggablRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
 	BgareggablInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };
 
 struct BurnDriver BurnDrvBgareggabla = {
-	"bgareggabla", "bgaregga", NULL, NULL, "1996",
-	"Lei Shen Zhuan Thunder Deity Biography (Chinese hack of Battle Garegga)\0", NULL, "hack", "Toaplan GP9001 based",
+	"bgareggabla", "bgaregga", NULL, NULL, "1997",
+	"Leishen Chuan / Thunder Deity Biography (Chinese hack of Battle Garegga)\0", NULL, "bootleg (Melody)", "Toaplan GP9001 based",
 	L"\u96F7\u795E\u50B3\0Lei Shen Zhuan Thunder Deity Biography (Chinese hack of Battle Garegga)\0" , NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_HACK | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, bgareggablaRomInfo, bgareggablaRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
 	BgareggablaInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
+	240, 320, 3, 4
+};
+
+struct BurnDriver BurnDrvBgareggablj = {
+	"bgareggablj", "bgaregga", NULL, NULL, "1996",
+	"Battle Garegga (Japan, bootleg) (Sat Feb 3 1996)\0", NULL, "bootleg", "Toaplan GP9001 based",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | TOA_ROTATE_GRAPHICS_CCW | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	NULL, bgareggabljRomInfo, bgareggabljRomName, NULL, NULL, NULL, NULL, battlegInputInfo, bgareggaDIPInfo,
+	BgareggablInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	240, 320, 3, 4
 };

@@ -30,23 +30,27 @@ static UINT8 *DrvBgRAM0;
 static UINT8 *DrvBgRAM1;
 static UINT8 *DrvBgRAM2;
 static UINT8 *DrvRadarRAM;
+static UINT8 *DrvProm;
 
 static UINT32 *DrvPalette;
 static UINT8 DrvRecalc;
 
 static UINT8 flipscreen;
-static UINT8 sounddata;
+
+static INT32 nCyclesExtra[2];
+
 static UINT8 soundclock;
-static UINT8 soundstop;
+static UINT8 dac_en;
+static float dac_vol;
 
 static UINT8 DrvJoy1[8];
 static UINT8 DrvJoy2[8];
 static UINT8 DrvJoy3[8];
 static UINT8 DrvDips[2];
-static UINT8 DrvInputs[3+1]; // extra for hold logic
+static UINT8 DrvInputs[3];
 static UINT8 DrvReset;
 
-static INT32 hold_coin[4];
+static HoldCoin<2> hold_coin;
 
 static INT32 is_senjyo = 0;
 static INT32 is_starforc_encrypted = 0;
@@ -78,150 +82,153 @@ STDINPUTINFO(Senjyo)
 
 static struct BurnDIPInfo SenjyoDIPList[]=
 {
-	{0x0f, 0xff, 0xff, 0xc0, NULL					},
-	{0x10, 0xff, 0xff, 0x43, NULL					},
+	DIP_OFFSET(0x0f)
+	{0x00, 0xff, 0xff, 0x80, NULL					},
+	{0x01, 0xff, 0xff, 0x43, NULL					},
 
 	{0   , 0xfe, 0   ,    4, "Coin A"				},
-	{0x0f, 0x01, 0x03, 0x00, "1 Coin  1 Credits"	},
-	{0x0f, 0x01, 0x03, 0x01, "1 Coin  2 Credits"	},
-	{0x0f, 0x01, 0x03, 0x02, "1 Coin  3 Credits"	},
-	{0x0f, 0x01, 0x03, 0x03, "1 Coin  6 Credits"	},
+	{0x00, 0x01, 0x03, 0x00, "1 Coin  1 Credits"	},
+	{0x00, 0x01, 0x03, 0x01, "1 Coin  2 Credits"	},
+	{0x00, 0x01, 0x03, 0x02, "1 Coin  3 Credits"	},
+	{0x00, 0x01, 0x03, 0x03, "1 Coin  6 Credits"	},
 
 	{0   , 0xfe, 0   ,    4, "Coin B"				},
-	{0x0f, 0x01, 0x0c, 0x04, "2 Coins 1 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x00, "1 Coin  1 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x08, "1 Coin  2 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x0c, "1 Coin  3 Credits"	},
+	{0x00, 0x01, 0x0c, 0x04, "2 Coins 1 Credits"	},
+	{0x00, 0x01, 0x0c, 0x00, "1 Coin  1 Credits"	},
+	{0x00, 0x01, 0x0c, 0x08, "1 Coin  2 Credits"	},
+	{0x00, 0x01, 0x0c, 0x0c, "1 Coin  3 Credits"	},
 
 	{0   , 0xfe, 0   ,    4, "Lives"				},
-	{0x0f, 0x01, 0x30, 0x30, "2"					},
-	{0x0f, 0x01, 0x30, 0x00, "3"					},
-	{0x0f, 0x01, 0x30, 0x10, "4"					},
-	{0x0f, 0x01, 0x30, 0x20, "5"					},
+	{0x00, 0x01, 0x30, 0x30, "2"					},
+	{0x00, 0x01, 0x30, 0x00, "3"					},
+	{0x00, 0x01, 0x30, 0x10, "4"					},
+	{0x00, 0x01, 0x30, 0x20, "5"					},
 
 	{0   , 0xfe, 0   ,    2, "Cabinet"				},
-	{0x0f, 0x01, 0x40, 0x40, "Upright"				},
-	{0x0f, 0x01, 0x40, 0x00, "Cocktail"				},
+	{0x00, 0x01, 0x40, 0x40, "Upright"				},
+	{0x00, 0x01, 0x40, 0x00, "Cocktail"				},
 
 	{0   , 0xfe, 0   ,    2, "Demo Sounds"			},
-	{0x0f, 0x01, 0x80, 0x00, "Off"					},
-	{0x0f, 0x01, 0x80, 0x80, "On"					},
+	{0x00, 0x01, 0x80, 0x00, "Off"					},
+	{0x00, 0x01, 0x80, 0x80, "On"					},
 
 	{0   , 0xfe, 0   ,    2, "Unknown"				},
-	{0x10, 0x01, 0x01, 0x00, "Off"					},
-	{0x10, 0x01, 0x01, 0x01, "On"					},
+	{0x01, 0x01, 0x01, 0x00, "Off"					},
+	{0x01, 0x01, 0x01, 0x01, "On"					},
 
 	{0   , 0xfe, 0   ,    2, "Bonus Life"			},
-	{0x10, 0x01, 0x02, 0x02, "100k only"			},
-	{0x10, 0x01, 0x02, 0x00, "None"					},
+	{0x01, 0x01, 0x02, 0x02, "100k only"			},
+	{0x01, 0x01, 0x02, 0x00, "None"					},
 
 	{0   , 0xfe, 0   ,    4, "Difficulty"			},
-	{0x10, 0x01, 0xc0, 0x80, "Easy"					},
-	{0x10, 0x01, 0xc0, 0x40, "Medium"				},
-	{0x10, 0x01, 0xc0, 0x00, "Hard"					},
-	{0x10, 0x01, 0xc0, 0xc0, "Hardest"				},
+	{0x01, 0x01, 0xc0, 0x80, "Easy"					},
+	{0x01, 0x01, 0xc0, 0x40, "Medium"				},
+	{0x01, 0x01, 0xc0, 0x00, "Hard"					},
+	{0x01, 0x01, 0xc0, 0xc0, "Hardest"				},
 };
 
 STDDIPINFO(Senjyo)
 
 static struct BurnDIPInfo StarforcDIPList[]=
 {
-	{0x0f, 0xff, 0xff, 0xc0, NULL					},
-	{0x10, 0xff, 0xff, 0x00, NULL					},
+	DIP_OFFSET(0x0f)
+	{0x00, 0xff, 0xff, 0xc0, NULL					},
+	{0x01, 0xff, 0xff, 0x00, NULL					},
 
 	{0   , 0xfe, 0   ,    4, "Coin A"				},
-	{0x0f, 0x01, 0x03, 0x01, "2 Coins 1 Credits"	},
-	{0x0f, 0x01, 0x03, 0x00, "1 Coin  1 Credits"	},
-	{0x0f, 0x01, 0x03, 0x02, "1 Coin  2 Credits"	},
-	{0x0f, 0x01, 0x03, 0x03, "1 Coin  3 Credits"	},
+	{0x00, 0x01, 0x03, 0x01, "2 Coins 1 Credits"	},
+	{0x00, 0x01, 0x03, 0x00, "1 Coin  1 Credits"	},
+	{0x00, 0x01, 0x03, 0x02, "1 Coin  2 Credits"	},
+	{0x00, 0x01, 0x03, 0x03, "1 Coin  3 Credits"	},
 
 	{0   , 0xfe, 0   ,    4, "Coin B"				},
-	{0x0f, 0x01, 0x0c, 0x04, "2 Coins 1 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x00, "1 Coin  1 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x08, "1 Coin  2 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x0c, "1 Coin  3 Credits"	},
+	{0x00, 0x01, 0x0c, 0x04, "2 Coins 1 Credits"	},
+	{0x00, 0x01, 0x0c, 0x00, "1 Coin  1 Credits"	},
+	{0x00, 0x01, 0x0c, 0x08, "1 Coin  2 Credits"	},
+	{0x00, 0x01, 0x0c, 0x0c, "1 Coin  3 Credits"	},
 
 	{0   , 0xfe, 0   ,    4, "Lives"				},
-	{0x0f, 0x01, 0x30, 0x30, "2"					},
-	{0x0f, 0x01, 0x30, 0x00, "3"					},
-	{0x0f, 0x01, 0x30, 0x10, "4"					},
-	{0x0f, 0x01, 0x30, 0x20, "5"					},
+	{0x00, 0x01, 0x30, 0x30, "2"					},
+	{0x00, 0x01, 0x30, 0x00, "3"					},
+	{0x00, 0x01, 0x30, 0x10, "4"					},
+	{0x00, 0x01, 0x30, 0x20, "5"					},
 
 	{0   , 0xfe, 0   ,    2, "Cabinet"				},
-	{0x0f, 0x01, 0x40, 0x40, "Upright"				},
-	{0x0f, 0x01, 0x40, 0x00, "Cocktail"				},
+	{0x00, 0x01, 0x40, 0x40, "Upright"				},
+	{0x00, 0x01, 0x40, 0x00, "Cocktail"				},
 
 	{0   , 0xfe, 0   ,    2, "Demo Sounds"			},
-	{0x0f, 0x01, 0x80, 0x00, "Off"					},
-	{0x0f, 0x01, 0x80, 0x80, "On"					},
+	{0x00, 0x01, 0x80, 0x00, "Off"					},
+	{0x00, 0x01, 0x80, 0x80, "On"					},
 
 	{0   , 0xfe, 0   ,    8, "Bonus Life"			},
-	{0x10, 0x01, 0x07, 0x00, "50k, 200k and 500k"	},
-	{0x10, 0x01, 0x07, 0x01, "100k, 300k and 800k"	},
-	{0x10, 0x01, 0x07, 0x02, "50k and 200k"			},
-	{0x10, 0x01, 0x07, 0x03, "100k and 300k"		},
-	{0x10, 0x01, 0x07, 0x04, "50k only"				},
-	{0x10, 0x01, 0x07, 0x05, "100k only"			},
-	{0x10, 0x01, 0x07, 0x06, "200k only"			},
-	{0x10, 0x01, 0x07, 0x07, "None"					},
+	{0x01, 0x01, 0x07, 0x00, "50k, 200k and 500k"	},
+	{0x01, 0x01, 0x07, 0x01, "100k, 300k and 800k"	},
+	{0x01, 0x01, 0x07, 0x02, "50k and 200k"			},
+	{0x01, 0x01, 0x07, 0x03, "100k and 300k"		},
+	{0x01, 0x01, 0x07, 0x04, "50k only"				},
+	{0x01, 0x01, 0x07, 0x05, "100k only"			},
+	{0x01, 0x01, 0x07, 0x06, "200k only"			},
+	{0x01, 0x01, 0x07, 0x07, "None"					},
 
 	{0   , 0xfe, 0   ,    6, "Difficulty"			},
-	{0x10, 0x01, 0x38, 0x00, "Easiest"				},
-	{0x10, 0x01, 0x38, 0x08, "Easy"					},
-	{0x10, 0x01, 0x38, 0x10, "Medium"				},
-	{0x10, 0x01, 0x38, 0x18, "Difficult"			},
-	{0x10, 0x01, 0x38, 0x20, "Hard"					},
-	{0x10, 0x01, 0x38, 0x28, "Hardest"				},
+	{0x01, 0x01, 0x38, 0x00, "Easiest"				},
+	{0x01, 0x01, 0x38, 0x08, "Easy"					},
+	{0x01, 0x01, 0x38, 0x10, "Medium"				},
+	{0x01, 0x01, 0x38, 0x18, "Difficult"			},
+	{0x01, 0x01, 0x38, 0x20, "Hard"					},
+	{0x01, 0x01, 0x38, 0x28, "Hardest"				},
 };
 
 STDDIPINFO(Starforc)
 
 static struct BurnDIPInfo BalubaDIPList[]=
 {
-	{0x0f, 0xff, 0xff, 0xc0, NULL					},
-	{0x10, 0xff, 0xff, 0x00, NULL					},
+	DIP_OFFSET(0x0f)
+	{0x00, 0xff, 0xff, 0xc0, NULL					},
+	{0x01, 0xff, 0xff, 0x00, NULL					},
 
 	{0   , 0xfe, 0   ,    4, "Coin A"				},
-	{0x0f, 0x01, 0x03, 0x01, "2 Coins 1 Credits"	},
-	{0x0f, 0x01, 0x03, 0x00, "1 Coin  1 Credits"	},
-	{0x0f, 0x01, 0x03, 0x02, "1 Coin  2 Credits"	},
-	{0x0f, 0x01, 0x03, 0x03, "1 Coin  3 Credits"	},
+	{0x00, 0x01, 0x03, 0x01, "2 Coins 1 Credits"	},
+	{0x00, 0x01, 0x03, 0x00, "1 Coin  1 Credits"	},
+	{0x00, 0x01, 0x03, 0x02, "1 Coin  2 Credits"	},
+	{0x00, 0x01, 0x03, 0x03, "1 Coin  3 Credits"	},
 
 	{0   , 0xfe, 0   ,    4, "Coin B"				},
-	{0x0f, 0x01, 0x0c, 0x04, "2 Coins 1 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x00, "1 Coin  1 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x08, "1 Coin  2 Credits"	},
-	{0x0f, 0x01, 0x0c, 0x0c, "1 Coin  3 Credits"	},
+	{0x00, 0x01, 0x0c, 0x04, "2 Coins 1 Credits"	},
+	{0x00, 0x01, 0x0c, 0x00, "1 Coin  1 Credits"	},
+	{0x00, 0x01, 0x0c, 0x08, "1 Coin  2 Credits"	},
+	{0x00, 0x01, 0x0c, 0x0c, "1 Coin  3 Credits"	},
 
 	{0   , 0xfe, 0   ,    4, "Lives"				},
-	{0x0f, 0x01, 0x30, 0x30, "2"					},
-	{0x0f, 0x01, 0x30, 0x00, "3"					},
-	{0x0f, 0x01, 0x30, 0x10, "4"					},
-	{0x0f, 0x01, 0x30, 0x20, "5"					},
+	{0x00, 0x01, 0x30, 0x30, "2"					},
+	{0x00, 0x01, 0x30, 0x00, "3"					},
+	{0x00, 0x01, 0x30, 0x10, "4"					},
+	{0x00, 0x01, 0x30, 0x20, "5"					},
 	
 	{0   , 0xfe, 0   ,    2, "Cabinet"				},
-	{0x0f, 0x01, 0x40, 0x40, "Upright"				},
-	{0x0f, 0x01, 0x40, 0x00, "Cocktail"				},
+	{0x00, 0x01, 0x40, 0x40, "Upright"				},
+	{0x00, 0x01, 0x40, 0x00, "Cocktail"				},
 
 	{0   , 0xfe, 0   ,    8, "Bonus Life"			},
-	{0x10, 0x01, 0x07, 0x00, "30k, 100k and 200k"	},
-	{0x10, 0x01, 0x07, 0x01, "50k, 200k and 500k"	},
-	{0x10, 0x01, 0x07, 0x02, "30k and 100k"			},
-	{0x10, 0x01, 0x07, 0x03, "50k and 200k"			},
-	{0x10, 0x01, 0x07, 0x04, "30k only"				},
-	{0x10, 0x01, 0x07, 0x05, "100k only"			},
-	{0x10, 0x01, 0x07, 0x06, "200k only"			},
-	{0x10, 0x01, 0x07, 0x07, "None"					},
+	{0x01, 0x01, 0x07, 0x00, "30k, 100k and 200k"	},
+	{0x01, 0x01, 0x07, 0x01, "50k, 200k and 500k"	},
+	{0x01, 0x01, 0x07, 0x02, "30k and 100k"			},
+	{0x01, 0x01, 0x07, 0x03, "50k and 200k"			},
+	{0x01, 0x01, 0x07, 0x04, "30k only"				},
+	{0x01, 0x01, 0x07, 0x05, "100k only"			},
+	{0x01, 0x01, 0x07, 0x06, "200k only"			},
+	{0x01, 0x01, 0x07, 0x07, "None"					},
 
 	{0   , 0xfe, 0   ,    8, "Difficulty"			},
-	{0x10, 0x01, 0x38, 0x00, "0"					},
-	{0x10, 0x01, 0x38, 0x08, "1"					},
-	{0x10, 0x01, 0x38, 0x10, "2"					},
-	{0x10, 0x01, 0x38, 0x18, "3"					},
-	{0x10, 0x01, 0x38, 0x20, "4"					},
-	{0x10, 0x01, 0x38, 0x28, "5"					},
-	{0x10, 0x01, 0x38, 0x30, "6"					},
-	{0x10, 0x01, 0x38, 0x38, "7"					},
+	{0x01, 0x01, 0x38, 0x00, "0"					},
+	{0x01, 0x01, 0x38, 0x08, "1"					},
+	{0x01, 0x01, 0x38, 0x10, "2"					},
+	{0x01, 0x01, 0x38, 0x18, "3"					},
+	{0x01, 0x01, 0x38, 0x20, "4"					},
+	{0x01, 0x01, 0x38, 0x28, "5"					},
+	{0x01, 0x01, 0x38, 0x30, "6"					},
+	{0x01, 0x01, 0x38, 0x38, "7"					},
 };
 
 STDDIPINFO(Baluba)
@@ -239,11 +246,9 @@ static void __fastcall senjyo_main_write(UINT16 address, UINT8 data)
 		return;
 
 		case 0xd004:
-			ZetClose();
-			ZetOpen(1);
+			ZetCPUPush(1);
 			z80pio_port_write(0, data);
-			ZetClose();
-			ZetOpen(0);
+			ZetCPUPop();
 		return;
 	}
 }
@@ -283,8 +288,11 @@ static void __fastcall senjyo_sound_write(UINT16 address, UINT8 data)
 		return;
 
 		case 0xd000:
-			sounddata = (data & 0x0f) << 1;
-			soundstop = 0;
+			dac_vol = (float)(data & 0xf) / 0xf;
+		return;
+
+		case 0xe000:
+			dac_en = data;
 		return;
 	}
 }
@@ -423,11 +431,14 @@ static INT32 DrvDoReset()
 	SN76496Reset();
 
 	flipscreen = 0;
-	sounddata = 0;
 	soundclock = 0;
-	soundstop = 0;
+	dac_en = 0;
+	dac_vol = 0;
 
-    memset (hold_coin, 0, sizeof(hold_coin));
+	hold_coin.reset();
+	nCyclesExtra[0] = nCyclesExtra[1] = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -446,6 +457,8 @@ static INT32 MemIndex()
 	DrvGfxROM3		= Next; Next += 0x010000;
 	DrvGfxROM4		= Next; Next += 0x020000;
 	DrvGfxROM5		= Next; Next += 0x020000;
+
+	DrvProm         = Next; Next += 0x000020;
 
 	DrvPalette		= (UINT32*)Next; Next += 0x202 * sizeof(UINT32);
 
@@ -515,9 +528,8 @@ static void ctc_trigger(INT32 offs, UINT8 data)
 static void ctc_clockdac(INT32 offs, UINT8 data)
 {
 	if (data) {
-		DACWrite(0, (soundclock & 0x08) ? sounddata : 0);
+		DACWrite(0, ((dac_en) ? (DrvProm[soundclock & 0xf] * dac_vol) : 0));
 		soundclock++;
-		if (is_senjyo && soundstop++ > 0x30) sounddata = 0;
 	}
 }
 
@@ -563,17 +575,12 @@ static void MachineInit()
 	SN76496SetBuffered(ZetTotalCycles, 2000000);
 
 	DACInit(0, 0, 1, ZetTotalCycles, 2000000);
-	DACSetRoute(0, 1.00, BURN_SND_ROUTE_BOTH);
+	DACSetRoute(0, 0.25, BURN_SND_ROUTE_BOTH);
 }
 
 static INT32 SenjyoInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvZ80ROM0 + 0x00000,  0, 1)) return 1;
@@ -616,6 +623,8 @@ static INT32 SenjyoInit()
 		if (BurnLoadRom(DrvGfxROM4 + 0x08000, 18, 1)) return 1;
 		if (BurnLoadRom(DrvGfxROM4 + 0x0a000, 19, 1)) return 1;
 
+		if (BurnLoadRom(DrvProm + 0x00000, 20, 1)) return 1;
+
 		DrvGfxDecode();
 	}
 
@@ -633,12 +642,7 @@ static INT32 SenjyoInit()
 
 static INT32 StarforcInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		INT32 k = 0;
@@ -685,6 +689,8 @@ static INT32 StarforcInit()
             if (BurnLoadRom(DrvGfxROM4 + 0x08000, k++, 1)) return 1;
         }
 
+		if (BurnLoadRom(DrvProm + 0x00000, k++, 1)) return 1;
+
 		DrvGfxDecode();
 	}
 
@@ -707,7 +713,7 @@ static INT32 DrvExit()
 	SN76496Exit();
 	DACExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	is_senjyo = 0;
 	is_starforc_encrypted = 0;
@@ -740,33 +746,32 @@ static void DrvPaletteUpdate()
 
 static void draw_bgbitmap()
 {
-	INT32 stripes = DrvVidRegs[0x27];
+	INT32 stripe = DrvVidRegs[0x27];
 
-	if (stripes == 0xff) {
+	if (stripe == 0xff) {
 		BurnTransferClear();
 		return;
 	}
 
 	INT32 pen = 0;
 	INT32 count = 0;
-	INT32 strwid = stripes;
-	if (strwid == 0) strwid = 0x100;
+	if (stripe == 0) stripe = 0x100;
 	INT32 flip = (flipscreen ? 0xff : 0);
+	if (flip) stripe ^= 0xff;
 
 	for (INT32 x = 0; x < nScreenWidth; x++)
 	{
-		UINT16 *dst = pTransDraw + (x ^ flip);
-		UINT16 color = pen + 0x180;
+		UINT16 *dst = pTransDraw + (x^flip);
+		UINT16 color = (pen & 0xf) + 0x180;
 
 		for (INT32 y = 0; y < nScreenHeight; y++) {
-			dst[(y^flip)*nScreenWidth] = color;
+			dst[((y^flip) % 224) * nScreenWidth] = color;
 		}
 
 		count += 0x10;
-		if (count >= strwid)
-		{
-			pen = (pen + 1) & 0x0f;
-			count -= strwid;
+		if (count >= stripe) {
+			pen++;
+			count -= stripe;
 		}
 	}
 }
@@ -780,7 +785,7 @@ static void draw_radar()
 			if (DrvRadarRAM[offs] & (1 << x))
 			{
 				INT32 sx = (8 * (offs % 8) + x) + 256-64;
-				INT32 sy = ((offs & 0x1ff) / 8) + 96-16;
+				INT32 sy = ((offs & 0x1ff) / 8) + 96-(flipscreen ? -16 : 16);
 
 				if (flipscreen)
 				{
@@ -821,13 +826,10 @@ static void draw_sprites(INT32 bigmask, INT32 priority)
 				flipx = !flipx;
 				flipy = !flipy;
 
-				if (big)
-				{
+				if (big) {
 					sx = 224 - sx;
 					sy = 226 - sy;
-				}
-				else
-				{
+				} else {
 					sx = 240 - sx;
 					sy = 242 - sy;
 				}
@@ -835,35 +837,10 @@ static void draw_sprites(INT32 bigmask, INT32 priority)
 
 			sy -= 16;
 
-			if (big)
-			{
-				if (flipy) {
-					if (flipx) {
-						Render32x32Tile_Mask_FlipXY_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM5);
-					} else {
-						Render32x32Tile_Mask_FlipY_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM5);
-					}
-				} else {
-					if (flipx) {
-						Render32x32Tile_Mask_FlipX_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM5);
-					} else {
-						Render32x32Tile_Mask_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM5);
-					}
-				}
+			if (big) {
+				Draw32x32MaskTile(pTransDraw, code, sx, sy, flipx, flipy, color, 3, 0, 0x140, DrvGfxROM5);
 			} else {
-				if (flipy) {
-					if (flipx) {
-						Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM4);
-					} else {
-						Render16x16Tile_Mask_FlipY_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM4);
-					}
-				} else {
-					if (flipx) {
-						Render16x16Tile_Mask_FlipX_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM4);
-					} else {
-						Render16x16Tile_Mask_Clip(pTransDraw, code, sx, sy, color, 3, 0, 0x140, DrvGfxROM4);
-					}
-				}
+				Draw16x16MaskTile(pTransDraw, code, sx, sy, flipx, flipy, color, 3, 0, 0x140, DrvGfxROM4);
 			}
 		}
 	}
@@ -880,14 +857,20 @@ static void common_draw(INT32 scrollhack, INT32 spritemask) // senj = 0x80, star
 		GenericTilemapSetScrollCol(0, i, DrvVidRegs[i]);
 	}
 
-	GenericTilemapSetScrollX(1, DrvVidRegs[0x35]);
+	GenericTilemapSetFlip(TMAP_GLOBAL, (flipscreen) ? TMAP_FLIPXY : 0);
+
+	INT32 scrollx = (flipscreen) ? -DrvVidRegs[0x35] : DrvVidRegs[0x35];
+
+	GenericTilemapSetScrollX(1, scrollx);
 	GenericTilemapSetScrollY(1, DrvVidRegs[0x30] + (DrvVidRegs[0x31] * 256));
 
 	scrollhack = scrollhack ? 8 : 0;
-	GenericTilemapSetScrollX(2, DrvVidRegs[0x2d + scrollhack]);
+	scrollx = (flipscreen) ? -DrvVidRegs[0x2d + scrollhack] : DrvVidRegs[0x2d + scrollhack];
+	GenericTilemapSetScrollX(2, scrollx);
 	GenericTilemapSetScrollY(2, DrvVidRegs[0x28 + scrollhack] + (DrvVidRegs[0x29 + scrollhack] * 256));
 
-	GenericTilemapSetScrollX(3, DrvVidRegs[0x25]);
+	scrollx = (flipscreen) ? -DrvVidRegs[0x25] : DrvVidRegs[0x25];
+	GenericTilemapSetScrollX(3, scrollx);
 	GenericTilemapSetScrollY(3, DrvVidRegs[0x20] + (DrvVidRegs[0x21] * 256));
 
 	BurnTransferClear();
@@ -897,12 +880,13 @@ static void common_draw(INT32 scrollhack, INT32 spritemask) // senj = 0x80, star
 	if (nBurnLayer & 0x02) GenericTilemapDraw(3, pTransDraw, 0);
 	if (nSpriteEnable & 2) draw_sprites(spritemask, 1);
 	if (nBurnLayer & 0x04) GenericTilemapDraw(2, pTransDraw, 0);
-	if (nSpriteEnable &8 ) draw_sprites(spritemask, 2);
+	if (nSpriteEnable & 4) draw_sprites(spritemask, 2);
 	if (nBurnLayer & 0x08) GenericTilemapDraw(1, pTransDraw, 0);
 	if (nSpriteEnable & 0x10) draw_sprites(spritemask, 3);
 	if (nSpriteEnable & 0x20) GenericTilemapDraw(0, pTransDraw, 0);
 	if (nSpriteEnable & 0x40) draw_radar();
 
+	BurnTransferFlip(flipscreen, flipscreen); // unflip coctail for netplay/etc
 	BurnTransferCopy(DrvPalette);
 }
 
@@ -936,36 +920,20 @@ static INT32 DrvFrame()
 	ZetNewFrame();
 
 	{
-        INT32 previous_coin = DrvInputs[3] & 3;
-
-        memset (DrvInputs, 0, 4);
+        memset (DrvInputs, 0, 3);
 		for (INT32 i = 0; i < 8; i++) {
 			DrvInputs[0] ^= (DrvJoy1[i] & 1) << i;
 			DrvInputs[1] ^= (DrvJoy2[i] & 1) << i;
-			DrvInputs[3] ^= (DrvJoy3[i] & 1) << i; // [3],DrvJoy3 for hold logic
+			DrvInputs[2] ^= (DrvJoy3[i] & 1) << i;
 		}
 
-        // silly hold coin logic
-        for (INT32 i = 0; i < 2; i++) {
-            if ((previous_coin != (DrvInputs[3]&3)) && DrvJoy3[i] && !hold_coin[i]) {
-                hold_coin[i] = 5; // frames to hold coin + 1
-            }
-
-            if (hold_coin[i]) {
-                hold_coin[i]--;
-                DrvInputs[2] |= 1<<i;
-            }
-            if (!hold_coin[i]) {
-                DrvInputs[2] &= ~(1<<i);
-			}
-		}
-
-        DrvInputs[2] |= DrvInputs[3] & 0xc; // start buttons
+		hold_coin.check(0, DrvInputs[2], 1 << 0, 5);
+		hold_coin.check(1, DrvInputs[2], 1 << 1, 5);
     }
 
 	INT32 nInterleave = 256;
 	INT32 nCyclesTotal[2] = { 4000000 / 60, 2000000 / 60 };
-	INT32 nCyclesDone[2] = { 0, 0 };
+	INT32 nCyclesDone[2] = { nCyclesExtra[0], nCyclesExtra[1] };
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
@@ -979,9 +947,13 @@ static INT32 DrvFrame()
 		ZetClose();
 	}
 
+	nCyclesExtra[0] = nCyclesDone[0] - nCyclesTotal[0];
+	nCyclesExtra[1] = nCyclesDone[1] - nCyclesTotal[1];
+
 	if (pBurnSoundOut) {
 		SN76496Update(pBurnSoundOut, nBurnSoundLen);
 		DACUpdate(pBurnSoundOut, nBurnSoundLen);
+		BurnSoundDCFilter();
 	}
 
 	if (pBurnDraw) {
@@ -1013,9 +985,13 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		DACScan(nAction, pnMin);
 
 		SCAN_VAR(flipscreen);
-		SCAN_VAR(sounddata);
 		SCAN_VAR(soundclock);
-		SCAN_VAR(soundstop);
+		SCAN_VAR(dac_en);
+		SCAN_VAR(dac_vol);
+
+		SCAN_VAR(nCyclesExtra);
+
+		hold_coin.scan();
 	}
 
 	return 0;
@@ -1052,7 +1028,7 @@ static struct BurnRomInfo senjyoRomDesc[] = {
 	{ "08j_09b.bin",	0x2000, 0x1ee63b5c, 7 | BRF_GRA },           // 18
 	{ "08k_10b.bin",	0x2000, 0xa9f41ec9, 7 | BRF_GRA },           // 19
 
-	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 20 Unused PROM
+	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 20 Unused PROM
 };
 
 STD_ROM_PICK(senjyo)
@@ -1062,7 +1038,7 @@ struct BurnDriver BurnDrvSenjyo = {
 	"senjyo", NULL, NULL, NULL, "1983",
 	"Senjyo\0", NULL, "Tehkan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, senjyoRomInfo, senjyoRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, SenjyoDIPInfo,
 	SenjyoInit, DrvExit, DrvFrame, SenjyoDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1097,7 +1073,7 @@ static struct BurnRomInfo starforcRomDesc[] = {
 	{ "5.9lm",			0x4000, 0xf71717f8, 7 | BRF_GRA },           // 16
 	{ "4.8lm",			0x4000, 0xdd9d68a4, 7 | BRF_GRA },           // 17
 
-	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 18 Unused PROM
+	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 18 Unused PROM
 };
 
 STD_ROM_PICK(starforc)
@@ -1107,7 +1083,7 @@ struct BurnDriver BurnDrvStarforc = {
 	"starforc", NULL, NULL, NULL, "1984",
 	"Star Force\0", NULL, "Tehkan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, starforcRomInfo, starforcRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, StarforcDIPInfo,
 	StarforcInit, DrvExit, DrvFrame, StarforcDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1142,7 +1118,7 @@ static struct BurnRomInfo megaforcRomDesc[] = {
 	{ "5.9lm",			0x4000, 0xf71717f8, 7 | BRF_GRA },           // 16
 	{ "4.8lm",			0x4000, 0xdd9d68a4, 7 | BRF_GRA },           // 17
 
-	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 18 Unused PROM
+	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 18 Unused PROM
 };
 
 STD_ROM_PICK(megaforc)
@@ -1152,7 +1128,7 @@ struct BurnDriver BurnDrvMegaforc = {
 	"megaforc", "starforc", NULL, NULL, "1984",
 	"Mega Force (World)\0", NULL, "Tehkan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, megaforcRomInfo, megaforcRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, StarforcDIPInfo,
 	StarforcInit, DrvExit, DrvFrame, StarforcDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1187,7 +1163,7 @@ static struct BurnRomInfo megaforcuRomDesc[] = {
 	{ "5.9lm",			0x4000, 0xf71717f8, 7 | BRF_GRA },           // 16
 	{ "4.8lm",			0x4000, 0xdd9d68a4, 7 | BRF_GRA },           // 17
 
-	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 18 Unused PROM
+	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 18 Unused PROM
 };
 
 STD_ROM_PICK(megaforcu)
@@ -1197,7 +1173,7 @@ struct BurnDriver BurnDrvMegaforcu = {
 	"megaforcu", "starforc", NULL, NULL, "1985",
 	"Mega Force (US)\0", NULL, "Tehkan (Video Ware license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, megaforcuRomInfo, megaforcuRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, StarforcDIPInfo,
 	StarforcInit, DrvExit, DrvFrame, StarforcDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1346,7 +1322,7 @@ static struct BurnRomInfo starforcbRomDesc[] = {
 	{ "b9.8j",			0x2000, 0xe7d51959, 7 | BRF_GRA },           // 21
 	{ "b10.8l",			0x2000, 0x6ea27bec, 7 | BRF_GRA },           // 22
 
-	{ "a18s030.7b",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 23 Unused PROM
+	{ "a18s030.7b",		0x0020, 0x68db8300, 0 | BRF_SND },           // 23 Unused PROM
 };
 
 STD_ROM_PICK(starforcb)
@@ -1356,7 +1332,7 @@ struct BurnDriver BurnDrvStarforcb = {
 	"starforcb", "starforc", NULL, NULL, "1984",
 	"Star Force (encrypted, bootleg)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, starforcbRomInfo, starforcbRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, StarforcDIPInfo,
 	StarforcbInit, DrvExit, DrvFrame, StarforceDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1396,7 +1372,7 @@ static struct BurnRomInfo starforcaRomDesc[] = {
 	{ "9.bin",			0x2000, 0xe7d51959, 7 | BRF_GRA },           // 21
 	{ "10.bin",			0x2000, 0x6ea27bec, 7 | BRF_GRA },           // 22
 	
-	{ "prom.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 23 Unused PROM
+	{ "prom.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 23 Unused PROM
 };
 
 STD_ROM_PICK(starforca)
@@ -1406,7 +1382,7 @@ struct BurnDriver BurnDrvStarforca = {
 	"starforca", "starforc", NULL, NULL, "1984",
 	"Star Force (encrypted, set 2)\0", NULL, "Tehkan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, starforcaRomInfo, starforcaRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, StarforcDIPInfo,
 	StarforcaInit, DrvExit, DrvFrame, StarforcDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1443,7 +1419,7 @@ static struct BurnRomInfo starforceRomDesc[] = {
 	{ "5.9lm",			0x4000, 0xf71717f8, 7 | BRF_GRA },           // 18
 	{ "4.8lm",			0x4000, 0xdd9d68a4, 7 | BRF_GRA },           // 19
 
-	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 23 Unused PROM
+	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 23 Unused PROM
 };
 
 STD_ROM_PICK(starforce)
@@ -1453,7 +1429,7 @@ struct BurnDriver BurnDrvStarforce = {
 	"starforce", "starforc", NULL, NULL, "1984",
 	"Star Force (encrypted, set 1)\0", NULL, "Tehkan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, starforceRomInfo, starforceRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, StarforcDIPInfo,
 	StarforceInit, DrvExit, DrvFrame, StarforceDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4
@@ -1488,7 +1464,7 @@ static struct BurnRomInfo balubaRomDesc[] = {
 	{ "4",				0x4000, 0xdd954124, 7 | BRF_GRA },           // 16
 	{ "3",				0x4000, 0x7ac24983, 7 | BRF_GRA },           // 17
 
-	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_OPT },           // 18 Unused PROM
+	{ "07b.bin",		0x0020, 0x68db8300, 0 | BRF_SND },           // 18 Unused PROM
 };
 
 STD_ROM_PICK(baluba)
@@ -1498,7 +1474,7 @@ struct BurnDriver BurnDrvBaluba = {
 	"baluba", NULL, NULL, NULL, "1986",
 	"Baluba-louk no Densetsu (Japan)\0", NULL, "Able Corp, Ltd.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_PLATFORM, 0,
 	NULL, balubaRomInfo, balubaRomName, NULL, NULL, NULL, NULL, SenjyoInputInfo, BalubaDIPInfo,
 	StarforcInit, DrvExit, DrvFrame, StarforcDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 256, 3, 4

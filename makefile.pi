@@ -43,7 +43,7 @@ srcdir	= src/
 
 include makefile.burn_rules
 # Platform-specific
-alldir += burner burner/pi burner/sdl dep/libs/libpng dep/libs/lib7z \
+alldir += burner burner/pi burner/sdl dep/libs/libspng dep/libs/lib7z \
 		dep/libs/zlib intf intf/video intf/video/scalers intf/video/pi \
 		intf/audio intf/audio/sdl intf/input intf/input/pi intf/cd \
 		intf/cd/sdl intf/perfcount intf/perfcount/pi dep/generated \
@@ -58,20 +58,18 @@ depobj += neocdlist.o \
 		gzread.o gzwrite.o infback.o inffast.o inflate.o inftrees.o \
 		trees.o uncompr.o zutil.o \
 		\
-		png.o pngerror.o pngget.o pngmem.o pngpread.o pngread.o \
-		pngrio.o pngrtran.o pngrutil.o pngset.o pngtrans.o pngwio.o \
-		pngwrite.o pngwtran.o pngwutil.o \
+		spng.o \
 		\
 		aud_dsp.o aud_interface.o cd_interface.o inp_interface.o \
 		interface.o lowpass2.o  vid_interface.o vid_softfx.o \
 		vid_support.o \
 		\
-		2xpm.o 2xsai.o ddt3x.o epx.o hq2xs.o hq2xs_16.o xbr.o \
+		2xpm.o 2xsai.o ddt3x.o epx.o hq2xs.o hq2xs_16.o xbr.o xbr32.o \
 		\
 		inp_pi.o aud_sdl.o support_paths.o \
 		ips_manager.o scrn.o config.o \
 		main_pi.o run_pi.o stringset.o bzip.o drv.o media.o inpdipsw.o \
-		matrix.o vid_pi.o dynhuff.o replay.o cd_sdl2.o
+		matrix.o vid_pi.o inputbuf.o replay.o cd_sdl2.o
 
 ifdef BUILD_DRM
   depobj += pigl_drm.o
@@ -81,7 +79,7 @@ endif
 
 ifdef INCLUDE_7Z_SUPPORT
 	depobj	+= un7z.o 7zArcIn.o 7zBuf.o 7zBuf2.o 7zCrc.o 7zCrcOpt.o \
-		7zDec.o 7zFile.o 7zStream.o Bcj2.o Bra.o Bra86.o BraIA64.o \
+		7zDec.o 7zFile.o 7zStream.o Alloc.o Bcj2.o Bra.o Bra86.o BraIA64.o \
 		CpuArch.o Delta.o LzmaDec.o Lzma2Dec.o Ppmd7.o Ppmd7Dec.o \
 		Sha256.o Xz.o XzCrc64.o XzCrc64Opt.o XzDec.o
 endif
@@ -273,7 +271,7 @@ DEF := $(DEF) -DNO_VIZ -D_LARGEFILE64_SOURCE=0 -D_FILE_OFFSET_BITS=32
 
 # For lib7z
 ifdef INCLUDE_7Z_SUPPORT
-DEF := $(DEF) -D_7ZIP_PPMD_SUPPPORT
+DEF := $(DEF) -D_7ZIP_PPMD_SUPPPORT -D_7ZIP_ST
 endif
 
 #

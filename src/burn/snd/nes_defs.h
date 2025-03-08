@@ -116,7 +116,7 @@ typedef struct triangle_s
 typedef struct noise_s
 {
    uint8 regs[4]; /* regs[1] unused */
-   INT32 cur_pos;
+   INT32 lfsr;
    INT32 vbl_length;
    INT32 phaseacc;
    INT32 output_vol;
@@ -131,6 +131,7 @@ typedef struct dpcm_s
    uint8 regs[4];
    uint32 address;
    uint32 length;
+   uint32 freq;
    INT32 bits_left;
    INT32 phaseacc;
    uint8 cur_byte;
@@ -175,7 +176,7 @@ typedef struct apu
 /* vblank length table used for squares, triangle, noise */
 static const uint8 vbl_length[32] =
 {
-   5, 127, 10, 1, 19,  2, 40,  3, 80,  4, 30,  5, 7,  6, 13,  7,
+   5, 127, 10, 1, 20,  2, 40,  3, 80,  4, 30,  5, 7,  6, 13,  7,
    6,   8, 12, 9, 24, 10, 48, 11, 96, 12, 36, 13, 8, 14, 16, 15
 };
 
@@ -186,16 +187,22 @@ static const INT32 freq_limit[8] =
 };
 
 /* table of noise frequencies */
-static const INT32 noise_freq[16] =
-{
-   4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 2046
-};
+static const INT32 noise_freq[2][16] = {
+{   // NTSC
+	4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
+},
+{   // PAL
+	4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708, 944, 1890, 3778
+} };
 
 /* dpcm transfer freqs */
-static const INT32 dpcm_clocks[16] =
-{
-   428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54
-};
+static const INT32 dpcm_freq[2][16] = {
+{   // NTSC
+	428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54
+},
+{   // PAL
+	398, 354, 316, 298, 276, 236, 210, 198, 176, 148, 132, 118, 98, 78, 66, 50
+} };
 
 /* ratios of pos/neg pulse for square waves */
 /* 2/16 = 12.5%, 4/16 = 25%, 8/16 = 50%, 12/16 = 75% */

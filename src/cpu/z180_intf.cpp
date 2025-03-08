@@ -58,6 +58,8 @@ cpu_core_config Z180Config =
 	Z180Run,
 	Z180RunEnd,
 	Z180Reset,
+	Z180Scan,
+	Z180Exit,
 	0x100000,
 	0
 };
@@ -229,7 +231,7 @@ void Z180BurnCycles(INT32 cycles)
 	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("Z180BurnCycles called when no CPU open\n"));
 #endif
 
-	z180_burn(cycles);
+	bprintf(0, _T("Z180BurnCycles();  not implimented.\n"));
 }
 
 INT32 Z180Idle(INT32 cycles)
@@ -247,20 +249,27 @@ void Z180SetIRQLine(INT32 irqline, INT32 state)
 #if defined FBNEO_DEBUG
 	if (!DebugCPU_Z180Initted) bprintf(PRINT_ERROR, _T("Z180SetIRQLine called without init\n"));
 	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("Z180SetIRQLine called when no CPU open\n"));
-	if (irqline != 0 && irqline != Z180_INPUT_LINE_NMI) bprintf(PRINT_ERROR, _T("Z180SetIRQLine called with invalid line %d\n"), irqline);
-	if (state != CPU_IRQSTATUS_NONE && state != CPU_IRQSTATUS_ACK && state != CPU_IRQSTATUS_AUTO)
+	if (irqline != 0 && irqline != 0x20) bprintf(PRINT_ERROR, _T("Z180SetIRQLine called with invalid line %d\n"), irqline);
+	if (state != CPU_IRQSTATUS_NONE && state != CPU_IRQSTATUS_ACK && state != CPU_IRQSTATUS_AUTO && state != CPU_IRQSTATUS_HOLD)
 		bprintf(PRINT_ERROR, _T("Z180SetIRQLine called with invalid state %d\n"), state);
 #endif
 
-	z180_set_irq_line(irqline, state); 
+	z180_set_irq_line(irqline, state);
 }
 
-void Z180Scan(INT32 nAction)
+void Z180Nmi()
+{
+	Z180SetIRQLine(0x20, CPU_IRQSTATUS_HOLD);
+}
+
+INT32 Z180Scan(INT32 nAction)
 {
 #if defined FBNEO_DEBUG
 	if (!DebugCPU_Z180Initted) bprintf(PRINT_ERROR, _T("Z180Scan called without init\n"));
 #endif
 	z180_scan(nAction);
+
+	return 0;
 }
 
 void __fastcall z180_cpu_write_handler(UINT32 address, UINT8 data)

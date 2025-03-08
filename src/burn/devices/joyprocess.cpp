@@ -1,3 +1,4 @@
+// JoyProcess (c)2016-2021 dink & iq_132
 #include "burnint.h"
 #include "joyprocess.h"
 
@@ -19,19 +20,28 @@ void ProcessJoystick(UINT8 *input, INT8 playernum, INT8 up_bit, INT8 down_bit, I
 
 	if (flags & INPUT_4WAY) {
 		playernum &= 3; // just incase.
-		if(*input != DrvInputPrev[playernum]) {
+		if (*input != DrvInputPrev[playernum]) {
 			fourway[playernum] = *input & udrlmask;
 
-			if((fourway[playernum] & rl) && (fourway[playernum] & ud))
-				fourway[playernum] ^= (fourway[playernum] & (DrvInputPrev[playernum] & udrlmask));
+			if ((flags & INPUT_4WAY_ALT) == INPUT_4WAY_ALT) {
+				// INPUT_4WAY_ALT: hold last direction bit until diagnoal is released
+				if ((fourway[playernum] & rl) && (fourway[playernum] & ud))
+					fourway[playernum] = DrvInputPrev[playernum] & udrlmask;
+				else
+					DrvInputPrev[playernum] = *input;
+			} else {
+				// INPUT_4WAY: cancels previous frame's direction bit when diagonal is pressed
+				if ((fourway[playernum] & rl) && (fourway[playernum] & ud))
+					fourway[playernum] ^= (fourway[playernum] & (DrvInputPrev[playernum] & udrlmask));
 
-			if((fourway[playernum] & rl) && (fourway[playernum] & ud))
-				fourway[playernum] &= ud | ud; // diagonals aren't allowed w/INPUT_4WAY
+				if ((fourway[playernum] & rl) && (fourway[playernum] & ud))
+					fourway[playernum] &= ud; // when frame starts on diagonal, mask it out (super rare, but not impossible)
+
+				DrvInputPrev[playernum] = *input;
+			}
 		}
 
-		DrvInputPrev[playernum] = *input;
-
-		*input = fourway[playernum] | (DrvInputPrev[playernum] & othermask); // add back the unprocessed/other bits
+		*input = fourway[playernum] | (*input & othermask); // add back the unprocessed/other bits
 	}
 
 	if (flags & INPUT_CLEAROPPOSITES) {
@@ -64,30 +74,31 @@ void CompileInput(UINT8 **input, void *output, INT32 num, INT32 bits, UINT32 *in
 }
 
 // Analog Processing
-INT16 AnalogDeadZone(INT16 anaval)
+INT32 AnalogDeadZone(INT32 anaval)
 {
 	INT32 negative = (anaval < 0);
 
 	anaval = abs(anaval);
 
-	// < 160 is usually "noise" with modern gamepad thumbsticks
-	// (mouse movements are usually above 200)
-	if (anaval < 160) {
+	// < 4, hopefully a good value for mouse / analog [thumb]stick
+	if (anaval < 4) {
 		anaval = 0;
 	} else {
-		anaval -= 160;
+		anaval -= 4;
 	}
 
 	return (negative) ? -anaval : anaval;
 }
 
 UINT32 scalerange(UINT32 x, UINT32 in_min, UINT32 in_max, UINT32 out_min, UINT32 out_max) {
+	if (x < in_min) return out_min;
+	if (x > in_max) return out_max;
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 UINT8 ProcessAnalog(INT16 anaval, INT32 reversed, INT32 flags, UINT8 scalemin, UINT8 scalemax)
 {
-	return ProcessAnalog(anaval, reversed, flags, scalemin, scalemax, 0x7f);
+	return ProcessAnalog(anaval, reversed, flags, scalemin, scalemax, 0x80);
 }
 
 UINT8 ProcessAnalog(INT16 anaval, INT32 reversed, INT32 flags, UINT8 scalemin, UINT8 scalemax, UINT8 centerval)
@@ -95,9 +106,8 @@ UINT8 ProcessAnalog(INT16 anaval, INT32 reversed, INT32 flags, UINT8 scalemin, U
     UINT8 linear_min = 0, linear_max = 0;
 
     if (flags & INPUT_MIGHTBEDIGITAL && (UINT16)anaval == 0xffff) {
-		anaval = 0x3fc; // digital button mapped here & pressed.
+		anaval = 0x3ff; // digital button mapped here & pressed.
 	}
-
     if (flags & INPUT_LINEAR) {
         anaval = abs(anaval);
         linear_min = scalemin;
@@ -119,20 +129,24 @@ UINT8 ProcessAnalog(INT16 anaval, INT32 reversed, INT32 flags, UINT8 scalemin, U
 				Temp = centerval; // we hit a dead-zone, return mid-range
 			} else {
 				// so we don't jump between 0x7f (center) and next value after deadzone
-				if (Temp < centerval-DeadZone) Temp += DeadZone;
-				else if (Temp > centerval+DeadZone) Temp -= DeadZone;
+				if (Temp < centerval-DeadZone) {
+					Temp += DeadZone;
+				} else if (Temp > centerval+DeadZone) {
+					Temp -= DeadZone;
+				}
 			}
 		}
     }
 
-	if (Temp < 0x3f + DeadZone) Temp = 0x3f + DeadZone; // clamping for happy scalerange()
+	if (Temp < 0x40 + DeadZone) Temp = 0x40 + DeadZone; // clamping for happy scalerange()
 	if (Temp > 0xbf - DeadZone) Temp = 0xbf - DeadZone;
 
-	Temp = scalerange(Temp, 0x3f + DeadZone, 0xbf - DeadZone, scalemin, scalemax);
+	Temp = scalerange(Temp, 0x40 + DeadZone, 0xbf - DeadZone, scalemin, scalemax);
 
 	if (flags & INPUT_LINEAR) {
 		if (!reversed) Temp -= centerval;
 		Temp = scalerange(Temp, 0, centerval, linear_min, linear_max);
+		if (Temp > linear_max - 4) Temp = linear_max; // some inputs stop a little short of full-on
 	}
 
 	return Temp;

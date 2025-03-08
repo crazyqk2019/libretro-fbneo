@@ -2292,7 +2292,7 @@ struct BurnDriver BurnDrvTodruagas = {
 	"todruagas", "todruaga", NULL, NULL, "1984",
 	"The Tower of Druaga (Sidam)\0", NULL, "bootleg? (Sidam)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
 	NULL, todruagasRomInfo, todruagasRomName, NULL, NULL, NULL, NULL, TodruagaInputInfo, TodruagaDIPInfo,
 	Digdug2Init, DrvExit, DrvFrame, MappyDraw, DrvScan, &DrvRecalc, 0x500,
 	224, 288, 3, 4
@@ -2359,7 +2359,7 @@ struct BurnDriver BurnDrvSuperpac = {
 	"superpac", NULL, NULL, NULL, "1982",
 	"Super Pac-Man\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, superpacRomInfo, superpacRomName, NULL, NULL, NULL, NULL, SuperpacInputInfo, SuperpacDIPInfo,
 	SuperpacInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2392,7 +2392,7 @@ struct BurnDriver BurnDrvSuperpacm = {
 	"superpacm", "superpac", NULL, NULL, "1982",
 	"Super Pac-Man (Midway)\0", NULL, "Namco (Bally Midway license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, superpacmRomInfo, superpacmRomName, NULL, NULL, NULL, NULL, SuperpacInputInfo, SuperpacDIPInfo,
 	SuperpacInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2426,7 +2426,7 @@ struct BurnDriver BurnDrvPacnpal = {
 	"pacnpal", NULL, NULL, NULL, "1983",
 	"Pac & Pal\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, pacnpalRomInfo, pacnpalRomName, NULL, NULL, NULL, NULL, PacnpalInputInfo, PacnpalDIPInfo,
 	PacnpalInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2460,7 +2460,7 @@ struct BurnDriver BurnDrvPacnpal2 = {
 	"pacnpal2", "pacnpal", NULL, NULL, "1983",
 	"Pac & Pal (older)\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, pacnpal2RomInfo, pacnpal2RomName, NULL, NULL, NULL, NULL, PacnpalInputInfo, PacnpalDIPInfo,
 	PacnpalInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2494,7 +2494,7 @@ struct BurnDriver BurnDrvPacnchmp = {
 	"pacnchmp", "pacnpal", NULL, NULL, "1983",
 	"Pac-Man & Chomp Chomp\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, pacnchmpRomInfo, pacnchmpRomName, NULL, NULL, NULL, NULL, PacnpalInputInfo, PacnpalDIPInfo,
 	PacnpalInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2529,7 +2529,7 @@ struct BurnDriver BurnDrvGrobda = {
 	"grobda", NULL, NULL, NULL, "1984",
 	"Grobda (New Ver.)\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, grobdaRomInfo, grobdaRomName, NULL, NULL, NULL, NULL, GrobdaInputInfo, GrobdaDIPInfo,
 	GrobdaInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2564,7 +2564,7 @@ struct BurnDriver BurnDrvGrobda2 = {
 	"grobda2", "grobda", NULL, NULL, "1984",
 	"Grobda (Old Ver. set 1)\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, grobda2RomInfo, grobda2RomName, NULL, NULL, NULL, NULL, GrobdaInputInfo, GrobdaDIPInfo,
 	GrobdaInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2599,7 +2599,7 @@ struct BurnDriver BurnDrvGrobda3 = {
 	"grobda3", "grobda", NULL, NULL, "1984",
 	"Grobda (Old Ver. set 2)\0", NULL, "Namco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, grobda3RomInfo, grobda3RomName, NULL, NULL, NULL, NULL, GrobdaInputInfo, GrobdaDIPInfo,
 	GrobdaInit, DrvExit, DrvFrame, SuperpacDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
@@ -2631,6 +2631,10 @@ static struct BurnRomInfo phozonRomDesc[] = {
 	{ "palette.prm",	0x0020, 0x60e856ed, 6 | BRF_GRA | BRF_OPT }, // 14
 
 	{ "sound.prm",		0x0100, 0xad43688f, 7 | BRF_GRA },           // 15 Sound Prom
+
+	{ "ph1-7.7b",		0x0117, 0x9a00af9a, 0 | BRF_OPT },           // 16 PLDs
+	{ "ph1-8.4b",		0x0117, 0xfb180f00, 0 | BRF_OPT },           // 17
+	{ "ph1-9.7r",		0x0117, 0x3b21d560, 0 | BRF_OPT },           // 18
 };
 
 STD_ROM_PICK(phozon)
@@ -2664,14 +2668,18 @@ static struct BurnRomInfo phozonsRomDesc[] = {
 
 	{ "5t.rom",		0x2000, 0xd50f08f8, 5 | BRF_GRA },           //  8 Sprites
 
-	{ "red.prm",		0x0100, 0xa2880667, 6 | BRF_GRA },           //  9 Color Data
-	{ "green.prm",		0x0100, 0xd6e08bef, 6 | BRF_GRA },           // 10
-	{ "blue.prm",		0x0100, 0xb2d69c72, 6 | BRF_GRA },           // 11
-	{ "chr.prm",		0x0100, 0x429e8fee, 6 | BRF_GRA },           // 12
-	{ "sprite.prm",		0x0100, 0x9061db07, 6 | BRF_GRA },           // 13
+	{ "ph1-2.1r",		0x0100, 0xa2880667, 6 | BRF_GRA },           //  9 Color Data
+	{ "ph1-1.1s",		0x0100, 0xd6e08bef, 6 | BRF_GRA },           // 10
+	{ "ph1-3.1p",		0x0100, 0xb2d69c72, 6 | BRF_GRA },           // 11
+	{ "ph1-5.5l",		0x0100, 0x429e8fee, 6 | BRF_GRA },           // 12
+	{ "ph1-6.6r",		0x0100, 0x9061db07, 6 | BRF_GRA },           // 13
 	{ "palette.prm",	0x0020, 0x60e856ed, 6 | BRF_GRA | BRF_OPT }, // 14
 
-	{ "sound.prm",		0x0100, 0xad43688f, 7 | BRF_GRA },           // 15 Sound Prom
+	{ "ph1-4.3e",		0x0100, 0xad43688f, 7 | BRF_GRA },           // 15 Sound Prom
+
+	{ "ph1-7.7b",		0x0117, 0x9a00af9a, 0 | BRF_OPT },           // 16 PLDs
+	{ "ph1-8.4b",		0x0117, 0xfb180f00, 0 | BRF_OPT },           // 17
+	{ "ph1-9.7r",		0x0117, 0x3b21d560, 0 | BRF_OPT },           // 18
 };
 
 STD_ROM_PICK(phozons)

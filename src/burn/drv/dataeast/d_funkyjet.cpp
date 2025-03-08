@@ -35,31 +35,33 @@ static UINT8 DrvDips[2];
 static UINT8 DrvReset;
 static UINT16 DrvInputs[3];
 
+static INT32 nCyclesExtra;
+
 static struct BurnInputInfo FunkyjetInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy2 + 0,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy2 + 0,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy1 + 7,	"p1 start"	},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
 	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
 	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 	{"P1 Button 3",		BIT_DIGITAL,	DrvJoy1 + 6,	"p1 fire 3"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy1 + 15,	"p2 start"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy1 + 8,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy1 + 9,	"p2 down"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy1 + 10,	"p2 left"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy1 + 8,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy1 + 9,	"p2 down"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy1 + 10,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy1 + 11,	"p2 right"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy1 + 12,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy1 + 13,	"p2 fire 2"	},
 	{"P2 Button 3",		BIT_DIGITAL,	DrvJoy1 + 14,	"p2 fire 3"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Service",		BIT_DIGITAL,	DrvJoy2 + 2,	"service"	},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy2 + 2,	"service"	},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
 };
 
 STDINPUTINFO(Funkyjet)
@@ -127,6 +129,70 @@ static struct BurnDIPInfo FunkyjetDIPList[]=
 };
 
 STDDIPINFO(Funkyjet)
+
+static struct BurnDIPInfo Funkyjeta2DIPList[]=
+{
+	{0x14, 0xff, 0xff, 0xff, NULL			},
+	{0x15, 0xff, 0xff, 0xff, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x01, 0x01, "Off"			},
+	{0x14, 0x01, 0x01, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x02, "Off"			},
+	{0x14, 0x01, 0x02, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    8, "Coin B"		},
+	{0x14, 0x01, 0x1c, 0x00, "3 Coins 1 Credits"	},
+	{0x14, 0x01, 0x1c, 0x10, "2 Coins 1 Credits"	},
+	{0x14, 0x01, 0x1c, 0x1c, "1 Coin  1 Credits"	},
+	{0x14, 0x01, 0x1c, 0x0c, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0x1c, 0x14, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0x1c, 0x04, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0x1c, 0x18, "1 Coin  5 Credits"	},
+	{0x14, 0x01, 0x1c, 0x08, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    8, "Coin A"		},
+	{0x14, 0x01, 0xe0, 0x00, "3 Coins 1 Credits"	},
+	{0x14, 0x01, 0xe0, 0x80, "2 Coins 1 Credits"	},
+	{0x14, 0x01, 0xe0, 0xe0, "1 Coin  1 Credits"	},
+	{0x14, 0x01, 0xe0, 0x60, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xe0, 0xa0, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0xe0, 0x20, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0xe0, 0xc0, "1 Coin  5 Credits"	},
+	{0x14, 0x01, 0xe0, 0x40, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x15, 0x01, 0x01, 0x01, "Off"			},
+	{0x15, 0x01, 0x01, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0x15, 0x01, 0x02, 0x00, "No"			},
+	{0x15, 0x01, 0x02, 0x02, "Yes"			},
+
+	{0   , 0xfe, 0   ,    2, "Free Play"		},
+	{0x15, 0x01, 0x04, 0x04, "Off"			},
+	{0x15, 0x01, 0x04, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Freeze"		},
+	{0x15, 0x01, 0x08, 0x08, "Off"			},
+	{0x15, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x30, 0x10, "Easy"			},
+	{0x15, 0x01, 0x30, 0x30, "Normal"		},
+	{0x15, 0x01, 0x30, 0x20, "Hard"			},
+	{0x15, 0x01, 0x30, 0x00, "Hardest"		},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0xc0, 0x00, "0"			},
+	{0x15, 0x01, 0xc0, 0x80, "1"			},
+	{0x15, 0x01, 0xc0, 0xc0, "2"			},
+	{0x15, 0x01, 0xc0, 0x40, "3"			},
+};
+
+STDDIPINFO(Funkyjeta2)
 
 static struct BurnDIPInfo FunkyjetjDIPList[]=
 {
@@ -321,6 +387,10 @@ static INT32 DrvDoReset()
 
 	deco16Reset();
 
+	nCyclesExtra = 0;
+
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -360,12 +430,7 @@ static INT32 DrvInit()
 {
 	BurnSetRefreshRate(58.00);
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(Drv68KROM  + 0x00001,  0, 2)) return 1;
@@ -392,6 +457,10 @@ static INT32 DrvInit()
 	deco16_set_color_base(0, 256);
 	deco16_set_color_base(1, 512);
 	deco16_set_global_offsets(0, 8);
+	deco16_set_scroll_offs(0, 0, -1, 0);
+	deco16_set_scroll_offs(0, 1, -1, 0);
+	deco16_set_scroll_offs(1, 0, -1, 0);
+	deco16_set_scroll_offs(1, 1, -1, 0);
 
 	SekInit(0, 0x68000);
 	SekOpen(0);
@@ -435,7 +504,7 @@ static INT32 DrvExit()
 	SekExit();
 	deco16SoundExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -511,19 +580,7 @@ static void draw_sprites()
 			INT32 y = ((sy + mult * multi) & 0x1ff) - 8;
 			INT32 c = (code - multi * inc) & 0x3fff;
 
-			if (flipy) {
-				if (flipx) {
-					Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, c, sx, y, color, 4, 0, 0, DrvGfxROM2);
-				} else {
-					Render16x16Tile_Mask_FlipY_Clip(pTransDraw, c, sx, y, color, 4, 0, 0, DrvGfxROM2);
-				}
-			} else {
-				if (flipx) {
-					Render16x16Tile_Mask_FlipX_Clip(pTransDraw, c, sx, y, color, 4, 0, 0, DrvGfxROM2);
-				} else {
-					Render16x16Tile_Mask_Clip(pTransDraw, c, sx, y, color, 4, 0, 0, DrvGfxROM2);
-				}
-			}
+			Draw16x16MaskTile(pTransDraw, c, sx, y, flipx, flipy, color, 4, 0, 0, DrvGfxROM2);
 
 			multi--;
 		}
@@ -569,12 +626,11 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = 232;
-	INT32 nSoundBufferPos = 0;
 	INT32 nCyclesTotal[2] = { 14000000 / 58, 8055000 / 58 };
-	INT32 nCyclesDone[2] = { 0, 0 };
+	INT32 nCyclesDone[2] = { nCyclesExtra, 0 };
 
 	h6280NewFrame();
-	
+
 	SekOpen(0);
 	h6280Open(0);
 
@@ -582,32 +638,22 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += SekRun(nCyclesTotal[0] / nInterleave);
-		nCyclesDone[1] += h6280Run(nCyclesTotal[1] / nInterleave);
+		CPU_RUN(0, Sek);
+		CPU_RUN_TIMER(1);
 
 		if (i == 206) deco16_vblank = 0x08;
-		
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			deco16SoundUpdate(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
 	}
 
 	SekSetIRQLine(6, CPU_IRQSTATUS_AUTO);
-	
-	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
 
-		if (nSegmentLength) {
-			deco16SoundUpdate(pSoundBuf, nSegmentLength);
-		}
-	}
-	
 	h6280Close();
 	SekClose();
+
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
+
+	if (pBurnSoundOut) {
+		deco16SoundUpdate(pBurnSoundOut, nBurnSoundLen);
+	}
 
 	if (pBurnDraw) {
 		DrvDraw();
@@ -634,10 +680,12 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 	if (nAction & ACB_DRIVER_DATA) {
 		SekScan(nAction);
-	
+
 		deco16SoundScan(nAction, pnMin);
 
 		deco16Scan();
+
+		SCAN_VAR(nCyclesExtra);
 	}
 
 	return 0;
@@ -665,9 +713,9 @@ STD_ROM_FN(funkyjet)
 
 struct BurnDriver BurnDrvFunkyjet = {
 	"funkyjet", NULL, NULL, NULL, "1992",
-	"Funky Jet (World, rev 1)\0", NULL, "[Data East] (Mitchell license)", "DECO IC16",
+	"Funky Jet (World, rev 1)\0", NULL, "Mitchell", "DECO IC16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
 	NULL, funkyjetRomInfo, funkyjetRomName, NULL, NULL, NULL, NULL, FunkyjetInputInfo, FunkyjetDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 240, 4, 3
@@ -695,10 +743,40 @@ STD_ROM_FN(funkyjeta)
 
 struct BurnDriver BurnDrvFunkyjeta = {
 	"funkyjeta", "funkyjet", NULL, NULL, "1992",
-	"Funky Jet (World)\0", NULL, "[Data East] (Mitchell license)", "DECO IC16",
+	"Funky Jet (World)\0", NULL, "Mitchell", "DECO IC16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
 	NULL, funkyjetaRomInfo, funkyjetaRomName, NULL, NULL, NULL, NULL, FunkyjetInputInfo, FunkyjetDIPInfo,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
+	320, 240, 4, 3
+};
+
+
+// Funky Jet (Korea, prototype?)
+
+static struct BurnRomInfo funkyjeta2RomDesc[] = {
+	{ "12f",			0x40000, 0xa18de697, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "13f",			0x40000, 0x695a27cd, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "16f",			0x10000, 0x748c0bd8, 2 | BRF_PRG | BRF_ESS }, //  2 Huc6280 Code
+
+	{ "mat02",			0x80000, 0xe4b94c7e, 3 | BRF_GRA },           //  3 Characters & Background Tiles
+
+	{ "mat01",			0x80000, 0x24093a8d, 4 | BRF_GRA },           //  4 Sprites
+	{ "mat00",			0x80000, 0xfbda0228, 4 | BRF_GRA },           //  5
+
+	{ "15h",			0x20000, 0xd7c0f0fe, 5 | BRF_SND },           //  6 OKI M6295 Samples
+};
+
+STD_ROM_PICK(funkyjeta2)
+STD_ROM_FN(funkyjeta2)
+
+struct BurnDriver BurnDrvFunkyjeta2 = {
+	"funkyjeta2", "funkyjet", NULL, NULL, "1992",
+	"Funky Jet (Korea, prototype?)\0", NULL, "Mitchell", "DECO IC16",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
+	NULL, funkyjeta2RomInfo, funkyjeta2RomName, NULL, NULL, NULL, NULL, FunkyjetInputInfo, Funkyjeta2DIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 240, 4, 3
 };
@@ -725,16 +803,16 @@ STD_ROM_FN(funkyjetj)
 
 struct BurnDriver BurnDrvFunkyjetj = {
 	"funkyjetj", "funkyjet", NULL, NULL, "1992",
-	"Funky Jet (Japan, rev 2)\0", NULL, "Data East Corporation", "DECO IC16",
+	"Funky Jet (Japan, rev 2)\0", NULL, "Mitchell (Data East Corporation license)", "DECO IC16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_DATAEAST, GBF_PLATFORM, 0,
 	NULL, funkyjetjRomInfo, funkyjetjRomName, NULL, NULL, NULL, NULL, FunkyjetInputInfo, FunkyjetjDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 240, 4, 3
 };
 
 
-// Sotsugyo Shousho
+// Sotsugyo Shousho (Japan)
 
 static struct BurnRomInfo sotsugyoRomDesc[] = {
 	{ "03.12f",			0x40000, 0xd175dfd1, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -755,10 +833,40 @@ STD_ROM_FN(sotsugyo)
 
 struct BurnDriver BurnDrvSotsugyo = {
 	"sotsugyo", NULL, NULL, NULL, "1995",
-	"Sotsugyo Shousho\0", NULL, "Mitchell (Atlus license)", "DECO IC16",
-	L"\u5352\u696D\u8A3C\u66F8\0Sotsugyo Shousho\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_DATAEAST, GBF_MINIGAMES, 0,
+	"Sotsugyo Shousho (Japan)\0", NULL, "Mitchell (Atlus license)", "DECO IC16",
+	L"\u5352\u696D\u8A3C\u66F8\0Sotsugyo Shousho (Japan)\0", NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_DATAEAST, GBF_MINIGAMES, 0,
 	NULL, sotsugyoRomInfo, sotsugyoRomName, NULL, NULL, NULL, NULL, FunkyjetInputInfo, SotsugyoDIPInfo,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
+	320, 240, 4, 3
+};
+
+
+// Jor-eop Jeungmyeongseo (Korea)
+
+static struct BurnRomInfo sotsugyokRomDesc[] = {
+	{ "27c020.12f",		0x40000, 0x147a794d, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "27c020.13f",		0x40000, 0xd59f270e, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "27c512.16f",		0x10000, 0xbaf5ec93, 2 | BRF_PRG | BRF_ESS }, //  2 Huc6280 Code
+
+	{ "27c4000.2f",		0x80000, 0x8a76a083, 3 | BRF_GRA },           //  3 Characters & Background Tiles
+
+	{ "27c4000.4a",		0x80000, 0x69de4049, 4 | BRF_GRA },           //  4 Sprites
+	{ "27c4000.2a",		0x80000, 0x9092cc83, 4 | BRF_GRA },           //  5
+
+	{ "27c010.15h",		0x20000, 0x1ea43f48, 5 | BRF_SND },           //  6 OKI M6295 Samples
+};
+
+STD_ROM_PICK(sotsugyok)
+STD_ROM_FN(sotsugyok)
+
+struct BurnDriver BurnDrvSotsugyok = {
+	"sotsugyok", "sotsugyo", NULL, NULL, "1996",
+	"Jor-eop Jeungmyeongseo (Korea)\0", NULL, "Mitchell", "DECO IC16",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_DATAEAST, GBF_MINIGAMES, 0,
+	NULL, sotsugyokRomInfo, sotsugyokRomName, NULL, NULL, NULL, NULL, FunkyjetInputInfo, SotsugyoDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 240, 4, 3
 };

@@ -4,10 +4,6 @@ TLCS-900/H instruction set
 
 *******************************************************************/
 
-#if defined(__CELLOS_LV2__)
-#undef _D0
-#endif
-
 enum e_operand
 {
 	_A=1,		/* currect register set register A */
@@ -645,7 +641,7 @@ INLINE void ldcf8( tlcs900_state *cpustate, UINT8 a, UINT8 b )
 }
 
 
-INLINE void ldcf16( tlcs900_state *cpustate, UINT8 a, UINT8 b )
+INLINE void ldcf16( tlcs900_state *cpustate, UINT8 a, UINT16 b )
 {
 	if ( b & ( 1 << ( a & 0x0f ) ) )
 		cpustate->sr.b.l |= FLAG_CF;
@@ -663,7 +659,7 @@ INLINE void andcf8( tlcs900_state *cpustate, UINT8 a, UINT8 b )
 }
 
 
-INLINE void andcf16( tlcs900_state *cpustate, UINT8 a, UINT8 b )
+INLINE void andcf16( tlcs900_state *cpustate, UINT8 a, UINT16 b )
 {
 	if ( ( b & ( 1 << ( a & 0x0f ) ) ) && ( cpustate->sr.b.l & FLAG_CF ) )
 		cpustate->sr.b.l |= FLAG_CF;
@@ -679,7 +675,7 @@ INLINE void orcf8( tlcs900_state *cpustate, UINT8 a, UINT8 b )
 }
 
 
-INLINE void orcf16( tlcs900_state *cpustate, UINT8 a, UINT8 b )
+INLINE void orcf16( tlcs900_state *cpustate, UINT8 a, UINT16 b )
 {
 	if ( b & ( 1 << ( a & 0x0f ) ) )
 		cpustate->sr.b.l |= FLAG_CF;
@@ -693,7 +689,7 @@ INLINE void xorcf8( tlcs900_state *cpustate, UINT8 a, UINT8 b )
 }
 
 
-INLINE void xorcf16( tlcs900_state *cpustate, UINT8 a, UINT8 b )
+INLINE void xorcf16( tlcs900_state *cpustate, UINT8 a, UINT16 b )
 {
 	if ( b & ( 1 << ( a & 0x0f ) ) )
 		cpustate->sr.b.l ^= FLAG_CF;
@@ -5606,7 +5602,7 @@ static void oC8(tlcs900_state *cpustate)
 
 
 /* memory used as source in word operations */
-static void _D0(tlcs900_state *cpustate)
+static void oD0(tlcs900_state *cpustate)
 {
 	const tlcs900inst *inst;
 	UINT32 *reg = NULL;
@@ -6029,8 +6025,8 @@ static const tlcs900inst mnemonic[256] =
 	{ _C0, 0, 0, 0 }, { _C0, 0, 0, 0 }, { _DB, 0, 0, 0 }, { oC8, 0, 0, 0 },
 	{ oC8, 0, 0, 0 }, { oC8, 0, 0, 0 }, { oC8, 0, 0, 0 }, { oC8, 0, 0, 0 },
 	{ oC8, 0, 0, 0 }, { oC8, 0, 0, 0 }, { oC8, 0, 0, 0 }, { oC8, 0, 0, 0 },
-	{ _D0, 0, 0, 0 }, { _D0, 0, 0, 0 }, { _D0, 0, 0, 0 }, { _D0, 0, 0, 0 },
-	{ _D0, 0, 0, 0 }, { _D0, 0, 0, 0 }, { _DB, 0, 0, 0 }, { oD8, 0, 0, 0 },
+	{ oD0, 0, 0, 0 }, { oD0, 0, 0, 0 }, { oD0, 0, 0, 0 }, { oD0, 0, 0, 0 },
+	{ oD0, 0, 0, 0 }, { oD0, 0, 0, 0 }, { _DB, 0, 0, 0 }, { oD8, 0, 0, 0 },
 	{ oD8, 0, 0, 0 }, { oD8, 0, 0, 0 }, { oD8, 0, 0, 0 }, { oD8, 0, 0, 0 },
 	{ oD8, 0, 0, 0 }, { oD8, 0, 0, 0 }, { oD8, 0, 0, 0 }, { oD8, 0, 0, 0 },
 

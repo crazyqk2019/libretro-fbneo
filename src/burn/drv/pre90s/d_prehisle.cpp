@@ -7,30 +7,33 @@
 #include "burn_ym3812.h"
 #include "upd7759.h"
 
-static UINT8 *Mem				= NULL;
-static UINT8 *MemEnd			= NULL;
-static UINT8 *RamStart			= NULL;
-static UINT8 *RamEnd			= NULL;
-static UINT8 *Drv68KROM			= NULL;
-static UINT8 *DrvZ80ROM			= NULL;
-static UINT8 *DrvTileMapROM		= NULL;
-static UINT8 *DrvSndROM 		= NULL;
-static UINT8 *Drv68KRAM         = NULL;
-static UINT8 *DrvVidRAM0		= NULL;
-static UINT8 *DrvSprRAM			= NULL;
-static UINT8 *DrvVidRAM1		= NULL;
-static UINT8 *DrvPalRAM			= NULL;
-static UINT8 *DrvZ80RAM			= NULL;
-static UINT32 *DrvPalette		= NULL;
-static UINT8 *DrvTextROM		= NULL;
-static UINT8 *DrvSprROM			= NULL;
-static UINT8 *DrvFgROM			= NULL;
-static UINT8 *DrvBgROM			= NULL;
+static UINT8 *AllMem;
+static UINT8 *MemEnd;
+static UINT8 *RamStart;
+static UINT8 *RamEnd;
+static UINT8 *Drv68KROM;
+static UINT8 *DrvZ80ROM;
+static UINT8 *DrvTileMapROM;
+static UINT8 *DrvSndROM;
+static UINT8 *Drv68KRAM;
+static UINT8 *DrvVidRAM0;
+static UINT8 *DrvSprRAM;
+static UINT8 *DrvVidRAM1;
+static UINT8 *DrvPalRAM;
+static UINT8 *DrvZ80RAM;
+static UINT32 *DrvPalette;
+static UINT8 *DrvTextROM;
+static UINT8 *DrvSprROM;
+static UINT8 *DrvFgROM;
+static UINT8 *DrvBgROM;
 
 static INT32 ControlsInvert;
 static UINT16 ScrollData[4];
 static INT32 FlipScreen;
 static INT32 SoundLatch;
+static INT32 vblank;
+
+static INT32 nExtraCycles;
 
 static UINT8 DrvInputPort0[8];
 static UINT8 DrvInputPort1[8];
@@ -40,11 +43,8 @@ static UINT8 DrvInput[3];
 static UINT8 DrvReset;
 
 static struct BurnInputInfo PrehisleInputList[] = {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort2 + 0, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort0 + 7, "p1 start"  },
-	{"Coin 2"            , BIT_DIGITAL  , DrvInputPort2 + 1, "p2 coin"   },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort1 + 7, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort2 + 0, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort0 + 7, "p1 start"  },
 	{"P1 Up"             , BIT_DIGITAL  , DrvInputPort0 + 0, "p1 up"     },
 	{"P1 Down"           , BIT_DIGITAL  , DrvInputPort0 + 1, "p1 down"   },
 	{"P1 Left"           , BIT_DIGITAL  , DrvInputPort0 + 2, "p1 left"   },
@@ -53,6 +53,8 @@ static struct BurnInputInfo PrehisleInputList[] = {
 	{"P1 Fire 2"         , BIT_DIGITAL  , DrvInputPort0 + 5, "p1 fire 2" },
 	{"P1 Fire 3"         , BIT_DIGITAL  , DrvInputPort0 + 6, "p1 fire 3" },
 
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort2 + 1, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort1 + 7, "p2 start"  },
 	{"P2 Up"             , BIT_DIGITAL  , DrvInputPort1 + 0, "p2 up"     },
 	{"P2 Down"           , BIT_DIGITAL  , DrvInputPort1 + 1, "p2 down"   },
 	{"P2 Left"           , BIT_DIGITAL  , DrvInputPort1 + 2, "p2 left"   },
@@ -126,20 +128,15 @@ static struct BurnDIPInfo PrehisleDIPList[]=
 
 STDDIPINFO(Prehisle)
 
-inline UINT16 PrehisleVBlankRegister()
+static UINT8 __fastcall PrehisleReadByte(UINT32 address)
 {
-	INT32 nCycles = SekTotalCycles();
+	bprintf(0, _T("rb %x\n"), address);
+	return 0;
+}
 
-	// 262 == approximate number of scanlines on an arcade monitor
-	if (nCycles >= (262 - 16) * ((9000000 / 60) / 262)) {
-		return 0x80;
-	} else {
-		if (nCycles < (262 - 210 - 16) * ((9000000 / 60) / 262)) {
-			return 0x80;
-		}
-	}
-
-	return 0x00;
+static void __fastcall PrehisleWriteByte(UINT32 address, UINT8 data)
+{
+	bprintf(0, _T("wb %x  %x\n"), address, data);
 }
 
 static UINT16 __fastcall PrehisleReadWord(UINT32 address)
@@ -159,7 +156,7 @@ static UINT16 __fastcall PrehisleReadWord(UINT32 address)
 			return DrvDip[0];
 
 		case 0x0e0044:
-			return DrvDip[1] + PrehisleVBlankRegister();
+			return (DrvDip[1] & ~0x80) | ((vblank) ? 0x00 : 0x80);
 	}
 
 	return 0;
@@ -186,7 +183,7 @@ static void __fastcall PrehisleWriteWord(UINT32 address, UINT16 data)
 		return;
 
 		case 0x0f0046:
-			ControlsInvert = data ? 0xff : 0x00;
+			ControlsInvert = (data) ? 0xff : 0x00;
 		return;
 
 		case 0x0f0050:
@@ -295,6 +292,9 @@ static INT32 DrvDoReset()
 	ControlsInvert = 0;
 	SoundLatch = 0;
 	FlipScreen = 0;
+	vblank = 1;
+
+	nExtraCycles = 0;
 
 	HiscoreReset();
 
@@ -303,7 +303,7 @@ static INT32 DrvDoReset()
 
 static INT32 MemIndex()
 {
-	UINT8 *Next; Next = Mem;
+	UINT8 *Next; Next = AllMem;
 
 	Drv68KROM			= Next; Next += 0x40000;
 	DrvZ80ROM			= Next; Next += 0x10000;
@@ -364,14 +364,8 @@ static void DrvGfxDecode()
 
 static INT32 PrehisleInit()
 {
-	Mem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((Mem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(Mem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
-	if ((BurnDrvGetFlags() & BDF_BOOTLEG) == 0) // normal
 	{
 		if (BurnLoadRom(Drv68KROM  + 0x00001,  0, 2)) return 1;
 		if (BurnLoadRom(Drv68KROM  + 0x00000,  1, 2)) return 1;
@@ -391,7 +385,31 @@ static INT32 PrehisleInit()
 
 		if (BurnLoadRom(DrvSndROM  + 0x00000,  9, 1)) return 1;
 	}
-	else // bootleg
+	if (strstr(BurnDrvGetTextA(DRV_NAME), "prehislea")) 
+	{
+		if (BurnLoadRom(Drv68KROM  + 0x00001,  0, 2)) return 1;
+		if (BurnLoadRom(Drv68KROM  + 0x00000,  1, 2)) return 1;
+
+		if (BurnLoadRom(DrvTextROM + 0x00000,  2, 1)) return 1;
+
+		if (BurnLoadRom(DrvBgROM   + 0x00000,  3, 1)) return 1;
+		if (BurnLoadRom(DrvBgROM   + 0x20000,  4, 1)) return 1;
+
+		if (BurnLoadRom(DrvFgROM   + 0x00000,  5, 1)) return 1;
+
+		if (BurnLoadRom(DrvSprROM  + 0x00000,  6, 1)) return 1;
+		if (BurnLoadRom(DrvSprROM  + 0x20000,  7, 1)) return 1;
+		if (BurnLoadRom(DrvSprROM  + 0x40000,  8, 1)) return 1;
+		if (BurnLoadRom(DrvSprROM  + 0x60000,  9, 1)) return 1;
+		if (BurnLoadRom(DrvSprROM  + 0x80000, 10, 1)) return 1;
+
+		if (BurnLoadRom(DrvTileMapROM + 0x00, 11, 1)) return 1;
+
+		if (BurnLoadRom(DrvZ80ROM  + 0x00000, 12, 1)) return 1;
+
+		if (BurnLoadRom(DrvSndROM  + 0x00000, 13, 1)) return 1;
+	}
+	if (strstr(BurnDrvGetTextA(DRV_NAME), "prehisleb"))  // bootleg
 	{
 		if (BurnLoadRom(Drv68KROM  + 0x00001,  0, 2)) return 1;
 		if (BurnLoadRom(Drv68KROM  + 0x00000,  1, 2)) return 1;
@@ -441,6 +459,8 @@ static INT32 PrehisleInit()
 	SekMapMemory(DrvPalRAM, 	0x0d0000, 0x0d07ff, MAP_RAM);
 	SekSetReadWordHandler(0, 	PrehisleReadWord);
 	SekSetWriteWordHandler(0, 	PrehisleWriteWord);
+	SekSetReadByteHandler(0, 	PrehisleReadByte);
+	SekSetWriteByteHandler(0, 	PrehisleWriteByte);
 	SekClose();
 
 	ZetInit(0);
@@ -453,12 +473,13 @@ static INT32 PrehisleInit()
 	ZetClose();
 
 	BurnYM3812Init(1, 4000000, &DrvFMIRQHandler, 0);
-	BurnTimerAttachYM3812(&ZetConfig, 4000000);
+	BurnTimerAttach(&ZetConfig, 4000000);
 	BurnYM3812SetRoute(0, BURN_SND_YM3812_ROUTE, 1.00, BURN_SND_ROUTE_BOTH);
-	
+
 	UPD7759Init(0, UPD7759_STANDARD_CLOCK, DrvSndROM);
 	UPD7759SetRoute(0, 0.90, BURN_SND_ROUTE_BOTH);
-	
+	UPD7759SetSyncCallback(0, ZetTotalCycles, 4000000);
+
 	GenericTilesInit();
 	GenericTilemapInit(0, TILEMAP_SCAN_COLS, bg_map_callback, 16, 16, 1024, 32);
 	GenericTilemapInit(1, TILEMAP_SCAN_COLS, fg_map_callback, 16, 16,  256, 32);
@@ -485,7 +506,7 @@ static INT32 DrvExit()
 
 	GenericTilesExit();
 
-	BurnFree(Mem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -518,9 +539,9 @@ static void DrvRecalcPalette()
 
 	for (INT32 i = 0; i < 0x800; i++)
 	{
-		INT32 r =  p[i] >> 12;
-		INT32 g = (p[i] >> 8) & 0x0f;
-		INT32 b = (p[i] >> 4) & 0x0f;
+		INT32 r =  BURN_ENDIAN_SWAP_INT16(p[i]) >> 12;
+		INT32 g = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 8) & 0x0f;
+		INT32 b = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 4) & 0x0f;
 
 		r = (r * 16) + r;
 		g = (g * 16) + g;
@@ -587,32 +608,35 @@ static INT32 DrvFrame()
 		DrvClearOpposites(&DrvInput[1]);
 	}
 
-	INT32 nInterleave = 1;
+	INT32 nInterleave = 264;
 	INT32 nCyclesTotal[2] = { 9000000 / 60, 4000000 / 60 };
-	INT32 nCyclesDone[2] = { 0, 0 };
-	
+	INT32 nCyclesDone[2] = { nExtraCycles, 0 };
+
 	SekOpen(0);
 	ZetOpen(0);
-	
+
 	for (INT32 i = 0; i < nInterleave; i++) {
-		INT32 nCurrentCPU, nNext, nCyclesSegment;
+		CPU_RUN(0, Sek);
 
-		nCurrentCPU = 0;
-		nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
-		if (i == (nInterleave - 1)) SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
-	}
-	
-	BurnTimerEndFrameYM3812(nCyclesTotal[1]);
+		if (i == (nInterleave - 1)) {
+			SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
+			vblank = 1;
+		}
 
-	if (pBurnSoundOut) {
-		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
-		UPD7759Update(0, pBurnSoundOut, nBurnSoundLen);
+		if (i == 40) vblank = 0;
+
+		CPU_RUN_TIMER(1);
 	}
 
 	ZetClose();
 	SekClose();
+
+	nExtraCycles = nCyclesDone[0] - nCyclesTotal[0];
+
+	if (pBurnSoundOut) {
+		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
+		UPD7759Render(pBurnSoundOut, nBurnSoundLen);
+	}
 
 	if (pBurnDraw) {
 		BurnDrvRedraw();
@@ -648,13 +672,14 @@ static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
 		SCAN_VAR(ScrollData);
 		SCAN_VAR(SoundLatch);
 		SCAN_VAR(FlipScreen);
+		SCAN_VAR(nExtraCycles);
 	}
 
 	return 0;
 }
 
 
-// Prehistoric Isle in 1930 (World)
+// Prehistoric Isle in 1930 (World, set 1)
 
 static struct BurnRomInfo PrehisleRomDesc[] = {
 	{ "gt-e2.2h",      0x20000, 0x7083245a, BRF_ESS | BRF_PRG }, //  0	68000 Program Code
@@ -682,10 +707,51 @@ STD_ROM_FN(Prehisle)
 
 struct BurnDriver BurnDrvPrehisle = {
 	"prehisle", NULL, NULL, NULL, "1989",
-	"Prehistoric Isle in 1930 (World)\0", NULL, "SNK", "Prehistoric Isle (SNK)",
+	"Prehistoric Isle in 1930 (World, set 1)\0", NULL, "SNK", "Prehistoric Isle (SNK)",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, PrehisleRomInfo, PrehisleRomName, NULL, NULL, NULL, NULL, PrehisleInputInfo, PrehisleDIPInfo,
+	PrehisleInit, DrvExit, DrvFrame, DrvDraw, DrvScan, NULL, 0x800,
+	256, 224, 4, 3
+};
+
+
+// Prehistoric Isle in 1930 (World, set 2)
+
+static struct BurnRomInfo PrehisleaRomDesc[] = {
+	{ "gt-e2.2h",      0x20000, 0x7083245a, BRF_ESS | BRF_PRG }, //  0	68000 Program Code
+	{ "gt-e3.3h",      0x20000, 0x6d8cdf58, BRF_ESS | BRF_PRG }, //  1
+
+	{ "gt15.b15",      0x08000, 0xac652412, BRF_GRA },			 //  2	Text Layer Tiles
+
+	{ "12.bin",    	   0x20000, 0xc30ff459, BRF_GRA },			 //  3	Background2 Layer Tiles
+	{ "13.bin",    	   0x20000, 0xc7da6980, BRF_GRA },			 //  4	
+
+	{ "pi8916.h16",    0x40000, 0x7cffe0f6, BRF_GRA },			 //  5	Background1 Layer Tiles
+
+	{ "9.bin",    	   0x20000, 0x6927a073, BRF_GRA },			 //  6	Sprite Layer Tiles
+	{ "8.bin",    	   0x20000, 0x5f3e0148, BRF_GRA },			 //  7
+	{ "7.bin",    	   0x20000, 0x4486939d, BRF_GRA },			 //  8
+	{ "6.bin",    	   0x20000, 0x099beac7, BRF_GRA },			 //  9
+	{ "gt5.5",         0x20000, 0x3d3ab273, BRF_GRA },			 // 10
+
+	{ "gt11.11",       0x10000, 0xb4f0fcf0, BRF_GRA },			 // 12	Background 2 TileMap
+
+	{ "gt1.1",         0x10000, 0x80a4c093, BRF_SND },			 // 13	Z80 Program Code
+
+	{ "gt4.4",         0x20000, 0x85dfb9ec, BRF_SND },			 // 14	ADPCM Samples
+};
+
+
+STD_ROM_PICK(Prehislea)
+STD_ROM_FN(Prehislea)
+
+struct BurnDriver BurnDrvPrehislea = {
+	"prehislea", "prehisle", NULL, NULL, "1989",
+	"Prehistoric Isle in 1930 (World, set 2)\0", NULL, "SNK", "Prehistoric Isle (SNK)",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	NULL, PrehisleaRomInfo, PrehisleaRomName, NULL, NULL, NULL, NULL, PrehisleInputInfo, PrehisleDIPInfo,
 	PrehisleInit, DrvExit, DrvFrame, DrvDraw, DrvScan, NULL, 0x800,
 	256, 224, 4, 3
 };
@@ -719,7 +785,7 @@ STD_ROM_FN(Prehislu)
 
 struct BurnDriver BurnDrvPrehislu = {
 	"prehisleu", "prehisle", NULL, NULL, "1989",
-	"Prehistoric Isle in 1930 (US)\0", NULL, "SNK of America", "Prehistoric Isle (SNK)",
+	"Prehistoric Isle in 1930 (US)\0", NULL, "SNK", "Prehistoric Isle (SNK)",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, PrehisluRomInfo, PrehisluRomName, NULL, NULL, NULL, NULL, PrehisleInputInfo, PrehisleDIPInfo,
@@ -728,7 +794,7 @@ struct BurnDriver BurnDrvPrehislu = {
 };
 
 
-// Prehistoric Isle in 1930 (Korea)
+// Wonsido 1930's (Korea)
 
 static struct BurnRomInfo PrehislkRomDesc[] = {
 	{ "gt-k2.2h",      0x20000, 0xf2d3544d, BRF_ESS | BRF_PRG }, //  0	68000 Program Code
@@ -756,7 +822,7 @@ STD_ROM_FN(Prehislk)
 
 struct BurnDriver BurnDrvPrehislk = {
 	"prehislek", "prehisle", NULL, NULL, "1989",
-	"Prehistoric Isle in 1930 (Korea)\0", NULL, "SNK (Victor license)", "Prehistoric Isle (SNK)",
+	"Wonsido 1930's (Korea)\0", NULL, "SNK (Victor license)", "Prehistoric Isle (SNK)",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, PrehislkRomInfo, PrehislkRomName, NULL, NULL, NULL, NULL, PrehisleInputInfo, PrehisleDIPInfo,
@@ -765,7 +831,7 @@ struct BurnDriver BurnDrvPrehislk = {
 };
 
 
-// Genshi-Tou 1930's (Japan)
+// Genshitou 1930's (Japan)
 
 static struct BurnRomInfo GensitouRomDesc[] = {
 	{ "gt-j2.2h",      0x20000, 0xa2da0b6b, BRF_ESS | BRF_PRG }, //  0	68000 Program Code
@@ -793,7 +859,7 @@ STD_ROM_FN(Gensitou)
 
 struct BurnDriver BurnDrvGensitou = {
 	"gensitou", "prehisle", NULL, NULL, "1989",
-	"Genshi-Tou 1930's (Japan)\0", NULL, "SNK", "Prehistoric Isle (SNK)",
+	"Genshitou 1930's (Japan)\0", NULL, "SNK", "Prehistoric Isle (SNK)",
 	L"Genshi-Tou 1930's (Japan)\0\u539F\u59CB\u5CF6 1930's\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, GensitouRomInfo, GensitouRomName, NULL, NULL, NULL, NULL, PrehisleInputInfo, PrehisleDIPInfo,

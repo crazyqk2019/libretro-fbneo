@@ -1,4 +1,4 @@
-// FB Alpha Shanghai 3 / Hebereke no Popoon / Blocken driver module
+// FB Neo Shanghai 3 / Hebereke no Popoon / Blocken driver module
 // Based on MAME driver by Nicola Salmoria
 
 #include "tiles_generic.h"
@@ -352,16 +352,16 @@ static void blitter_write()
 
 	for (INT32 offs = gfx_list * 8; offs < 0x10000/2; offs += 16)
 	{
-		INT32 code	=  ram[offs+1];
-		INT32 sx	= (ram[offs+2] & 0x1ff0) >> 4;
-		INT32 sy	= (ram[offs+3] & 0x1ff0) >> 4;
-		INT32 flipx	=  ram[offs+4] & 0x01;
-		INT32 flipy	=  ram[offs+4] & 0x02;
-		INT32 color	=  ram[offs+5] & 0x7f;
-		INT32 sizex	=  ram[offs+6];
-		INT32 sizey	=  ram[offs+7];
-		INT32 zoomx	=  ram[offs+10];
-		INT32 zoomy	=  ram[offs+13];
+		INT32 code	=  BURN_ENDIAN_SWAP_INT16(ram[offs+1]);
+		INT32 sx	= (BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x1ff0) >> 4;
+		INT32 sy	= (BURN_ENDIAN_SWAP_INT16(ram[offs+3]) & 0x1ff0) >> 4;
+		INT32 flipx	=  BURN_ENDIAN_SWAP_INT16(ram[offs+4]) & 0x01;
+		INT32 flipy	=  BURN_ENDIAN_SWAP_INT16(ram[offs+4]) & 0x02;
+		INT32 color	=  BURN_ENDIAN_SWAP_INT16(ram[offs+5]) & 0x7f;
+		INT32 sizex	=  BURN_ENDIAN_SWAP_INT16(ram[offs+6]);
+		INT32 sizey	=  BURN_ENDIAN_SWAP_INT16(ram[offs+7]);
+		INT32 zoomx	=  BURN_ENDIAN_SWAP_INT16(ram[offs+10]);
+		INT32 zoomy	=  BURN_ENDIAN_SWAP_INT16(ram[offs+13]);
 
 		if (sx >= 0x180) sx -= 0x200;
 		if (sy >= 0x100) sy -= 0x200;
@@ -380,12 +380,12 @@ static void blitter_write()
 		{
 			GenericTilesSetClip(sx, sx + sizex+1, sy, sy + sizey+1);
 
-			if (ram[offs+4] & 0x08)
+			if (BURN_ENDIAN_SWAP_INT16(ram[offs+4]) & 0x08)
 			{
-				INT32 condensed = ram[offs+4] & 0x04;
+				INT32 condensed = BURN_ENDIAN_SWAP_INT16(ram[offs+4]) & 0x04;
 
-				INT32 srcx = ram[offs+8]/16;
-				INT32 srcy = ram[offs+9]/16;
+				INT32 srcx = BURN_ENDIAN_SWAP_INT16(ram[offs+8])/16;
+				INT32 srcy = BURN_ENDIAN_SWAP_INT16(ram[offs+9])/16;
 				INT32 dispx = srcx & 0x0f;
 				INT32 dispy = srcy & 0x0f;
 
@@ -414,14 +414,14 @@ static void blitter_write()
 						if (condensed)
 						{
 							INT32 addr = ((y+srcy) & 0x1f) + 0x20 * ((x+srcx) & 0xff);
-							tile = ram[addr];
+							tile = BURN_ENDIAN_SWAP_INT16(ram[addr]);
 							dx = 8*x*(0x200-zoomx)/0x100 - dispx;
 							dy = 8*y*(0x200-zoomy)/0x100 - dispy;
 						}
 						else
 						{
 							INT32 addr = ((y+srcy) & 0x0f) + 0x10 * ((x+srcx) & 0xff) + 0x100 * ((y+srcy) & 0x10);
-							tile = ram[addr];
+							tile = BURN_ENDIAN_SWAP_INT16(ram[addr]);
 							dx = 16*x*(0x200-zoomx)/0x100 - dispx;
 							dy = 16*y*(0x200-zoomy)/0x100 - dispy;
 						}
@@ -663,6 +663,8 @@ static INT32 DrvDoReset()
 	flipscreen = 0;
 	gfx_list = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -840,9 +842,9 @@ static void DrvPaletteUpdate()
 
 	for (INT32 i = 0; i < 0x1000/2; i++)
 	{
-		UINT8 r = (pal[i] >> 11) & 0x1f;
-		UINT8 g = (pal[i] >>  6) & 0x1f;
-		UINT8 b = (pal[i] >>  1) & 0x1f;
+		UINT8 r = (BURN_ENDIAN_SWAP_INT16(pal[i]) >> 11) & 0x1f;
+		UINT8 g = (BURN_ENDIAN_SWAP_INT16(pal[i]) >>  6) & 0x1f;
+		UINT8 b = (BURN_ENDIAN_SWAP_INT16(pal[i]) >>  1) & 0x1f;
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
@@ -998,7 +1000,7 @@ struct BurnDriver BurnDrvShangha3 = {
 	"shangha3", NULL, NULL, NULL, "1993",
 	"Shanghai III (World)\0", NULL, "Sunsoft", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
 	NULL, shangha3RomInfo, shangha3RomName, NULL, NULL, NULL, NULL, Shangha3InputInfo, Shangha3DIPInfo,
 	Shangha3Init, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 224, 4, 3
@@ -1008,12 +1010,12 @@ struct BurnDriver BurnDrvShangha3 = {
 // Shanghai III (US)
 
 static struct BurnRomInfo shangha3uRomDesc[] = {
-	{ "ic3.ic3",							0x080000, 0x53ef4988, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
-	{ "ic2.ic2",							0x080000, 0xfdea0232, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "s3u_ic3_v1.0.ic3",					0x080000, 0x53ef4988, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
+	{ "s3u_ic2_v1.0.ic2",					0x080000, 0xfdea0232, 1 | BRF_PRG | BRF_ESS }, //  1
 
 	{ "s3j_char-a1.ic43",					0x200000, 0x2dbf9d17, 2 | BRF_GRA },           //  2 Graphics
 
-	{ "ic75.ic75",							0x080000, 0xa8136d8c, 3 | BRF_SND },           //  3 Samples
+	{ "s3j_ic75v1.0.ic75",					0x080000, 0xa8136d8c, 3 | BRF_SND },           //  3 Samples
 };
 
 STD_ROM_PICK(shangha3u)
@@ -1028,7 +1030,7 @@ struct BurnDriver BurnDrvShangha3u = {
 	"shangha3u", "shangha3", NULL, NULL, "1993",
 	"Shanghai III (US)\0", NULL, "Sunsoft", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
 	NULL, shangha3uRomInfo, shangha3uRomName, NULL, NULL, NULL, NULL, Shangha3InputInfo, Shangha3DIPInfo,
 	Shangha3uInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 224, 4, 3
@@ -1061,7 +1063,7 @@ struct BurnDriver BurnDrvShangha3up = {
 	"shangha3up", "shangha3", NULL, NULL, "1993",
 	"Shanghai III (US, prototype)\0", NULL, "Sunsoft", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
 	NULL, shangha3upRomInfo, shangha3upRomName, NULL, NULL, NULL, NULL, Shangha3InputInfo, Shangha3DIPInfo,
 	Shangha3upInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 224, 4, 3
@@ -1086,7 +1088,7 @@ struct BurnDriver BurnDrvShangha3j = {
 	"shangha3j", "shangha3", NULL, NULL, "1993",
 	"Shanghai III (Japan)\0", NULL, "Sunsoft", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
 	NULL, shangha3jRomInfo, shangha3jRomName, NULL, NULL, NULL, NULL, Shangha3InputInfo, Shangha3DIPInfo,
 	Shangha3uInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 224, 4, 3
@@ -1124,7 +1126,7 @@ struct BurnDriver BurnDrvHeberpop = {
 	"heberpop", NULL, NULL, NULL, "1994",
 	"Hebereke no Popoon (Japan)\0", NULL, "Sunsoft / Atlus", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, heberpopRomInfo, heberpopRomName, NULL, NULL, NULL, NULL, HeberpopInputInfo, HeberpopDIPInfo,
 	HeberpopInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 224, 4, 3
@@ -1158,7 +1160,7 @@ struct BurnDriver BurnDrvBlocken = {
 	"blocken", NULL, NULL, NULL, "1994",
 	"Blocken (Japan)\0", NULL, "Visco / KID", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, blockenRomInfo, blockenRomName, NULL, NULL, NULL, NULL, BlockenInputInfo, BlockenDIPInfo,
 	BlockenInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x1000,
 	384, 224, 4, 3

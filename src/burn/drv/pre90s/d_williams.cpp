@@ -1,4 +1,4 @@
-// FB Alpha Williams Games driver module
+// FB Neo Williams Games driver module
 // Based on MAME driver by Aaron Giles
 
 // Works:
@@ -13,11 +13,16 @@
 //  Splat
 //  Alien Area - no sound (there is none)
 //  Sinistar
+//  Playball!
 //  Blaster
 //  Speed Ball
+//  Lottofun
 
-// todo / tofix:
-//  Lottofun - memory protect sw. error
+// Not added yet:
+//  mysticm, mysticmp
+//  tshoot
+//  inferno
+//  joust2, joust2r1
 
 #include "tiles_generic.h"
 #include "m6809_intf.h"
@@ -83,31 +88,30 @@ static INT16 DrvAnalogPort0 = 0;
 static INT16 DrvAnalogPort1 = 0;
 static INT16 DrvAnalogPort2 = 0;
 static INT16 DrvAnalogPort3 = 0;
+static UINT8 lotto_ticket;
+static UINT8 lotto_motor;
 static INT32 TrackX[2] = { 0, 0 };
 static INT32 TrackY[2] = { 0, 0 };
+
+static ButtonToggle MemoryProtect; // lottofun
 
 static INT32 defender_control_hack = 0;
 static INT32 defender = 0;
 static INT32 mayday = 0;
 static INT32 splat = 0;
 static INT32 blaster = 0;
+static INT32 sinistarc = 0;
+static INT32 playball = 0;
 static INT32 spdball = 0;
+static INT32 lottofun = 0;
 
 static INT32 uses_hc55516 = 0;
 static INT32 uses_colprom = 0;
-
-// dc-blocking filter for DAC
-static INT16 dac_lastin_r;
-static INT16 dac_lastout_r;
-static INT16 dac_lastin_l;
-static INT16 dac_lastout_l;
 
 // raster update helpers
 static INT32 lastline;
 static void (*pStartDraw)() = NULL;
 static void (*pDrawScanline)() = NULL;
-
-static INT32 nCyclesDone[3];
 
 static struct BurnInputInfo DefenderInputList[] = {
 	{"P1 Coin",					BIT_DIGITAL,	DrvJoy3 + 4,	"p1 coin"	},
@@ -127,7 +131,7 @@ static struct BurnInputInfo DefenderInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -149,7 +153,7 @@ static struct BurnInputInfo MaydayInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Test Credit",				BIT_DIGITAL,	DrvJoy3 + 2,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service3"	},
 };
 
@@ -217,8 +221,8 @@ static struct BurnInputInfo StargateInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
-	{"High Score reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"diag"		},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
+	{"High Score reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
 
@@ -241,8 +245,8 @@ static struct BurnInputInfo RobotronInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
-	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"		},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
+	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
 
@@ -261,12 +265,30 @@ static struct BurnInputInfo BubblesInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
 
 STDINPUTINFO(Bubbles)
+
+static struct BurnInputInfo PlayballInputList[] = {
+	{"P1 Coin",					BIT_DIGITAL,	DrvJoy3 + 4,	"p1 coin"	},
+	{"P1 Start",				BIT_DIGITAL,	DrvJoy1 + 0,	"p1 start"	},
+	{"P1 Left",					BIT_DIGITAL,	DrvJoy1 + 1,	"p1 left"	},
+	{"P1 Right",				BIT_DIGITAL,	DrvJoy1 + 2,	"p1 right"	},
+
+	{"P2 Coin",					BIT_DIGITAL,	DrvJoy3 + 2,	"p2 coin"	},
+	{"P2 Start",				BIT_DIGITAL,	DrvJoy1 + 4,	"p2 start"	},
+
+	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
+	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
+	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
+};
+
+STDINPUTINFO(Playball)
 
 static struct BurnInputInfo SplatInputList[] = {
 	{"P1 Coin",					BIT_DIGITAL,	DrvJoy3 + 4,	"p1 coin"	},
@@ -294,7 +316,7 @@ static struct BurnInputInfo SplatInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -316,7 +338,7 @@ static struct BurnInputInfo JoustInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -349,7 +371,7 @@ static struct BurnInputInfo SpdballInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -377,7 +399,7 @@ static struct BurnInputInfo AlienarInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -399,7 +421,7 @@ static struct BurnInputInfo SinistarInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -423,7 +445,7 @@ static struct BurnInputInfo BlasterInputList[] = {
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -442,8 +464,8 @@ static struct BurnInputInfo LottofunInputList[] = {
 	{"P2 Coin",					BIT_DIGITAL,	DrvJoy3 + 2,	"p2 coin"	},
 
 	{"Reset",					BIT_DIGITAL,	&DrvReset,		"reset"		},
-	{"Auto Up / Manual Down",	BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"service2"	},
+	{"Memory Protect",			BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
+	{"Advance",					BIT_DIGITAL,	DrvJoy3 + 1,	"diag"		},
 	{"High Score Reset",		BIT_DIGITAL,	DrvJoy3 + 3,	"service3"	},
 	{"Tilt",					BIT_DIGITAL,	DrvJoy3 + 6,	"tilt"		},
 };
@@ -995,36 +1017,48 @@ static void sync_sound(INT32 num)
 	INT32 cyc = (INT32)(((double)((double)M6809TotalCycles() * 894886) / 1000000)+0.5);
 	INT32 todo = cyc - M6800TotalCycles();
 	//bprintf(0, _T("m6809 cyc: %d  m6800 cyc: %d.    cyc: %d  todo %d.\n"), M6809TotalCycles(), M6800TotalCycles(), cyc, todo);
-	// Adding in a couple cycles to prevent lost soundcommands.  This is OK since we lose a few cycles/frame due to division & rounding loss.
+	// Adding in a couple cycles to prevent lost soundcommands.  CPU_RUN_SYNCINT in DrvFrame() will compensate.
 	if (todo < 1) todo = 15;
-	nCyclesDone[num + 1] += M6800Run(todo + 10);
+	M6800Run(todo + 10);
+}
+
+static void pia0_out_b(UINT16 , UINT8 data)
+{
+	if (lottofun) {
+		lotto_motor = ~data & 0x80;
+	}
 }
 
 static void pia1_out_b(UINT16 , UINT8 data)
 {
-	if (!blaster) { // defender, williams HW
-		M6800Open(0);
-		sync_sound(0);
-		data |= 0xc0;
-		pia_set_input_b(2, data);
-		pia_set_input_cb1(2, (data == 0xff) ? 0 : 1);
-		M6800Close();
-	} else {        // Blaster HW
+	if (blaster || sinistarc) {
+		// Blaster HW & Sinistar Cockpit
 		UINT8 l_data = data | 0x80;
 		UINT8 r_data = (data >> 1 & 0x40) | (data & 0x3f) | 0x80;
 
+		if (sinistarc) {
+			l_data = data | 0xc0;
+			r_data = data | 0xc0;
+		}
+
 		M6800Open(0);
-		//bprintf(0, _T("0) "));
 		sync_sound(0);
 		pia_set_input_b(2, l_data);
 		pia_set_input_cb1(2, (l_data == 0xff) ? 0 : 1);
 		M6800Close();
 
 		M6800Open(1);
-		//bprintf(0, _T("1) "));
 		sync_sound(1);
 		pia_set_input_b(4, r_data);
 		pia_set_input_cb1(4, (r_data == 0xff) ? 0 : 1);
+		M6800Close();
+	} else {
+		// defender, williams HW (everything else)
+		M6800Open(0);
+		sync_sound(0);
+		if (!playball) data |= 0xc0;
+		pia_set_input_b(2, data);
+		pia_set_input_cb1(2, (data == 0xff) ? 0 : 1);
 		M6800Close();
 	}
 }
@@ -1067,7 +1101,7 @@ static void pia4_sound_irq(INT32 state)
 static pia6821_interface pia_0 = {
 	pia0_in_a, pia0_in_b,
 	NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL,
+	NULL, pia0_out_b, NULL, NULL,
 	NULL, NULL
 };
 
@@ -1144,7 +1178,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	M6800Reset();
 	M6800Close();
 
-	if (blaster) {
+	if (blaster || sinistarc) {
 		M6800Open(1);
 		M6800Reset();
 		M6800Close();
@@ -1167,15 +1201,15 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	blaster_video_control = 0;
 	blaster_color0 = 0;
 
-	dac_lastin_r = 0;
-	dac_lastout_r = 0;
-	dac_lastin_l = 0;
-	dac_lastout_l = 0;
+	lotto_motor = 0;
+	lotto_ticket = 20;
 
 	TrackX[0] = TrackX[1] = 0;
 	TrackY[0] = TrackY[1] = 0;
 
 	nExtraCycles[0] = nExtraCycles[1] = nExtraCycles[2] = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -1260,6 +1294,7 @@ static INT32 DrvRomLoad(INT32 type) // 1-defender, 2-mysticm, 3-tshoot, 4-sinist
 		}
 
 		if ((ri.nType & 7) == 3) {
+			bprintf(0, _T("loading second sound rom %x\n"), ri.nLen);
 			memmove (DrvM6800ROM1, DrvM6800ROM1 + ri.nLen, 0x10000 - ri.nLen); // move back
 			if (BurnLoadRom(DrvM6800ROM1 + 0x10000 - ri.nLen, i, 1)) return 1;
 			continue;
@@ -1303,15 +1338,10 @@ static void blitter_init(INT32 blitter_config, UINT8 *prom)
 			blitter_remap[i * 256 + j] = (table[j >> 4] << 4) | table[j & 0x0f];
 	}
 }
-//DrvInit(0, 1, 12, -1, 0);
+
 static INT32 DrvInit(INT32 maptype, INT32 loadtype, INT32 x_adjust, INT32 blitter_config, INT32 blitter_clip_addr)
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (DrvRomLoad(loadtype)) return 1;
@@ -1382,6 +1412,7 @@ static INT32 DrvInit(INT32 maptype, INT32 loadtype, INT32 x_adjust, INT32 blitte
 
 	DACInit(0, 0, 0, M6800TotalCycles, 894886);
 	DACSetRoute(0, 0.35, BURN_SND_ROUTE_BOTH);
+	DACDCBlock(1);
 
 	if (maptype == 2) // blaster, pia config & l+r dac
 	{
@@ -1400,7 +1431,7 @@ static INT32 DrvInit(INT32 maptype, INT32 loadtype, INT32 x_adjust, INT32 blitte
 
 	blitter_clip_address = blitter_clip_addr;
 	blitter_init(blitter_config, (uses_colprom) ? DrvColPROM : NULL);
-	
+
 	GenericTilesInit();
 
 	screen_x_adjust = x_adjust;
@@ -1423,16 +1454,19 @@ static INT32 DrvExit()
 	if (uses_hc55516)
 		hc55516_exit();
 
-	BurnFree(AllMem);
+	BurnFreeMemIndex();
 
 	memset (DrvDips, 0, 3);
 
 	mayday = 0;
 	splat = 0;
 	blaster = 0;
+	sinistarc = 0;
 	defender_control_hack = 0;
 	defender = 0;
 	spdball = 0;
+	playball = 0;
+	lottofun = 0;
 
 	uses_hc55516 = 0;
 	uses_colprom = 0;
@@ -1600,24 +1634,6 @@ static INT32 BlasterDraw()
 	return 0;
 }
 
-static void dcfilter_dac()
-{
-	for (INT32 i = 0; i < nBurnSoundLen; i++) {
-		INT16 r = pBurnSoundOut[i*2+0];
-		INT16 l = pBurnSoundOut[i*2+1];
-
-		INT16 outr = r - dac_lastin_r + 0.995 * dac_lastout_r;
-		INT16 outl = l - dac_lastin_l + 0.995 * dac_lastout_l;
-
-		dac_lastin_r = r;
-		dac_lastout_r = outr;
-		dac_lastin_l = l;
-		dac_lastout_l = outl;
-		pBurnSoundOut[i*2+0] = outr;
-		pBurnSoundOut[i*2+1] = outl;
-	}
-}
-
 static INT32 DrvFrame()
 {
 	BurnWatchdogUpdate();
@@ -1635,6 +1651,11 @@ static INT32 DrvFrame()
 		DrvInputs[2] = DrvDips[2];
 
 		memset (DrvInputs + 3, 0, 7-3);
+
+		if (lottofun) {
+			DrvInputs[2] |= 1; // Memory Protect ON by default (for clean boot)
+			MemoryProtect.Toggle(DrvJoy3[0]);
+		}
 
 		for (INT32 i = 0; i < 8; i++) {
 			DrvInputs[0] ^= (DrvJoy1[i] & 1) << i;
@@ -1659,6 +1680,14 @@ static INT32 DrvFrame()
 			}
 			M6809Close();
 		}
+		if (lottofun && lotto_motor) {
+			if (lotto_ticket) lotto_ticket--;
+			if (!lotto_ticket) {
+				lotto_ticket = 20;
+				bprintf(0, _T("ticket!\n"));
+				DrvInputs[0] |= 0x80;
+			}
+		}
 
 		if (spdball) {
 			UINT8 xy = 0;
@@ -1682,8 +1711,7 @@ static INT32 DrvFrame()
 
 	INT32 nInterleave = 256;
 	INT32 nCyclesTotal[3] = { 1000000 / 60, 894886 / 60, 894886 / 60 };
-	//INT32 nCyclesDone[3] = { nExtraCycles[0], nExtraCycles[1], nExtraCycles[2] };
-	nCyclesDone[0] = nExtraCycles[0]; nCyclesDone[1] = nExtraCycles[1]; nCyclesDone[2] = nExtraCycles[2];
+	INT32 nCyclesDone[3] = { nExtraCycles[0], nExtraCycles[1], nExtraCycles[2] };
 
 	M6809Open(0);
 
@@ -1693,7 +1721,7 @@ static INT32 DrvFrame()
 	{
 		scanline = i;
 
-		nCyclesDone[0] += M6809Run(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, M6809);
 
 		if (scanline % 8 == 0) {
 			pia_set_input_cb1(1, scanline & 0x20);
@@ -1704,12 +1732,12 @@ static INT32 DrvFrame()
 			pia_set_input_ca1(1, scanline >= 240 ? 1 : 0);
 
 		M6800Open(0);
-		nCyclesDone[1] += M6800Run(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+		CPU_RUN_SYNCINT(1, M6800);
 		M6800Close();
 
-		if (blaster) {
+		if (blaster || sinistarc) {
 			M6800Open(1);
-			nCyclesDone[2] += M6800Run(((i + 1) * nCyclesTotal[2] / nInterleave) - nCyclesDone[2]);
+			CPU_RUN_SYNCINT(2, M6800);
 			M6800Close();
 		}
 	}
@@ -1717,7 +1745,6 @@ static INT32 DrvFrame()
 	if (pBurnSoundOut) {
 		M6800Open(0);
 		DACUpdate(pBurnSoundOut, nBurnSoundLen);
-		dcfilter_dac();
 		if (uses_hc55516)
 			hc55516_update(pBurnSoundOut, nBurnSoundLen);
 		M6800Close();
@@ -1726,9 +1753,15 @@ static INT32 DrvFrame()
 	M6809Close();
 
 	nExtraCycles[0] = nCyclesDone[0] - nCyclesTotal[0];
-	nExtraCycles[1] = nCyclesDone[1] - nCyclesTotal[1];
-	nExtraCycles[2] = nCyclesDone[2] - nCyclesTotal[2];
-	
+	M6800Open(0);
+	nExtraCycles[1] = M6800TotalCycles() - nCyclesTotal[1];
+	M6800Close();
+	if (blaster || sinistarc) {
+		M6800Open(1);
+		nExtraCycles[2] = M6800TotalCycles() - nCyclesTotal[2];
+		M6800Close();
+	}
+
 	if (pBurnDraw) {
 		if (pStartDraw)
 			DrvDrawEnd();
@@ -1771,6 +1804,11 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(blaster_video_control);
 		SCAN_VAR(blaster_color0);
 
+		if (lottofun) {
+			SCAN_VAR(lotto_motor);
+			SCAN_VAR(lotto_ticket);
+		}
+
 		SCAN_VAR(nExtraCycles);
 
 		if (spdball) {
@@ -1807,22 +1845,22 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 // Defender (Red label)
 
 static struct BurnRomInfo defenderRomDesc[] = {
-	{ "defend.1",			0x0800, 0xc3e52d7e, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "defend.4",			0x0800, 0x9a72348b, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "defend.2",			0x1000, 0x89b75984, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "defend.3",			0x1000, 0x94f51e9b, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "defend.9",			0x0800, 0x6870e8a5, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "defend.12",			0x0800, 0xf1f88938, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "defend.8",			0x0800, 0xb649e306, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "defend.11",			0x0800, 0x9deaf6d9, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "defend.7",			0x0800, 0x339e092e, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "defend.10",			0x0800, 0xa543b167, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "defend.6",			0x0800, 0x65f4efd1, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "defend.1",			0x0800, 0xc3e52d7e, 1 | BRF_PRG | BRF_ESS }, 	 //  0 M6809 Code
+	{ "defend.4",			0x0800, 0x9a72348b, 1 | BRF_PRG | BRF_ESS }, 	 //  1
+	{ "defend.2",			0x1000, 0x89b75984, 1 | BRF_PRG | BRF_ESS }, 	 //  2
+	{ "defend.3",			0x1000, 0x94f51e9b, 1 | BRF_PRG | BRF_ESS }, 	 //  3
+	{ "defend.9",			0x0800, 0x6870e8a5, 1 | BRF_PRG | BRF_ESS }, 	 //  4
+	{ "defend.12",			0x0800, 0xf1f88938, 1 | BRF_PRG | BRF_ESS }, 	 //  5
+	{ "defend.8",			0x0800, 0xb649e306, 1 | BRF_PRG | BRF_ESS }, 	 //  6
+	{ "defend.11",			0x0800, 0x9deaf6d9, 1 | BRF_PRG | BRF_ESS }, 	 //  7
+	{ "defend.7",			0x0800, 0x339e092e, 1 | BRF_PRG | BRF_ESS }, 	 //  8
+	{ "defend.10",			0x0800, 0xa543b167, 1 | BRF_PRG | BRF_ESS }, 	 //  9
+	{ "defend.6",			0x0800, 0x65f4efd1, 1 | BRF_PRG | BRF_ESS }, 	 // 10
 
-	{ "defend.snd",			0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 11 M6808 Code
+	{ "video_sound_rom_1.ic12",	0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 11 M6808 Code
 
-	{ "decoder.2",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           // 12 Address Decoder
-	{ "decoder.3",			0x0200, 0xc3f45f70, 0 | BRF_OPT },           // 13
+	{ "decoder.2",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           	 // 12 Address Decoder
+	{ "decoder.3",			0x0200, 0xc3f45f70, 0 | BRF_OPT },           	 // 13
 };
 
 STD_ROM_PICK(defender)
@@ -1863,9 +1901,9 @@ static INT32 DefenceInit()
 
 struct BurnDriver BurnDrvDefender = {
 	"defender", NULL, NULL, NULL, "1980",
-	"Defender (Red label)\0", NULL, "Williams", "Miscellaneous",
+	"Defender (Red label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, defenderRomInfo, defenderRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenderInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -1875,21 +1913,21 @@ struct BurnDriver BurnDrvDefender = {
 // Defender (Green label)
 
 static struct BurnRomInfo defendergRomDesc[] = {
-	{ "defeng01.bin",		0x0800, 0x6111d74d, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "defeng04.bin",		0x0800, 0x3cfc04ce, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "defeng02.bin",		0x1000, 0xd184ab6b, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "defeng03.bin",		0x1000, 0x788b76d7, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "defeng09.bin",		0x0800, 0xf57caa62, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "defeng12.bin",		0x0800, 0x33db686f, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "defeng08.bin",		0x0800, 0x9a9eb3d2, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "defeng11.bin",		0x0800, 0x5ca4e860, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "defeng07.bin",		0x0800, 0x545c3326, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "defeng10.bin",		0x0800, 0x941cf34e, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "defeng06.bin",		0x0800, 0x3af34c05, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "defeng01.bin",		0x0800, 0x6111d74d, 1 | BRF_PRG | BRF_ESS }, 	 //  0 M6809 Code
+	{ "defeng04.bin",		0x0800, 0x3cfc04ce, 1 | BRF_PRG | BRF_ESS }, 	 //  1
+	{ "defeng02.bin",		0x1000, 0xd184ab6b, 1 | BRF_PRG | BRF_ESS }, 	 //  2
+	{ "defeng03.bin",		0x1000, 0x788b76d7, 1 | BRF_PRG | BRF_ESS }, 	 //  3
+	{ "defeng09.bin",		0x0800, 0xf57caa62, 1 | BRF_PRG | BRF_ESS }, 	 //  4
+	{ "defeng12.bin",		0x0800, 0x33db686f, 1 | BRF_PRG | BRF_ESS }, 	 //  5
+	{ "defeng08.bin",		0x0800, 0x9a9eb3d2, 1 | BRF_PRG | BRF_ESS }, 	 //  6
+	{ "defeng11.bin",		0x0800, 0x5ca4e860, 1 | BRF_PRG | BRF_ESS }, 	 //  7
+	{ "defeng07.bin",		0x0800, 0x545c3326, 1 | BRF_PRG | BRF_ESS }, 	 //  8
+	{ "defeng10.bin",		0x0800, 0x941cf34e, 1 | BRF_PRG | BRF_ESS }, 	 //  9
+	{ "defeng06.bin",		0x0800, 0x3af34c05, 1 | BRF_PRG | BRF_ESS }, 	 // 10
 
-	{ "defend.snd",			0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+	{ "video_sound_rom_1.ic12",	0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 11 M6808 Code
 
-	{ "decoder.1",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           // 11 Address Decoder
+	{ "decoder.1",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           	 // 12 Address Decoder
 };
 
 STD_ROM_PICK(defenderg)
@@ -1899,7 +1937,7 @@ struct BurnDriver BurnDrvDefenderg = {
 	"defenderg", "defender", NULL, NULL, "1980",
 	"Defender (Green label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, defendergRomInfo, defendergRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenderBGInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -1909,20 +1947,20 @@ struct BurnDriver BurnDrvDefenderg = {
 // Defender (Blue label)
 
 static struct BurnRomInfo defenderbRomDesc[] = {
-	{ "wb01.bin",			0x1000, 0x0ee1019d, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "defeng02.bin",		0x1000, 0xd184ab6b, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "wb03.bin",			0x1000, 0xa732d649, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "defeng09.bin",		0x0800, 0xf57caa62, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "defeng12.bin",		0x0800, 0x33db686f, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "defeng08.bin",		0x0800, 0x9a9eb3d2, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "defeng11.bin",		0x0800, 0x5ca4e860, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "defeng07.bin",		0x0800, 0x545c3326, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "defeng10.bin",		0x0800, 0x941cf34e, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "defeng06.bin",		0x0800, 0x3af34c05, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "wb01.bin",			0x1000, 0x0ee1019d, 1 | BRF_PRG | BRF_ESS }, 	 //  0 M6809 Code
+	{ "defeng02.bin",		0x1000, 0xd184ab6b, 1 | BRF_PRG | BRF_ESS }, 	 //  1
+	{ "wb03.bin",			0x1000, 0xa732d649, 1 | BRF_PRG | BRF_ESS }, 	 //  2
+	{ "defeng09.bin",		0x0800, 0xf57caa62, 1 | BRF_PRG | BRF_ESS }, 	 //  3
+	{ "defeng12.bin",		0x0800, 0x33db686f, 1 | BRF_PRG | BRF_ESS }, 	 //  4
+	{ "defeng08.bin",		0x0800, 0x9a9eb3d2, 1 | BRF_PRG | BRF_ESS }, 	 //  5
+	{ "defeng11.bin",		0x0800, 0x5ca4e860, 1 | BRF_PRG | BRF_ESS }, 	 //  6
+	{ "defeng07.bin",		0x0800, 0x545c3326, 1 | BRF_PRG | BRF_ESS }, 	 //  7
+	{ "defeng10.bin",		0x0800, 0x941cf34e, 1 | BRF_PRG | BRF_ESS }, 	 //  8
+	{ "defeng06.bin",		0x0800, 0x3af34c05, 1 | BRF_PRG | BRF_ESS }, 	 //  9
 
-	{ "defend.snd",			0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+	{ "video_sound_rom_1.ic12",	0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
 
-	{ "decoder.1",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           // 11 Address Decoder
+	{ "decoder.1",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           	 // 11 Address Decoder
 };
 
 STD_ROM_PICK(defenderb)
@@ -1932,7 +1970,7 @@ struct BurnDriver BurnDrvDefenderb = {
 	"defenderb", "defender", NULL, NULL, "1980",
 	"Defender (Blue label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, defenderbRomInfo, defenderbRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenderBGInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -1942,20 +1980,20 @@ struct BurnDriver BurnDrvDefenderb = {
 // Defender (White label)
 
 static struct BurnRomInfo defenderwRomDesc[] = {
-	{ "rom1.bin",			0x1000, 0x5af871e3, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "rom2.bin",			0x1000, 0x1126adc9, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "rom3.bin",			0x1000, 0x4097b46b, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "rom9.bin",			0x0800, 0x93012991, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "rom12.bin",			0x0800, 0x4bdd8dc4, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "rom8.bin",			0x0800, 0x5227fc0b, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "rom11.bin",			0x0800, 0xd068f0c5, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "rom7.bin",			0x0800, 0xfef4cb77, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "rom10.bin",			0x0800, 0x49b50b40, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "rom6.bin",			0x0800, 0x43d42a1b, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "rom1.bin",			0x1000, 0x5af871e3, 1 | BRF_PRG | BRF_ESS }, 	 //  0 M6809 Code
+	{ "rom2.bin",			0x1000, 0x1126adc9, 1 | BRF_PRG | BRF_ESS }, 	 //  1
+	{ "rom3.bin",			0x1000, 0x4097b46b, 1 | BRF_PRG | BRF_ESS }, 	 //  2
+	{ "rom9.bin",			0x0800, 0x93012991, 1 | BRF_PRG | BRF_ESS }, 	 //  3
+	{ "rom12.bin",			0x0800, 0x4bdd8dc4, 1 | BRF_PRG | BRF_ESS }, 	 //  4
+	{ "rom8.bin",			0x0800, 0x5227fc0b, 1 | BRF_PRG | BRF_ESS }, 	 //  5
+	{ "rom11.bin",			0x0800, 0xd068f0c5, 1 | BRF_PRG | BRF_ESS }, 	 //  6
+	{ "rom7.bin",			0x0800, 0xfef4cb77, 1 | BRF_PRG | BRF_ESS }, 	 //  7
+	{ "rom10.bin",			0x0800, 0x49b50b40, 1 | BRF_PRG | BRF_ESS }, 	 //  8
+	{ "rom6.bin",			0x0800, 0x43d42a1b, 1 | BRF_PRG | BRF_ESS }, 	 //  9
 
-	{ "defend.snd",			0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+	{ "video_sound_rom_1.ic12",	0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
 
-	{ "decoder.1",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           // 11 Address Decoder
+	{ "decoder.1",			0x0200, 0x8dd98da5, 0 | BRF_OPT },           	 // 11 Address Decoder
 };
 
 STD_ROM_PICK(defenderw)
@@ -1965,7 +2003,7 @@ struct BurnDriver BurnDrvDefenderw = {
 	"defenderw", "defender", NULL, NULL, "1980",
 	"Defender (White label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, defenderwRomInfo, defenderwRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenderWhiteInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -1986,7 +2024,10 @@ static struct BurnRomInfo defenderjRomDesc[] = {
 	{ "df5-1.b3",			0x0800, 0xa543b167, 1 | BRF_PRG | BRF_ESS }, //  8
 	{ "df4-1.c1",			0x0800, 0x65f4efd1, 1 | BRF_PRG | BRF_ESS }, //  9
 
-	{ "df12.i3",			0x0800, 0xf122d9c9, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+	{ "dr12.i3",			0x0800, 0xf122d9c9, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+
+	{ "df11.k3",			0x0200, 0x25de5d85, 0 | BRF_OPT },           // 11 Address Decoder
+	{ "df12.f3",			0x0200, 0xc3f45f70, 0 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(defenderj)
@@ -2050,7 +2091,7 @@ STD_ROM_FN(tornado1)
 
 struct BurnDriver BurnDrvTornado1 = {
 	"tornado1", "defender", NULL, NULL, "1980",
-	"Tornado (set 1, Defender bootleg)\0", NULL, "bootleg (Jeutel)", "6809 System",
+	"Tornado (bootleg of Defender, set 1)\0", NULL, "bootleg (Jeutel)", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, tornado1RomInfo, tornado1RomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
@@ -2078,7 +2119,7 @@ STD_ROM_FN(tornado2)
 
 struct BurnDriverD BurnDrvTornado2 = {
 	"tornado2", "defender", NULL, NULL, "1980",
-	"Tornado (set 2, Defender bootleg)\0", NULL, "bootleg (Jeutel)", "6809 System",
+	"Tornado (bootleg of Defender, set 2)\0", NULL, "bootleg (Jeutel)", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, tornado2RomInfo, tornado2RomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
@@ -2090,15 +2131,15 @@ struct BurnDriverD BurnDrvTornado2 = {
 // Zero (set 1, Defender bootleg)
 
 static struct BurnRomInfo zeroRomDesc[] = {
-	{ "zero-15",			0x1000, 0x706a24bd, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "zero-16",			0x1000, 0xa79213b2, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "zero-17",			0x1000, 0x25287eca, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "zero-21",			0x1000, 0x7ca35cfd, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "zero-20",			0x1000, 0x0757967f, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "zero-19",			0x1000, 0xf2bef850, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "zero-18",			0x1000, 0xe99d5679, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "zero-15",			0x1000, 0x706a24bd, 1 | BRF_PRG | BRF_ESS }, 	 //  0 M6809 Code
+	{ "zero-16",			0x1000, 0xa79213b2, 1 | BRF_PRG | BRF_ESS }, 	 //  1
+	{ "zero-17",			0x1000, 0x25287eca, 1 | BRF_PRG | BRF_ESS }, 	 //  2
+	{ "zero-21",			0x1000, 0x7ca35cfd, 1 | BRF_PRG | BRF_ESS }, 	 //  3
+	{ "zero-20",			0x1000, 0x0757967f, 1 | BRF_PRG | BRF_ESS }, 	 //  4
+	{ "zero-19",			0x1000, 0xf2bef850, 1 | BRF_PRG | BRF_ESS }, 	 //  5
+	{ "zero-18",			0x1000, 0xe99d5679, 1 | BRF_PRG | BRF_ESS }, 	 //  6
 
-	{ "defend.snd",			0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, //  7 M6808 Code
+	{ "video_sound_rom_1.ic12",	0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, //  7 M6808 Code
 };
 
 STD_ROM_PICK(zero)
@@ -2106,7 +2147,7 @@ STD_ROM_FN(zero)
 
 struct BurnDriver BurnDrvZero = {
 	"zero", "defender", NULL, NULL, "1980",
-	"Zero (set 1, Defender bootleg)\0", NULL, "bootleg (Jeutel)", "6809 System",
+	"Zero (bootleg of Defender, set 1)\0", NULL, "bootleg (Jeutel)", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, zeroRomInfo, zeroRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
@@ -2134,7 +2175,7 @@ STD_ROM_FN(zero2)
 
 struct BurnDriver BurnDrvZero2 = {
 	"zero2", "defender", NULL, NULL, "1980",
-	"Zero (set 2, Defender bootleg)\0", NULL, "bootleg (Amtec)", "6809 System",
+	"Zero (bootleg of Defender, set 2)\0", NULL, "bootleg (Amtec)", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, zero2RomInfo, zero2RomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
@@ -2143,7 +2184,7 @@ struct BurnDriver BurnDrvZero2 = {
 };
 
 
-// Defense Command (Defender bootleg)
+// Defense Command (bootleg of Defender)
 
 static struct BurnRomInfo defcmndRomDesc[] = {
 	{ "defcmnda.1",			0x1000, 0x68effc1d, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2165,30 +2206,64 @@ STD_ROM_FN(defcmnd)
 
 struct BurnDriver BurnDrvDefcmnd = {
 	"defcmnd", "defender", NULL, NULL, "1980",
-	"Defense Command (Defender bootleg)\0", NULL, "bootleg", "6809 System",
+	"Defense Command (bootleg of Defender)\0", NULL, "bootleg", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, defcmndRomInfo, defcmndRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenderWhiteInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Star Trek (Defender bootleg)
+// Defense (bootleg of Defender)
+
+static struct BurnRomInfo defensebRomDesc[] = {
+	{ "1.d9",			0x1000, 0x8c04602b, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "2.c9",			0x1000, 0x89b75984, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "3.d8",			0x1000, 0x94f51e9b, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "10.c4",			0x0800, 0x12e2bd1c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "7.d5",			0x0800, 0x88881cc6, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "9.d4",			0x0800, 0x252605c9, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "6.c6",			0x0800, 0x9deaf6d9, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "8.c5",			0x0800, 0x339e092e, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "5.d6",			0x0800, 0xa543b167, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "4.c7",			0x0800, 0x65f4efd1, 1 | BRF_PRG | BRF_ESS }, //  9
+
+	{ "12.f3.snd",		0x0800, 0xf122d9c9, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+
+	{ "mmi6341.a1",		0x0200, 0x25de5d85, 0 | BRF_OPT },           // 11 Address Decoder
+	{ "mmi6341.l1",		0x0200, 0xc3f45f70, 0 | BRF_OPT },           // 12
+};
+
+STD_ROM_PICK(defenseb)
+STD_ROM_FN(defenseb)
+
+struct BurnDriver BurnDrvDefenseb = {
+	"defenseb", "defender", NULL, NULL, "198?",
+	"Defense (bootleg of Defender)\0", NULL, "bootleg", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	NULL, defensebRomInfo, defensebRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
+	DefenceInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	292, 240, 4, 3
+};
+
+
+// Star Trek (bootleg of Defender)
 
 static struct BurnRomInfo startrkdRomDesc[] = {
-	{ "st_rom8.bin",		0x1000, 0x5af871e3, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "st_rom9.bin",		0x1000, 0x1126adc9, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "st_rom10.bin",		0x1000, 0x4097b46b, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "st_rom6.bin",		0x0800, 0x93012991, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "st_rom5.bin",		0x0800, 0xc6f0c004, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "st_rom4.bin",		0x0800, 0xb48430bf, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "st_rom3.bin",		0x0800, 0xd068f0c5, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "st_rom2.bin",		0x0800, 0xfef4cb77, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "st_rom1.bin",		0x0800, 0xd23d6cdb, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "st_rom7.bin",		0x0800, 0x43d42a1b, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "st_rom8.bin",		0x1000, 0x5af871e3, 1 | BRF_PRG | BRF_ESS }, 	 //  0 M6809 Code
+	{ "st_rom9.bin",		0x1000, 0x1126adc9, 1 | BRF_PRG | BRF_ESS }, 	 //  1
+	{ "st_rom10.bin",		0x1000, 0x4097b46b, 1 | BRF_PRG | BRF_ESS }, 	 //  2
+	{ "st_rom6.bin",		0x0800, 0x93012991, 1 | BRF_PRG | BRF_ESS }, 	 //  3
+	{ "st_rom5.bin",		0x0800, 0xc6f0c004, 1 | BRF_PRG | BRF_ESS }, 	 //  4
+	{ "st_rom4.bin",		0x0800, 0xb48430bf, 1 | BRF_PRG | BRF_ESS }, 	 //  5
+	{ "st_rom3.bin",		0x0800, 0xd068f0c5, 1 | BRF_PRG | BRF_ESS }, 	 //  6
+	{ "st_rom2.bin",		0x0800, 0xfef4cb77, 1 | BRF_PRG | BRF_ESS }, 	 //  7
+	{ "st_rom1.bin",		0x0800, 0xd23d6cdb, 1 | BRF_PRG | BRF_ESS }, 	 //  8
+	{ "st_rom7.bin",		0x0800, 0x43d42a1b, 1 | BRF_PRG | BRF_ESS }, 	 //  9
 
-	{ "defend.snd",			0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
+	{ "video_sound_rom_1.ic12",	0x0800, 0xfefd5b48, 2 | BRF_PRG | BRF_ESS }, // 10 M6808 Code
 };
 
 STD_ROM_PICK(startrkd)
@@ -2196,16 +2271,16 @@ STD_ROM_FN(startrkd)
 
 struct BurnDriver BurnDrvStartrkd = {
 	"startrkd", "defender", NULL, NULL, "1981",
-	"Star Trek (Defender bootleg)\0", NULL, "bootleg", "6809 System",
+	"Star Trek (bootleg of Defender)\0", NULL, "bootleg", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, startrkdRomInfo, startrkdRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenderWhiteInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Defence Command (Defender bootleg)
+// Defence Command (bootleg of Defender)
 
 static struct BurnRomInfo defenceRomDesc[] = {
 	{ "1",					0x1000, 0xebc93622, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2227,16 +2302,16 @@ STD_ROM_FN(defence)
 
 struct BurnDriver BurnDrvDefence = {
 	"defence", "defender", NULL, NULL, "1981",
-	"Defence Command (Defender bootleg)\0", NULL, "bootleg (Outer Limits)", "6809 System",
+	"Defence Command (bootleg of Defender)\0", NULL, "bootleg (Outer Limits)", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, defenceRomInfo, defenceRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenceInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Attack (Defender bootleg)
+// Attack (bootleg of Defender)
 
 static struct BurnRomInfo attackfRomDesc[] = {
 	{ "002-1.ic1",		0x1000, 0x0ee1019d, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2260,7 +2335,7 @@ STD_ROM_FN(attackf)
 
 struct BurnDriver BurnDrvAttackf = {
 	"attackf", "defender", NULL, NULL, "1980",
-	"Attack (Defender bootleg)\0", NULL, "bootleg (Famare SA)", "6809 System",
+	"Attack (bootleg of Defender)\0", NULL, "bootleg (Famaresa)", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, attackfRomInfo, attackfRomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
@@ -2269,7 +2344,7 @@ struct BurnDriver BurnDrvAttackf = {
 };
 
 
-// Galaxy Wars II (Defender bootleg)
+// Galaxy Wars II (bootleg of Defender)
 
 static struct BurnRomInfo galwars2RomDesc[] = {
 	{ "9d-1-2532.bin",		0x1000, 0xebc93622, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2294,9 +2369,9 @@ STD_ROM_FN(galwars2)
 
 struct BurnDriver BurnDrvGalwars2 = {
 	"galwars2", "defender", NULL, NULL, "1981",
-	"Galaxy Wars II (Defender bootleg)\0", NULL, "bootleg (Sonic)", "6809 System",
+	"Galaxy Wars II (bootleg of Defender)\0", NULL, "bootleg (Sonic)", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, galwars2RomInfo, galwars2RomName, NULL, NULL, NULL, NULL, DefenderInputInfo, NULL,
 	DefenceInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2331,7 +2406,7 @@ struct BurnDriver BurnDrvMayday = {
 	"mayday", NULL, NULL, NULL, "1980",
 	"Mayday (set 1)\0", NULL, "Hoei", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, maydayRomInfo, maydayRomName, NULL, NULL, NULL, NULL, MaydayInputInfo, NULL,
 	MaydayInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2359,7 +2434,7 @@ struct BurnDriver BurnDrvMaydaya = {
 	"maydaya", "mayday", NULL, NULL, "1980",
 	"Mayday (set 2)\0", NULL, "Hoei", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, maydayaRomInfo, maydayaRomName, NULL, NULL, NULL, NULL, MaydayInputInfo, NULL,
 	MaydayInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2392,7 +2467,7 @@ struct BurnDriver BurnDrvMaydayb = {
 	"maydayb", "mayday", NULL, NULL, "1980",
 	"Mayday (set 3)\0", NULL, "Hoei", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, maydaybRomInfo, maydaybRomName, NULL, NULL, NULL, NULL, MaydayInputInfo, NULL,
 	MaydayInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2420,7 +2495,7 @@ struct BurnDriver BurnDrvBatlzone = {
 	"batlzone", "mayday", NULL, NULL, "1980",
 	"Battle Zone (bootleg of Mayday)\0", NULL, "bootleg (Video Game)", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, batlzoneRomInfo, batlzoneRomName, NULL, NULL, NULL, NULL, MaydayInputInfo, NULL,
 	MaydayInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2522,7 +2597,7 @@ struct BurnDriver BurnDrvJin = {
 	"jin", NULL, NULL, NULL, "1982",
 	"Jin\0", NULL, "Falcon", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_PUZZLE, 0,
 	NULL, jinRomInfo, jinRomName, NULL, NULL, NULL, NULL, JinInputInfo, JinDIPInfo,
 	JinInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	240, 316, 3, 4
@@ -2530,25 +2605,26 @@ struct BurnDriver BurnDrvJin = {
 
 
 // Stargate
+/* "B" ROMs labeled 3002-13 through 3002-24, identical data */
 
 static struct BurnRomInfo stargateRomDesc[] = {
-	{ "10",					0x1000, 0x60b07ff7, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "11",					0x1000, 0x7d2c5daf, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "12",					0x1000, 0xa0396670, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "01",					0x1000, 0x88824d18, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "02",					0x1000, 0xafc614c5, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "03",					0x1000, 0x15077a9d, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "04",					0x1000, 0xa8b4bf0f, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "05",					0x1000, 0x2d306074, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "06",					0x1000, 0x53598dde, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "07",					0x1000, 0x23606060, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "08",					0x1000, 0x4ec490c7, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "09",					0x1000, 0x88187b64, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "stargate_rom_10-a_3002-10.a7",	0x1000, 0x60b07ff7, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "stargate_rom_11-a_3002-11.c7",	0x1000, 0x7d2c5daf, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "stargate_rom_12-a_3002-12.e7",	0x1000, 0xa0396670, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "stargate_rom_1-a_3002-1.e4",		0x1000, 0x88824d18, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "stargate_rom_2-a_3002-2.c4",		0x1000, 0xafc614c5, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "stargate_rom_3-a_3002-3.a4",		0x1000, 0x15077a9d, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "stargate_rom_4-a_3002-4.e5",		0x1000, 0xa8b4bf0f, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "stargate_rom_5-a_3002-5.c5",		0x1000, 0x2d306074, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "stargate_rom_6-a_3002-6.a5",		0x1000, 0x53598dde, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "stargate_rom_7-a_3002-7.e6",		0x1000, 0x23606060, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "stargate_rom_8-a_3002-8.c6",		0x1000, 0x4ec490c7, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "stargate_rom_9-a_3002-9.a6",		0x1000, 0x88187b64, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "sg.snd",				0x0800, 0x2fcf6c4d, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_2_std_744.ic12",	0x0800, 0x2fcf6c4d, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.5",			0x0200, 0xf921c5fe, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_5.3c",				0x0200, 0xf921c5fe, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(stargate)
@@ -2573,25 +2649,26 @@ struct BurnDriver BurnDrvStargate = {
 
 
 // Robotron: 2084 (Solid Blue label)
+/* Solid Blue labels, "B" type ROMs labeled 3005-13 through 3005-24 */
 
 static struct BurnRomInfo robotronRomDesc[] = {
-	{ "robotron.sba",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "robotron.sbb",		0x1000, 0x7e3c1b87, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "robotron.sbc",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "robotron.sb1",		0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "robotron.sb2",		0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "robotron.sb3",		0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "robotron.sb4",		0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "robotron.sb5",		0x1000, 0x62691e77, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "robotron.sb6",		0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "robotron.sb7",		0x1000, 0x49ac400c, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "robotron.sb8",		0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "robotron.sb9",		0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "2084_rom_10b_3005-22.a7",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "2084_rom_11b_3005-23.c7",		0x1000, 0x7e3c1b87, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "2084_rom_12b_3005-24.e7",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "2084_rom_1b_3005-13.e4",			0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "2084_rom_2b_3005-14.c4",			0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "2084_rom_3b_3005-15.a4",			0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "2084_rom_4b_3005-16.e5",			0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "2084_rom_5b_3005-17.c5",			0x1000, 0x62691e77, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "2084_rom_6b_3005-18.a5",			0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "2084_rom_7b_3005-19.e6",			0x1000, 0x49ac400c, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "2084_rom_8b_3005-20.c6",			0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "2084_rom_9b_3005-21.a6",			0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "robotron.snd",		0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(robotron)
@@ -2614,25 +2691,26 @@ struct BurnDriver BurnDrvRobotron = {
 
 
 // Robotron: 2084 (Yellow/Orange label)
-
+/* Yellow label / Red stripe & Black print or Yellow label / Red stripe & Green print "B" type ROMs numbered 3005-13 through 3005-24 */
+	
 static struct BurnRomInfo robotronyoRomDesc[] = {
-	{ "robotron.yoa",		0x1000, 0x4a9d5f52, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "robotron.yob",		0x1000, 0x2afc5e7f, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "robotron.yoc",		0x1000, 0x45da9202, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "robotron.sb1",		0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "robotron.sb2",		0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "robotron.yo3",		0x1000, 0x67a369bc, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "robotron.yo4",		0x1000, 0xb0de677a, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "robotron.yo5",		0x1000, 0x24726007, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "robotron.yo6",		0x1000, 0x028181a6, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "robotron.yo7",		0x1000, 0x4dfcceae, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "robotron.sb8",		0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "robotron.sb9",		0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "2084_rom_10b_3005-10.a7",		0x1000, 0x4a9d5f52, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "2084_rom_11b_3005-11.c7",		0x1000, 0x2afc5e7f, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "2084_rom_12b_3005-12.e7",		0x1000, 0x45da9202, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "2084_rom_1b_3005-1.e4",			0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "2084_rom_2b_3005-2.c4",			0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "2084_rom_3b_3005-3.a4",			0x1000, 0x67a369bc, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "2084_rom_4b_3005-4.e5",			0x1000, 0xb0de677a, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "2084_rom_5b_3005-5.c5",			0x1000, 0x24726007, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "2084_rom_6b_3005-6.a5",			0x1000, 0x028181a6, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "2084_rom_7b_3005-7.e6",			0x1000, 0x4dfcceae, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "2084_rom_8b_3005-8.c6",			0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "2084_rom_9b_3005-9.a6",			0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "robotron.snd",		0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(robotronyo)
@@ -2649,26 +2727,63 @@ struct BurnDriver BurnDrvRobotronyo = {
 };
 
 
+// Robotron: 2084 (Unidesa license)
+
+static struct BurnRomInfo robotronunRomDesc[] = {
+	{ "roboun11.10b",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "roboun11.11b",		0x1000, 0x7e3c1b87, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "roboun11.12b",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "roboun11.1b",		0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "roboun11.2b",		0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "roboun11.3b",		0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "roboun11.4b",		0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "roboun11.5b",		0x1000, 0x62691e77, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "roboun11.6b",		0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "roboun11.7b",		0x1000, 0x8981a43b, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "roboun11.8b",		0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "roboun11.9b",		0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
+
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+
+	{ "decoder_rom_4.3g",	0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",	0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+};
+
+STD_ROM_PICK(robotronun)
+STD_ROM_FN(robotronun)
+
+struct BurnDriver BurnDrvRobotronun = {
+	"robotronun", "robotron", NULL, NULL, "1982",
+	"Robotron: 2084 (Unidesa license)\0", NULL, "Williams / Vid Kidz (Unidesa license)", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, robotronunRomInfo, robotronunRomName, NULL, NULL, NULL, NULL, RobotronInputInfo, NULL,
+	RobotronInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	292, 240, 4, 3
+};
+
+
 // Robotron: 2084 (1987 'shot-in-the-corner' bugfix)
+/* Patch by Christian Gingras in 1987 fixing 7 bugs, AKA "Shot in the corner" bug fix */
 
 static struct BurnRomInfo robotron87RomDesc[] = {
-	{ "robotron.sba",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "fixrobo.sbb",		0x1000, 0xe83a2eda, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "robotron.sbc",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "robotron.sb1",		0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "robotron.sb2",		0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "robotron.sb3",		0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "robotron.sb4",		0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "fixrobo.sb5",		0x1000, 0x827cb5c9, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "robotron.sb6",		0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "robotron.sb7",		0x1000, 0x49ac400c, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "robotron.sb8",		0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "robotron.sb9",		0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "2084_rom_10b_3005-22.a7",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "fixrobo_rom_11b.c7",				0x1000, 0xe83a2eda, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "2084_rom_12b_3005-24.e7",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "2084_rom_1b_3005-13.e4",			0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "2084_rom_2b_3005-14.c4",			0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "2084_rom_3b_3005-15.a4",			0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "2084_rom_4b_3005-16.e5",			0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "fixrobo_rom_5b.c5",				0x1000, 0x827cb5c9, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "2084_rom_6b_3005-18.a5",			0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "2084_rom_7b_3005-19.e6",			0x1000, 0x49ac400c, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "2084_rom_8b_3005-20.c6",			0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "2084_rom_9b_3005-21.a6",			0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "robotron.snd",		0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(robotron87)
@@ -2678,7 +2793,7 @@ struct BurnDriver BurnDrvRobotron87 = {
 	"robotron87", "robotron", NULL, NULL, "1987",
 	"Robotron: 2084 (1987 'shot-in-the-corner' bugfix)\0", NULL, "hack", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, robotron87RomInfo, robotron87RomName, NULL, NULL, NULL, NULL, RobotronInputInfo, NULL,
 	RobotronInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2688,23 +2803,23 @@ struct BurnDriver BurnDrvRobotron87 = {
 // Robotron: 2084 (2012 'wave 201 start' hack)
 
 static struct BurnRomInfo robotron12RomDesc[] = {
-	{ "robotron.sba",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "fixrobo.sbb",		0x1000, 0xe83a2eda, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "robotron.sbc",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "robotron.sb1",		0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "robotron.sb2",		0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "wave201.sb3",		0x1000, 0x85eb583e, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "robotron.sb4",		0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "fixrobo.sb5",		0x1000, 0x827cb5c9, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "robotron.sb6",		0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "robotron.sb7",		0x1000, 0x49ac400c, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "robotron.sb8",		0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "robotron.sb9",		0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "2084_rom_10b_3005-22.a7",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "fixrobo_rom_11b.c7",				0x1000, 0xe83a2eda, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "2084_rom_12b_3005-24.e7",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "2084_rom_1b_3005-13.e4",			0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "2084_rom_2b_3005-14.c4",			0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "wave201.a4",						0x1000, 0x85eb583e, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "2084_rom_4b_3005-16.e5",			0x1000, 0xafb1c561, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "fixrobo_rom_5b.c5",				0x1000, 0x827cb5c9, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "2084_rom_6b_3005-18.a5",			0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "2084_rom_7b_3005-19.e6",			0x1000, 0x49ac400c, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "2084_rom_8b_3005-20.c6",			0x1000, 0x3a96e88c, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "2084_rom_9b_3005-21.a6",			0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "robotron.snd",		0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(robotron12)
@@ -2714,7 +2829,7 @@ struct BurnDriver BurnDrvRobotron12 = {
 	"robotron12", "robotron", NULL, NULL, "2012",
 	"Robotron: 2084 (2012 'wave 201 start' hack)\0", NULL, "hack", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK, 2, HARDWARE_MISC_POST90S, GBF_SHOOT, 0,
 	NULL, robotron12RomInfo, robotron12RomName, NULL, NULL, NULL, NULL, RobotronInputInfo, NULL,
 	RobotronInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2722,25 +2837,26 @@ struct BurnDriver BurnDrvRobotron12 = {
 
 
 // Robotron: 2084 (2015 'tie-die V2' hack)
+/* Tie-Die version starts with a "Solid Blue label" set */
 
 static struct BurnRomInfo robotrontdRomDesc[] = {
-	{ "tiedie.sba",			0x1000, 0x952bea55, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "tiedie.sbb",			0x1000, 0x4c05fd3c, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "robotron.sbc",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "robotron.sb1",		0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "robotron.sb2",		0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "robotron.sb3",		0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "tiedie.sb4",			0x1000, 0xe8238019, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "fixrobo.sb5",		0x1000, 0x827cb5c9, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "robotron.sb6",		0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "tiedie.sb7",			0x1000, 0x3ecf4620, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "tiedie.sb8",			0x1000, 0x752d7a46, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "robotron.sb9",		0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "tiedie_rom_10b.a7",				0x1000, 0x952bea55, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "tiedie_rom_11b.c7",				0x1000, 0x4c05fd3c, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "2084_rom_12b_3005-24.e7",		0x1000, 0x645d543e, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "2084_rom_1b_3005-13.e4",			0x1000, 0x66c7d3ef, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "2084_rom_2b_3005-14.c4",			0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "2084_rom_3b_3005-15.a4",			0x1000, 0xe99a82be, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "tiedie_rom_4b.e5",				0x1000, 0xe8238019, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "fixrobo_rom_5b.c5",				0x1000, 0x827cb5c9, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "2084_rom_6b_3005-18.a5",			0x1000, 0xbd2c853d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "tiedie_rom_7b.e6",				0x1000, 0x3ecf4620, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "tiedie_rom_8b.c6",				0x1000, 0x752d7a46, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "2084_rom_9b_3005-21.a6",			0x1000, 0xb124367b, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "robotron.snd",		0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(robotrontd)
@@ -2750,33 +2866,34 @@ struct BurnDriver BurnDrvRobotrontd = {
 	"robotrontd", "robotron", NULL, NULL, "2015",
 	"Robotron: 2084 (2015 'tie-die V2' hack)\0", NULL, "hack", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK, 2, HARDWARE_MISC_POST90S, GBF_SHOOT, 0,
 	NULL, robotrontdRomInfo, robotrontdRomName, NULL, NULL, NULL, NULL, RobotronInputInfo, NULL,
 	RobotronInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Joust (White/Green label)
+// Joust (Green label)
+/* Solid green labels - contains the same data as the white label with green stripe 3006-52 through 3006-63 set */
 
 static struct BurnRomInfo joustRomDesc[] = {
-	{ "3006-22.10b",		0x1000, 0x3f1c4f89, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "3006-23.11b",		0x1000, 0xea48b359, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "3006-24.12b",		0x1000, 0xc710717b, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "3006-13.1b",			0x1000, 0xfe41b2af, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "3006-14.2b",			0x1000, 0x501c143c, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "3006-15.3b",			0x1000, 0x43f7161d, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "3006-16.4b",			0x1000, 0xdb5571b6, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "3006-17.5b",			0x1000, 0xc686bb6b, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "3006-18.6b",			0x1000, 0xfac5f2cf, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "3006-19.7b",			0x1000, 0x81418240, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "3006-20.8b",			0x1000, 0xba5359ba, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "3006-21.9b",			0x1000, 0x39643147, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "joust_rom_10b_3006-22.a7",		0x1000, 0x3f1c4f89, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "joust_rom_11b_3006-23.c7",		0x1000, 0xea48b359, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "joust_rom_12b_3006-24.e7",		0x1000, 0xc710717b, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "joust_rom_1b_3006-13.e4",		0x1000, 0xfe41b2af, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "joust_rom_2b_3006-14.c4",		0x1000, 0x501c143c, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "joust_rom_3b_3006-15.a4",		0x1000, 0x43f7161d, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "joust_rom_4b_3006-16.e5",		0x1000, 0xdb5571b6, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "joust_rom_5b_3006-17.c5",		0x1000, 0xc686bb6b, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "joust_rom_6b_3006-18.a5",		0x1000, 0xfac5f2cf, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "joust_rom_7b_3006-19.e6",		0x1000, 0x81418240, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "joust_rom_8b_3006-20.c6",		0x1000, 0xba5359ba, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "joust_rom_9b_3006-21.a6",		0x1000, 0x39643147, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "joust.snd",			0x1000, 0xf1835bdd, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_4_std_780.ic12",	0x1000, 0xf1835bdd, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(joust)
@@ -2798,71 +2915,73 @@ static INT32 JoustInit()
 
 struct BurnDriver BurnDrvJoust = {
 	"joust", NULL, NULL, NULL, "1982",
-	"Joust (White/Green label)\0", NULL, "Williams", "6809 System",
+	"Joust (Green label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, joustRomInfo, joustRomName, NULL, NULL, NULL, NULL, JoustInputInfo, NULL,
 	JoustInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Joust (White/Red label)
+// Joust (Yellow label)
+/* Solid yellow labels */
 
-static struct BurnRomInfo joustwrRomDesc[] = {
-	{ "joust.wra",			0x1000, 0x2039014a, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "joust.wgb",			0x1000, 0xea48b359, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "joust.wgc",			0x1000, 0xc710717b, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "joust.wg1",			0x1000, 0xfe41b2af, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "joust.wg2",			0x1000, 0x501c143c, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "joust.wg3",			0x1000, 0x43f7161d, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "joust.wg4",			0x1000, 0xdb5571b6, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "joust.wg5",			0x1000, 0xc686bb6b, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "joust.wg6",			0x1000, 0xfac5f2cf, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "joust.wr7",			0x1000, 0xe6f439c4, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "joust.wg8",			0x1000, 0xba5359ba, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "joust.wg9",			0x1000, 0x39643147, 1 | BRF_PRG | BRF_ESS }, // 11
+static struct BurnRomInfo joustyRomDesc[] = {
+	{ "joust_rom_10a_3006-10.a7",		0x1000, 0x2039014a, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "joust_rom_11a_3006-11.c7",		0x1000, 0xea48b359, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "joust_rom_12a_3006-12.e7",		0x1000, 0xc710717b, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "joust_rom_1a_3006-1.e4",			0x1000, 0xfe41b2af, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "joust_rom_2a_3006-2.c4",			0x1000, 0x501c143c, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "joust_rom_3a_3006-3.a4",			0x1000, 0x43f7161d, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "joust_rom_4a_3006-4.e5",			0x1000, 0xdb5571b6, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "joust_rom_5a_3006-5.c5",			0x1000, 0xc686bb6b, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "joust_rom_6a_3006-6.a5",			0x1000, 0xfac5f2cf, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "joust_rom_7a_3006-7.e6",			0x1000, 0xe6f439c4, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "joust_rom_8a_3006-8.c6",			0x1000, 0xba5359ba, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "joust_rom_9a_3006-9.a6",			0x1000, 0x39643147, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "joust.snd",			0x1000, 0xf1835bdd, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_4_std_780.ic12",	0x1000, 0xf1835bdd, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
-STD_ROM_PICK(joustwr)
-STD_ROM_FN(joustwr)
+STD_ROM_PICK(jousty)
+STD_ROM_FN(jousty)
 
-struct BurnDriver BurnDrvJoustwr = {
-	"joustwr", "joust", NULL, NULL, "1982",
-	"Joust (White/Red label)\0", NULL, "Williams", "6809 System",
+struct BurnDriver BurnDrvJousty = {
+	"jousty", "joust", NULL, NULL, "1982",
+	"Joust (Yellow label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_PLATFORM, 0,
-	NULL, joustwrRomInfo, joustwrRomName, NULL, NULL, NULL, NULL, JoustInputInfo, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
+	NULL, joustyRomInfo, joustyRomName, NULL, NULL, NULL, NULL, JoustInputInfo, NULL,
 	JoustInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Joust (Solid Red label)
+// Joust (Red label)
+/* Solid red labels */
 
 static struct BurnRomInfo joustrRomDesc[] = {
-	{ "joust.sra",			0x1000, 0xc0c6e52a, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "joust.srb",			0x1000, 0xab11bcf9, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "joust.src",			0x1000, 0xea14574b, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "joust.wg1",			0x1000, 0xfe41b2af, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "joust.wg2",			0x1000, 0x501c143c, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "joust.wg3",			0x1000, 0x43f7161d, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "joust.sr4",			0x1000, 0xab347170, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "joust.wg5",			0x1000, 0xc686bb6b, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "joust.sr6",			0x1000, 0x3d9a6fac, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "joust.sr7",			0x1000, 0x0a70b3d1, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "joust.sr8",			0x1000, 0xa7f01504, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "joust.sr9",			0x1000, 0x978687ad, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "joust_rom_10a_3006-37.a7",		0x1000, 0xc0c6e52a, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "joust_rom_11a_3006-38.c7",		0x1000, 0xab11bcf9, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "joust_rom_12a_3006-39.e7",		0x1000, 0xea14574b, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "joust_rom_1a_3006-28.e4",		0x1000, 0xfe41b2af, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "joust_rom_2a_3006-29.c4",		0x1000, 0x501c143c, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "joust_rom_3a_3006-30.a4",		0x1000, 0x43f7161d, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "joust_rom_4a_3006-31.e5",		0x1000, 0xab347170, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "joust_rom_5a_3006-32.c5",		0x1000, 0xc686bb6b, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "joust_rom_6a_3006-33.a5",		0x1000, 0x3d9a6fac, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "joust_rom_7a_3006-34.e6",		0x1000, 0x0a70b3d1, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "joust_rom_8a_3006-35.c6",		0x1000, 0xa7f01504, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "joust_rom_9a_3006-36.a6",		0x1000, 0x978687ad, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "joust.snd",			0x1000, 0xf1835bdd, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_4_std_780.ic12",	0x1000, 0xf1835bdd, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(joustr)
@@ -2870,9 +2989,9 @@ STD_ROM_FN(joustr)
 
 struct BurnDriver BurnDrvJoustr = {
 	"joustr", "joust", NULL, NULL, "1982",
-	"Joust (Solid Red label)\0", NULL, "Williams", "6809 System",
+	"Joust (Red label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, joustrRomInfo, joustrRomName, NULL, NULL, NULL, NULL, JoustInputInfo, NULL,
 	JoustInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2882,23 +3001,23 @@ struct BurnDriver BurnDrvJoustr = {
 // Bubbles
 
 static struct BurnRomInfo bubblesRomDesc[] = {
-	{ "bubbles.10b",		0x1000, 0x26e7869b, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "bubbles.11b",		0x1000, 0x5a5b572f, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "bubbles.12b",		0x1000, 0xce22d2e2, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "bubbles.1b",			0x1000, 0x8234f55c, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "bubbles.2b",			0x1000, 0x4a188d6a, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "bubbles.3b",			0x1000, 0x7728f07f, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "bubbles.4b",			0x1000, 0x040be7f9, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "bubbles.5b",			0x1000, 0x0b5f29e0, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "bubbles.6b",			0x1000, 0x4dd0450d, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "bubbles.7b",			0x1000, 0xe0a26ec0, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "bubbles.8b",			0x1000, 0x4fd23d8d, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "bubbles.9b",			0x1000, 0xb48559fb, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "bubbles_rom_10b_16-3012-49.a7",	0x1000, 0x26e7869b, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "bubbles_rom_11b_16-3012-50.c7",	0x1000, 0x5a5b572f, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "bubbles_rom_12b_16-3012-51.e7",	0x1000, 0xce22d2e2, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "bubbles_rom_1b_16-3012-40.4e",	0x1000, 0x8234f55c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "bubbles_rom_2b_16-3012-41.4c",	0x1000, 0x4a188d6a, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "bubbles_rom_3b_16-3012-42.4a",	0x1000, 0x7728f07f, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "bubbles_rom_4b_16-3012-43.5e",	0x1000, 0x040be7f9, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "bubbles_rom_5b_16-3012-44.5c",	0x1000, 0x0b5f29e0, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "bubbles_rom_6b_16-3012-45.5a",	0x1000, 0x4dd0450d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "bubbles_rom_7b_16-3012-46.6e",	0x1000, 0xe0a26ec0, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "bubbles_rom_8b_16-3012-47.6c",	0x1000, 0x4fd23d8d, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "bubbles_rom_9b_16-3012-48.6a",	0x1000, 0xb48559fb, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "bubbles.snd",		0x1000, 0x689ce2aa, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_5_std_771.ic12",	0x1000, 0x689ce2aa, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(bubbles)
@@ -2921,7 +3040,7 @@ struct BurnDriver BurnDrvBubbles = {
 	"bubbles", NULL, NULL, NULL, "1982",
 	"Bubbles\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, bubblesRomInfo, bubblesRomName, NULL, NULL, NULL, NULL, BubblesInputInfo, NULL,
 	BubblesInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -2944,10 +3063,10 @@ static struct BurnRomInfo bubblesrRomDesc[] = {
 	{ "bubblesr.8b",		0x1000, 0x598b9bd6, 1 | BRF_PRG | BRF_ESS }, // 10
 	{ "bubbles.9b",			0x1000, 0xb48559fb, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "bubbles.snd",		0x1000, 0x689ce2aa, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_5_std_771.ic12",		0x1000, 0x689ce2aa, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",	0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",	0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(bubblesr)
@@ -2957,14 +3076,14 @@ struct BurnDriver BurnDrvBubblesr = {
 	"bubblesr", "bubbles", NULL, NULL, "1982",
 	"Bubbles (Solid Red label)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, bubblesrRomInfo, bubblesrRomName, NULL, NULL, NULL, NULL, BubblesInputInfo, NULL,
 	BubblesInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Bubbles (prototype version)
+// Bubbles (prototype)
 
 static struct BurnRomInfo bubblespRomDesc[] = {
 	{ "bub_prot.10b",		0x1000, 0x89a565df, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2976,14 +3095,14 @@ static struct BurnRomInfo bubblespRomDesc[] = {
 	{ "bub_prot.4b",		0x1000, 0x4e264f01, 1 | BRF_PRG | BRF_ESS }, //  6
 	{ "bub_prot.5b",		0x1000, 0x121b0be6, 1 | BRF_PRG | BRF_ESS }, //  7
 	{ "bub_prot.6b",		0x1000, 0x80e90b25, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "bubbles.7b",			0x1000, 0xe0a26ec0, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "bub_prot.7b",		0x1000, 0xe0a26ec0, 1 | BRF_PRG | BRF_ESS }, //  9
 	{ "bub_prot.8b",		0x1000, 0x96fb19c8, 1 | BRF_PRG | BRF_ESS }, // 10
 	{ "bub_prot.9b",		0x1000, 0xbe7e1028, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "bubbles.snd",		0x1000, 0x689ce2aa, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_5_std_771.ic12",		0x1000, 0x689ce2aa, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",	0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",	0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(bubblesp)
@@ -2991,9 +3110,9 @@ STD_ROM_FN(bubblesp)
 
 struct BurnDriver BurnDrvBubblesp = {
 	"bubblesp", "bubbles", NULL, NULL, "1982",
-	"Bubbles (prototype version)\0", NULL, "Williams", "6809 System",
+	"Bubbles (prototype)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, bubblespRomInfo, bubblespRomName, NULL, NULL, NULL, NULL, BubblesInputInfo, NULL,
 	BubblesInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -3003,23 +3122,24 @@ struct BurnDriver BurnDrvBubblesp = {
 // Splat!
 
 static struct BurnRomInfo splatRomDesc[] = {
-	{ "splat.10",			0x1000, 0xd1a1f632, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "splat.11",			0x1000, 0xca8cde95, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "splat.12",			0x1000, 0x5bee3e60, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "splat.01",			0x1000, 0x1cf26e48, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "splat.02",			0x1000, 0xac0d4276, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "splat.03",			0x1000, 0x74873e59, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "splat.04",			0x1000, 0x70a7064e, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "splat.05",			0x1000, 0xc6895221, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "splat.06",			0x1000, 0xea4ab7fd, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "splat.07",			0x1000, 0x82fd8713, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "splat.08",			0x1000, 0x7dded1b4, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "splat.09",			0x1000, 0x71cbfe5a, 1 | BRF_PRG | BRF_ESS }, // 11
+	/* Solid Brown labels */
+	{ "splat_rom_10b_16-3011-10.a7",	0x1000, 0xd1a1f632, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "splat_rom_11b_16-3011-11.c7",	0x1000, 0xca8cde95, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "splat_rom_12b_16-3011-12.e7",	0x1000, 0x5bee3e60, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "splat_rom_1b_16-3011-1.e4",		0x1000, 0x1cf26e48, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "splat_rom_2b_16-3011-2.c4",		0x1000, 0xac0d4276, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "splat_rom_3b_16-3011-3.a4",		0x1000, 0x74873e59, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "splat_rom_4b_16-3011-4.e5",		0x1000, 0x70a7064e, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "splat_rom_5b_16-3011-5.c5",		0x1000, 0xc6895221, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "splat_rom_6b_16-3011-6.a5",		0x1000, 0xea4ab7fd, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "splat_rom_7b_16-3011-7.e6",		0x1000, 0x82fd8713, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "splat_rom_8b_16-3011-8.c6",		0x1000, 0x7dded1b4, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "splat_rom_9b_16-3011-9.a6",		0x1000, 0x71cbfe5a, 1 | BRF_PRG | BRF_ESS }, // 11
 
-	{ "splat.snd",			0x1000, 0xa878d5f3, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+	{ "video_sound_rom_13_std.ic12",	0x1000, 0xa878d5f3, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(splat)
@@ -3045,7 +3165,7 @@ struct BurnDriver BurnDrvSplat = {
 	"splat", NULL, NULL, NULL, "1982",
 	"Splat!\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, splatRomInfo, splatRomName, NULL, NULL, NULL, NULL, SplatInputInfo, NULL,
 	SplatInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -3137,7 +3257,7 @@ struct BurnDriver BurnDrvAlienar = {
 	"alienar", NULL, NULL, NULL, "1985",
 	"Alien Arena\0", "Game has no sound", "Duncan Brown", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, alienarRomInfo, alienarRomName, NULL, NULL, NULL, NULL, AlienarInputInfo, NULL,
 	AlienarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
@@ -3173,36 +3293,37 @@ struct BurnDriver BurnDrvAlienaru = {
 	"alienaru", "alienar", NULL, NULL, "1985",
 	"Alien Arena (Stargate upgrade)\0", NULL, "Duncan Brown", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, alienaruRomInfo, alienaruRomName, NULL, NULL, NULL, NULL, AlienarInputInfo, NULL,
 	AlienarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
 
 
-// Sinistar (revision 3)
+// Sinistar (revision 3, upright)
+// solid RED labels with final production part numbers
 
 static struct BurnRomInfo sinistarRomDesc[] = {
-	{ "sinistar.10",		0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "sinistar.11",		0x1000, 0x3162bc50, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "sinistar.01",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "sinistar.02",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "sinistar.03",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "sinistar.04",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "sinistar.05",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "sinistar.06",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "sinistar.07",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "sinistar.08",		0x1000, 0x4785a787, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "sinistar.09",		0x1000, 0x50cb63ad, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "sinistar_rom_10-b_16-3004-62.4c",	0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "sinistar_rom_11-b_16-3004-63.4a",	0x1000, 0x3162bc50, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-53.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-54.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-55.1a",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-56.2d",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-57.2c",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-58.2a",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-59.3d",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-60.3c",		0x1000, 0x4785a787, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-61.3a",		0x1000, 0x50cb63ad, 1 | BRF_PRG | BRF_ESS }, // 10
 
-	{ "speech.ic7",			0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
-	{ "speech.ic5",			0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
-	{ "speech.ic6",			0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
-	{ "speech.ic4",			0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
-	{ "sinistar.snd",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
 };
 
 STD_ROM_PICK(sinistar)
@@ -3236,7 +3357,7 @@ static INT32 SinistarInit()
 
 struct BurnDriver BurnDrvSinistar = {
 	"sinistar", NULL, NULL, NULL, "1982",
-	"Sinistar (revision 3)\0", NULL, "Williams", "6809 System",
+	"Sinistar (revision 3, upright)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, sinistarRomInfo, sinistarRomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
@@ -3245,68 +3366,217 @@ struct BurnDriver BurnDrvSinistar = {
 };
 
 
-// Sinistar (prototype version)
+// Sinistar (revision 3, cockpit)
 
-static struct BurnRomInfo sinistar1RomDesc[] = {
-	{ "sinrev1.10",			0x1000, 0xea87a53f, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "sinrev1.11",			0x1000, 0x88d36e80, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "sinrev1.01",			0x1000, 0x3810d7b8, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "sinistar.02",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "sinrev1.03",			0x1000, 0x7c984ca9, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "sinrev1.04",			0x1000, 0xcc6c4f24, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "sinrev1.05",			0x1000, 0x12285bfe, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "sinrev1.06",			0x1000, 0x7a675f35, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "sinrev1.07",			0x1000, 0xb0463243, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "sinrev1.08",			0x1000, 0x909040d4, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "sinrev1.09",			0x1000, 0xcc949810, 1 | BRF_PRG | BRF_ESS }, // 10
+static struct BurnRomInfo sinistarcRomDesc[] = {
+	{ "sinistar_rom_10-b_16-3004-62.4c",	0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
+	{ "sinistar_rom_11-b_16-3004-63.4a",	0x1000, 0x3162bc50, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-53.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-54.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-55.1a",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-56.2d",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-57.2c",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-58.2a",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-59.3d",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-60.3c",		0x1000, 0x4785a787, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-61.3a",		0x1000, 0x50cb63ad, 1 | BRF_PRG | BRF_ESS }, // 10
 
-	{ "speech.ic7",			0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
-	{ "speech.ic5",			0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
-	{ "speech.ic6",			0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
-	{ "speech.ic4",			0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
-	{ "sinistar.snd",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 soundcpu
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+	{ "video_sound_rom_10_std.ic12",		0x1000, 0xb5c70082, 3 | BRF_PRG | BRF_ESS }, // 16 soundcpu_b
+
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 17 proms
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 18
 };
 
-STD_ROM_PICK(sinistar1)
-STD_ROM_FN(sinistar1)
+STD_ROM_PICK(sinistarc)
+STD_ROM_FN(sinistarc)
 
-struct BurnDriver BurnDrvSinistar1 = {
-	"sinistar1", "sinistar", NULL, NULL, "1982",
-	"Sinistar (prototype version)\0", NULL, "Williams", "6809 System",
+static INT32 SinistarCockpitInit()
+{
+	INT32 nRet = SinistarInit();
+
+	if (nRet == 0) {
+		M6800Init(1);
+		M6800Open(1);
+		M6800MapMemory(DrvM6800RAM1,				0x0000, 0x00ff, MAP_RAM);
+		M6800MapMemory(DrvM6800ROM1 + 0xb000,		0xb000, 0xffff, MAP_ROM);
+		M6800SetWriteHandler(blaster_sound_write);
+		M6800SetReadHandler(blaster_sound_read);
+		M6800Close();
+
+		pia_config(4, 0, &pia_4); // 2nd soundboard
+
+		DACSetRoute(0, 0.35, BURN_SND_ROUTE_LEFT);
+
+		DACInit(1, 0, 0, M6800TotalCycles, 894886);
+		DACSetRoute(1, 0.35, BURN_SND_ROUTE_RIGHT);
+
+		sinistarc = 1;
+	}
+
+	return nRet;
+}
+
+struct BurnDriver BurnDrvSinistarc = {
+	"sinistarc", "sinistar", NULL, NULL, "1982",
+	"Sinistar (revision 3, cockpit)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
-	NULL, sinistar1RomInfo, sinistar1RomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, sinistarcRomInfo, sinistarcRomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
+	SinistarCockpitInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	240, 292, 3, 4
+};
+
+
+// Sinistar (revision 2, cockpit)
+
+static struct BurnRomInfo sinistarc2RomDesc[] = {
+	{ "sinistar_rom_10-b_16-3004-47.4c",	0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
+	{ "sinistar_rom_11-b_16-3004-48.4a",	0x1000, 0x792c8b00, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-38.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-39.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-40.1a",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-41.2d",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-42.2c",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-43.2a",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-44.3d",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-45.3c",		0x1000, 0xd7ecee45, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-46.3a",		0x1000, 0x50cb63ad, 1 | BRF_PRG | BRF_ESS }, // 10
+
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 soundcpu
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+
+	{ "video_sound_rom_10_std.ic12",		0x1000, 0xb5c70082, 3 | BRF_PRG | BRF_ESS }, // 16 soundcpu_b
+
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 17 proms
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 18
+};
+
+STD_ROM_PICK(sinistarc2)
+STD_ROM_FN(sinistarc2)
+
+struct BurnDriver BurnDrvSinistarc2 = {
+	"sinistarc2", "sinistar", NULL, NULL, "1982",
+	"Sinistar (revision 2, cockpit)\0", NULL, "Williams", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, sinistarc2RomInfo, sinistarc2RomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
+	SinistarCockpitInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	240, 292, 3, 4
+};
+
+// Sinistar (SynaMax difficulty/titlescreen hack, revision 3, upright)
+
+static struct BurnRomInfo sinistarsmRomDesc[] = {
+	{ "sinistar_rom_10-b_16-3004-62.4c",	0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "sinistar_rom_11-b_16-3004-63.4a.mod",0x1000, 0xfe83bce2, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-53.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-54.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-55.1a",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-56.2d",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-57.2c",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-58.2a",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-59.3d",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-60.3c.mod",	0x1000, 0x9b693243, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-61.3a.mod",	0x1000, 0x5ed44beb, 1 | BRF_PRG | BRF_ESS }, // 10
+
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+};
+
+STD_ROM_PICK(sinistarsm)
+STD_ROM_FN(sinistarsm)
+
+struct BurnDriver BurnDrvSinistarsm = {
+	"sinistarsm", "sinistar", NULL, NULL, "2023",
+	"Sinistar (SynaMax difficulty/titlescreen hack)\0", "initial boot will black screen, hit reset to fix", "Williams", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, sinistarsmRomInfo, sinistarsmRomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
 	SinistarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	240, 292, 3, 4
 };
 
 
-// Sinistar (revision 2)
+// Sinistar (SynaMax difficulty/titlescreen hack, revision 3, upright)
+
+static struct BurnRomInfo sinistarcsmRomDesc[] = {
+	{ "sinistar_rom_10-b_16-3004-62.4c",	0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "sinistar_rom_11-b_16-3004-63.4a.mod",0x1000, 0xfe83bce2, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-53.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-54.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-55.1a",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-56.2d",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-57.2c",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-58.2a",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-59.3d",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-60.3c.mod",	0x1000, 0x9b693243, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-61.3a.mod",	0x1000, 0x5ed44beb, 1 | BRF_PRG | BRF_ESS }, // 10
+
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+
+	{ "video_sound_rom_10_std.ic12",		0x1000, 0xb5c70082, 3 | BRF_PRG | BRF_ESS }, // 16 soundcpu_b
+
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+};
+
+STD_ROM_PICK(sinistarcsm)
+STD_ROM_FN(sinistarcsm)
+
+struct BurnDriver BurnDrvSinistarcsm = {
+	"sinistarcsm", "sinistar", NULL, NULL, "2023",
+	"Sinistar (Cockpit, SynaMax difficulty/titlescreen hack)\0", "initial boot will black screen, hit reset to fix", "Williams", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, sinistarcsmRomInfo, sinistarcsmRomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
+	SinistarCockpitInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	240, 292, 3, 4
+};
+
+
+// Sinistar (revision 2, upright)
+// solid RED labels with final production part numbers
 
 static struct BurnRomInfo sinistar2RomDesc[] = {
-	{ "sinistar.10",		0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "sinrev2.11",			0x1000, 0x792c8b00, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "sinistar.01",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "sinistar.02",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "sinistar.03",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "sinistar.04",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "sinistar.05",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "sinistar.06",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "sinistar.07",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "sinrev2.08",			0x1000, 0xd7ecee45, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "sinistar.09",		0x1000, 0x50cb63ad, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "sinistar_rom_10-b_16-3004-47.4c",	0x1000, 0x3d670417, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "sinistar_rom_11-b_16-3004-48.4a",	0x1000, 0x792c8b00, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-38.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-39.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-40.1a",		0x1000, 0x1ce1b3cc, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-41.2d",		0x1000, 0x6da632ba, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-42.2c",		0x1000, 0xb662e8fc, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-43.2a",		0x1000, 0x2306183d, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-44.3d",		0x1000, 0xe5dd918e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-45.3c",		0x1000, 0xd7ecee45, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-46.3a",		0x1000, 0x50cb63ad, 1 | BRF_PRG | BRF_ESS }, // 10
 
-	{ "speech.ic7",			0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
-	{ "speech.ic5",			0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
-	{ "speech.ic6",			0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
-	{ "speech.ic4",			0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
-	{ "sinistar.snd",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
 
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
 };
 
 STD_ROM_PICK(sinistar2)
@@ -3314,11 +3584,112 @@ STD_ROM_FN(sinistar2)
 
 struct BurnDriver BurnDrvSinistar2 = {
 	"sinistar2", "sinistar", NULL, NULL, "1982",
-	"Sinistar (revision 2)\0", NULL, "Williams", "6809 System",
+	"Sinistar (revision 2, upright)\0", NULL, "Williams", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, sinistar2RomInfo, sinistar2RomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
 	SinistarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	240, 292, 3, 4
+};
+
+
+// Sinistar (AMOA-82 prototype)
+// solid pink labels - 1982 AMOA prototype
+
+static struct BurnRomInfo sinistarpRomDesc[] = {
+	{ "sinistar_rom_10-b_16-3004-21.4c",	0x1000, 0xea87a53f, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "sinistar_rom_11-b_16-3004-22.4a",	0x1000, 0x88d36e80, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-12.1d",		0x1000, 0x3810d7b8, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-13.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-14.1a",		0x1000, 0x7c984ca9, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-15.2d",		0x1000, 0xcc6c4f24, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-16.2c",		0x1000, 0x12285bfe, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-17.2a",		0x1000, 0x7a675f35, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-18.3d",		0x1000, 0xb0463243, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-19.3c",		0x1000, 0x909040d4, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-20.3a",		0x1000, 0xcc949810, 1 | BRF_PRG | BRF_ESS }, // 10
+
+	{ "3004_speech_ic7_r1.ic7",				0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
+	{ "3004_speech_ic5_r1.ic5",				0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1.ic6",				0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1.ic4",				0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808",			0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+};
+
+STD_ROM_PICK(sinistarp)
+STD_ROM_FN(sinistarp)
+
+struct BurnDriver BurnDrvSinistarp = {
+	"sinistarp", "sinistar", NULL, NULL, "1982",
+	"Sinistar (AMOA-82 prototype)\0", NULL, "Williams", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_PROTOTYPE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, sinistarpRomInfo, sinistarpRomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
+	SinistarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	240, 292, 3, 4
+};
+
+
+// PlayBall! (prototype)
+
+static struct BurnRomInfo playballRomDesc[] = {
+	{ "playball.10",	0x1000, 0x18787b52, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
+	{ "playball.11",	0x1000, 0x1dd5c8f2, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "playball.12",	0x1000, 0xa700597b, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "playball.01",	0x1000, 0x7ba8fd71, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "playball.02",	0x1000, 0x2387c3d4, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "playball.03",	0x1000, 0xd34cc5fd, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "playball.04",	0x1000, 0xf68c3a8e, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "playball.05",	0x1000, 0xa3f20810, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "playball.06",	0x1000, 0xf213e48e, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "playball.07",	0x1000, 0x9b5574e9, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "playball.08",	0x1000, 0xb2d2074a, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "playball.09",	0x1000, 0xc4566d0f, 1 | BRF_PRG | BRF_ESS }, // 11
+
+	{ "speech.ic4",		0x1000, 0x7e4fc798, 2 | BRF_PRG | BRF_ESS }, // 12 soundcpu
+	{ "speech.ic5",		0x1000, 0xddfe860c, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "speech.ic6",		0x1000, 0x8bfebf87, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "speech.ic7",		0x1000, 0xdb351db6, 2 | BRF_PRG | BRF_ESS }, // 15
+	{ "playball.snd",	0x1000, 0xf3076f9f, 2 | BRF_PRG | BRF_ESS }, // 16
+};
+
+STD_ROM_PICK(playball)
+STD_ROM_FN(playball)
+
+static INT32 PlayballInit()
+{
+	playball = 1;
+
+	INT32 nRet = DrvInit(1, 5, 6, 1, 0xc000);
+
+	if (nRet == 0)
+	{
+		hc55516_init(M6800TotalCycles, 894886);
+		uses_hc55516 = 1;
+
+		pStartDraw = DrvDrawBegin;
+		pDrawScanline = DrvDrawLine;
+
+		pia_init();
+		pia_config(0, 0, &pia_0);
+		pia_config(1, 0, &pia_1);
+		pia_config(2, 0, &pia_2_sinistar);
+		pia_config(3, 0, &pia_3);
+	}
+
+	return nRet;
+}
+
+struct BurnDriver BurnDrvPlayball = {
+	"playball", NULL, NULL, NULL, "1983",
+	"PlayBall! (prototype)\0", NULL, "Williams", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_PROTOTYPE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
+	NULL, playballRomInfo, playballRomName, NULL, NULL, NULL, NULL, PlayballInputInfo, NULL,
+	PlayballInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	240, 292, 3, 4
 };
 
@@ -3347,48 +3718,56 @@ STD_ROM_FN(lottofun)
 
 static INT32 LottofunInit()
 {
-	return DrvInit(1, 0, 6, 1, 0xc000);
+	lottofun = 1;
+
+	INT32 rc = DrvInit(1, 0, 6, 1, 0xc000);
+	if (!rc) {
+		pStartDraw = DrvDrawBegin;
+		pDrawScanline = DrvDrawLine;
+	}
+	return rc;
 }
 
 struct BurnDriver BurnDrvLottofun = {
 	"lottofun", NULL, NULL, NULL, "1987",
-	"Lotto Fun\0", NULL, "H.A.R. Management", "6809 System",
+	"Lotto Fun\0", NULL, "HAR Management", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_NOT_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING, 1, HARDWARE_MISC_PRE90S, GBF_CASINO, 0,
 	NULL, lottofunRomInfo, lottofunRomName, NULL, NULL, NULL, NULL, LottofunInputInfo, NULL,
 	LottofunInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
-	292, 240, 4, 3
+	286, 240, 4, 3
 };
 
 
 // Blaster
+// 20 Level version - Each ROM label had an additional "PROTO5" or "PROTO6" sticker attached (verified on multiple PCBs)
 
 static struct BurnRomInfo blasterRomDesc[] = {
-	{ "16.ic39",			0x1000, 0x54a40b21, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "13.ic27",			0x2000, 0xf4dae4c8, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "11.ic25",			0x2000, 0x6371e62f, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "12.ic26",			0x2000, 0x9804faac, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "17.ic41",			0x1000, 0xbf96182f, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "15.ic38",			0x4000, 0x1ad146a4, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "8.ic20",				0x4000, 0xf110bbb0, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "9.ic22",				0x4000, 0x5c5b0f8a, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "10.ic24",			0x4000, 0xd47eb67f, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "6.ic13",				0x4000, 0x47fc007e, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "5.ic11",				0x4000, 0x15c1b94d, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "14.ic35",			0x4000, 0xaea6b846, 1 | BRF_PRG | BRF_ESS }, // 11
-	{ "7.ic15",				0x4000, 0x7a101181, 1 | BRF_PRG | BRF_ESS }, // 12
-	{ "1.ic1",				0x4000, 0x8d0ea9e7, 1 | BRF_PRG | BRF_ESS }, // 13
-	{ "2.ic3",				0x4000, 0x03c4012c, 1 | BRF_PRG | BRF_ESS }, // 14
-	{ "4.ic7",				0x4000, 0xfc9d39fb, 1 | BRF_PRG | BRF_ESS }, // 15
-	{ "3.ic6",				0x4000, 0x253690fb, 1 | BRF_PRG | BRF_ESS }, // 16
+	{ "proto6_blaster_3021_rom_16.ic39",		0x1000, 0x54a40b21, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "proto6_blaster_3021_rom_13.ic27",		0x2000, 0xf4dae4c8, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "proto6_blaster_3021_rom_11.ic25",		0x2000, 0x6371e62f, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "proto6_blaster_3021_rom_12.ic26",		0x2000, 0x9804faac, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "proto6_blaster_3021_rom_17.ic41",		0x1000, 0xbf96182f, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "proto5_blaster_3021_rom_15.ic38",		0x4000, 0x1ad146a4, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "proto5_blaster_3021_rom_8.ic20",			0x4000, 0xf110bbb0, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "proto5_blaster_3021_rom_9.ic22",			0x4000, 0x5c5b0f8a, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "proto5_blaster_3021_rom_10.ic24",		0x4000, 0xd47eb67f, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "proto5_blaster_3021_rom_6.ic13",			0x4000, 0x47fc007e, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "proto5_blaster_3021_rom_5.ic11",			0x4000, 0x15c1b94d, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "proto5_blaster_3021_rom_14.ic35",		0x4000, 0xaea6b846, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "proto6_blaster_3021_rom_7.ic15",			0x4000, 0x7a101181, 1 | BRF_PRG | BRF_ESS }, // 12
+	{ "proto5_blaster_3021_rom_1.ic1",			0x4000, 0x8d0ea9e7, 1 | BRF_PRG | BRF_ESS }, // 13
+	{ "proto5_blaster_3021_rom_2.ic3",			0x4000, 0x03c4012c, 1 | BRF_PRG | BRF_ESS }, // 14
+	{ "proto6_blaster_3021_rom_4.ic7",			0x4000, 0xfc9d39fb, 1 | BRF_PRG | BRF_ESS }, // 15
+	{ "proto6_blaster_3021_rom_3.ic6",			0x4000, 0x253690fb, 1 | BRF_PRG | BRF_ESS }, // 16
 
-	{ "18.sb13",			0x1000, 0xc33a3145, 2 | BRF_PRG | BRF_ESS }, // 17 M6800 #0 Code
+	{ "proto5_blaster_3021_rom_18.sb13",		0x1000, 0xc33a3145, 2 | BRF_PRG | BRF_ESS }, // 17 M6800 #0 Code
 
-	{ "18.sb10",			0x1000, 0xc33a3145, 3 | BRF_PRG | BRF_ESS }, // 18 M6800 #1 Code
+	{ "proto5_blaster_3021_rom_18.sb10",		0x1000, 0xc33a3145, 3 | BRF_PRG | BRF_ESS }, // 18 M6800 #1 Code
 
-	{ "4.u42",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 19 proms
-	{ "6.u23",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 20
-	{ "blaster.col",		0x0800, 0xbac50bc4, 4 | BRF_GRA },           // 21
+	{ "decoder_rom_4.ic42",						0x0200, 0xe6631c23, 0 | BRF_OPT },           // 19 proms
+	{ "video_decoder_rom_6.ic23",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 20
+	{ "blaster.col",							0x0800, 0xbac50bc4, 4 | BRF_GRA },           // 21
 };
 
 STD_ROM_PICK(blaster)
@@ -3411,34 +3790,56 @@ static INT32 BlasterInit()
 
 struct BurnDriver BurnDrvBlaster = {
 	"blaster", NULL, NULL, NULL, "1983",
-	"Blaster\0", NULL, "Williams / Vid Kidz", "Miscellaneous",
+	"Blaster\0", NULL, "Williams / Vid Kidz", "6809 System",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, blasterRomInfo, blasterRomName, NULL, NULL, NULL, NULL, BlasterInputInfo, NULL,
 	BlasterInit, DrvExit, DrvFrame, BlasterDraw, DrvScan, &DrvRecalc, 0x110,
 	292, 240, 4, 3
 };
 
 
+// Blaster (location test)
+// 30 Level version
 
+static struct BurnRomInfo blasteroRomDesc[] = {
+	{ "proto5_blaster_3021_rom_16.ic39",			0x1000, 0x2db032d2, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "proto5_blaster_3021_rom_13.ic27",			0x2000, 0xc99213c7, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "proto5_blaster_3021_rom_11.ic25",			0x2000, 0xbc2d7eda, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "proto5_blaster_3021_rom_12.ic26",			0x2000, 0x8a215017, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "proto5_blaster_3021_rom_17.ic41",			0x1000, 0xb308f0e5, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "proto5_blaster_3021_rom_15.ic38",			0x4000, 0x1ad146a4, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "proto5_blaster_3021_rom_8.ic20",				0x4000, 0xf110bbb0, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "proto5_blaster_3021_rom_9.ic22",				0x4000, 0x5c5b0f8a, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "proto5_blaster_3021_rom_10.ic24",			0x4000, 0xd47eb67f, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "proto5_blaster_3021_rom_6.ic13",				0x4000, 0x47fc007e, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "proto5_blaster_3021_rom_5.ic11",				0x4000, 0x15c1b94d, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "proto5_blaster_3021_rom_14.ic35",			0x4000, 0xaea6b846, 1 | BRF_PRG | BRF_ESS }, // 11
+	{ "proto5_blaster_3021_rom_7.ic15",				0x4000, 0xa1c4db77, 1 | BRF_PRG | BRF_ESS }, // 12
+	{ "proto5_blaster_3021_rom_1.ic1",				0x4000, 0x8d0ea9e7, 1 | BRF_PRG | BRF_ESS }, // 13
+	{ "proto5_blaster_3021_rom_2.ic3",				0x4000, 0x03c4012c, 1 | BRF_PRG | BRF_ESS }, // 14
+	{ "proto5_blaster_3021_rom_4.ic7",				0x4000, 0x39d2a32c, 1 | BRF_PRG | BRF_ESS }, // 15
+	{ "proto5_blaster_3021_rom_3.ic6",				0x4000, 0x054c9f1c, 1 | BRF_PRG | BRF_ESS }, // 16
 
+	{ "proto5_blaster_3021_rom_18.sb13",			0x1000, 0xc33a3145, 2 | BRF_PRG | BRF_ESS }, // 17 M6800 #0 Code
 
-#if 0
+	{ "proto5_blaster_3021_rom_18.sb10",			0x1000, 0xc33a3145, 3 | BRF_PRG | BRF_ESS }, // 18 M6800 #1 Code
 
-GAME( 1983, playball,   0,        playball,       playball, williams_state, init_playball, ROT270, "Williams", "PlayBall! (prototype)", MACHINE_SUPPORTS_SAVE )
+	{ "decoder_rom_4.ic42",							0x0200, 0xe6631c23, 0 | BRF_OPT },           // 19 proms
+	{ "video_decoder_rom_6.ic23",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 20
+	{ "blaster.col",								0x0800, 0xbac50bc4, 4 | BRF_GRA },           // 21
+};
 
-GAME( 1983, blaster,    0,        blaster,        blaster,  blaster_state,  init_blaster,  ROT0,   "Williams / Vid Kidz", "Blaster", MACHINE_SUPPORTS_SAVE )
-GAME( 1983, blastero,   blaster,  blaster,        blaster,  blaster_state,  init_blaster,  ROT0,   "Williams / Vid Kidz", "Blaster (location test)", MACHINE_SUPPORTS_SAVE )
-GAME( 1983, blasterkit, blaster,  blastkit,       blastkit, blaster_state,  init_blaster,  ROT0,   "Williams / Vid Kidz", "Blaster (conversion kit)", MACHINE_SUPPORTS_SAVE ) // mono sound
+STD_ROM_PICK(blastero)
+STD_ROM_FN(blastero)
 
-GAME( 1983, mysticm,    0,        mysticm,        mysticm, williams2_state, init_mysticm,  ROT0,   "Williams", "Mystic Marathon", MACHINE_WRONG_COLORS | MACHINE_SUPPORTS_SAVE)
-GAME( 1983, mysticmp,   mysticm,  mysticm,        mysticm, williams2_state, init_mysticm,  ROT0,   "Williams", "Mystic Marathon (prototype)", MACHINE_WRONG_COLORS | MACHINE_SUPPORTS_SAVE ) // newest roms are 'proto 6' ?
+struct BurnDriver BurnDrvBlastero = {
+	"blastero", "blaster", NULL, NULL, "1983",
+	"Blaster (location test)\0", NULL, "Williams / Vid Kidz", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_PROTOTYPE | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, blasteroRomInfo, blasteroRomName, NULL, NULL, NULL, NULL, BlasterInputInfo, NULL,
+	BlasterInit, DrvExit, DrvFrame, BlasterDraw, DrvScan, &DrvRecalc, 0x110,
+	292, 240, 4, 3
+};
 
-GAME( 1984, tshoot,     0,        tshoot,         tshoot,  tshoot_state,    init_tshoot,   ROT0,   "Williams", "Turkey Shoot (prototype)", MACHINE_SUPPORTS_SAVE )
-
-GAME( 1984, inferno,    0,        inferno,        inferno, williams2_state, init_inferno,  ROT0,   "Williams", "Inferno (Williams)", MACHINE_SUPPORTS_SAVE )
-
-GAME( 1986, joust2,     0,        joust2,         joust2,  joust2_state,    init_joust2,   ROT270, "Williams", "Joust 2 - Survival of the Fittest (revision 2)", MACHINE_SUPPORTS_SAVE )
-GAME( 1986, joust2r1,   joust2,   joust2,         joust2,  joust2_state,    init_joust2,   ROT270, "Williams", "Joust 2 - Survival of the Fittest (revision 1)", MACHINE_SUPPORTS_SAVE )
-
-#endif

@@ -1,7 +1,9 @@
+// license:BSD-3-Clause
+// copyright-holders:Manuel Abadia, David Haywood
 /***************************************************************************
                     Gaelco Sound Hardware
 
-                By Manuel Abadia <manu@teleline.es>
+                By Manuel Abadia <emumanu+mame@gmail.com>
 
 CG-1V/GAE1 (Gaelco custom GFX & Sound chip):
     The CG-1V/GAE1 can handle up to 7 stereo channels.
@@ -35,6 +37,7 @@ Registers per channel:
 
 #include "burnint.h"
 #include "gaelco.h"
+#include "stream.h"
 
 #define GAELCO_NUM_CHANNELS     0x07
 #define GAELCO_VOLUME_LEVELS    0x10
@@ -50,6 +53,7 @@ struct gaelco_sound_channel
 };
 
 //sound_stream *m_stream;                                 /* our stream */
+static Stream stream;
 static UINT8 *m_snd_data;                                      /* PCM data */
 static INT32 m_banks[4];                                         /* start of each ROM bank */
 static gaelco_sound_channel m_channel[GAELCO_NUM_CHANNELS];    /* 7 stereo channels */
@@ -59,12 +63,6 @@ static INT32 gaelcosnd_initted = 0;
 
 static INT32 gaelcosnd_mono = 0;
 static INT32 gaelcosnd_swap_lr = 0;
-
-// for resampling
-static UINT32 nSampleSize;
-static INT32 nFractionalPosition;
-static INT32 nPosition;
-static INT16 *sample_buffer;
 
 // Table for converting from 8 to 16 bits with volume control
 static INT16 m_volume_table[GAELCO_VOLUME_LEVELS][256];
@@ -82,26 +80,13 @@ static void gaelco_set_bank_offsets(INT32 offs1, INT32 offs2, INT32 offs3, INT32
 
             Writes length bytes to the sound buffer
   ============================================================================*/
-
-void gaelcosnd_update(INT16 *outputs, INT32 samples)
+static void sound_stream_update(INT16 **streams, INT32 samples)
 {
-	if (samples != nBurnSoundLen) {
-		bprintf(0, _T("gaelcosnd_update(): once per frame, please!\n"));
-		return;
-	}
-
-	INT32 nSamplesNeeded = ((((((8000 * 1000) / nBurnFPS) * samples) / nBurnSoundLen)) / 10) + 1;
-	if (nBurnSoundRate < 44100) nSamplesNeeded += 2; // so we don't end up with negative nPosition below
-
-	INT16 *lmix = sample_buffer + (8000 * 0) + 5 + nPosition;
-	INT16 *rmix = sample_buffer + (8000 * 1) + 5 + nPosition;
-
-	/* zap the contents of the mixer buffer */
-	memset(lmix, 0, nSamplesNeeded * sizeof(INT16));
-	memset(rmix, 0, nSamplesNeeded * sizeof(INT16));
+	INT16 *lmix = streams[0];
+	INT16 *rmix = streams[1];
 
 	/* fill all data needed */
-	for(INT32 j = 0; j < (nSamplesNeeded - nPosition); j++){
+	for(INT32 j = 0; j < samples; j++){
 		INT32 output_l = 0, output_r = 0;
 
 		/* for each channel */
@@ -210,45 +195,16 @@ void gaelcosnd_update(INT16 *outputs, INT32 samples)
 			*rmix++ = output_r;
 		}
 	}
+}
 
-	INT16 *pBufL = sample_buffer + (8000 * 0) + 5;
-	INT16 *pBufR = sample_buffer + (8000 * 1) + 5;
-
-	for (INT32 i = (nFractionalPosition & 0xFFFF0000) >> 15; i < (samples << 1); i += 2, nFractionalPosition += nSampleSize) {
-		INT32 nLeftSample[4] = {0, 0, 0, 0};
-		INT32 nRightSample[4] = {0, 0, 0, 0};
-		INT32 nTotalLeftSample, nTotalRightSample;
-
-		nLeftSample[0] += (INT32)(pBufL[(nFractionalPosition >> 16) - 3]);
-		nLeftSample[1] += (INT32)(pBufL[(nFractionalPosition >> 16) - 2]);
-		nLeftSample[2] += (INT32)(pBufL[(nFractionalPosition >> 16) - 1]);
-		nLeftSample[3] += (INT32)(pBufL[(nFractionalPosition >> 16) - 0]);
-
-		nRightSample[0] += (INT32)(pBufR[(nFractionalPosition >> 16) - 3]);
-		nRightSample[1] += (INT32)(pBufR[(nFractionalPosition >> 16) - 2]);
-		nRightSample[2] += (INT32)(pBufR[(nFractionalPosition >> 16) - 1]);
-		nRightSample[3] += (INT32)(pBufR[(nFractionalPosition >> 16) - 0]);
-
-		nTotalLeftSample  = INTERPOLATE4PS_16BIT((nFractionalPosition >> 4) & 0x0fff, nLeftSample[0], nLeftSample[1], nLeftSample[2], nLeftSample[3]);
-		nTotalRightSample = INTERPOLATE4PS_16BIT((nFractionalPosition >> 4) & 0x0fff, nRightSample[0], nRightSample[1], nRightSample[2], nRightSample[3]);
-
-		outputs[i + 0] = BURN_SND_CLIP(nTotalLeftSample);
-		outputs[i + 1] = BURN_SND_CLIP(nTotalRightSample);
+void gaelcosnd_update(INT16 *output, INT32 samples_len)
+{
+	if (samples_len != nBurnSoundLen) {
+		bprintf(0, _T("gaelco_update(): once per frame, please!\n"));
+		return;
 	}
 
-	if (samples >= nBurnSoundLen) {
-		INT32 nExtraSamples = nSamplesNeeded - (nFractionalPosition >> 16);
-		//bprintf(0, _T("%d, "), nExtraSamples);
-
-		for (INT32 i = -4; i < nExtraSamples; i++) {
-			pBufL[i] = pBufL[(nFractionalPosition >> 16) + i];
-			pBufR[i] = pBufR[(nFractionalPosition >> 16) + i];
-		}
-
-		nFractionalPosition &= 0xFFFF;
-
-		nPosition = nExtraSamples;
-	}
+	stream.render(output, samples_len);
 }
 
 /*============================================================================
@@ -272,31 +228,53 @@ void gaelcosnd_w(INT32 offset, UINT16 data)
 
 	m_sndregs[offset] = data;
 
-	switch(offset & 0x07){
-		case 0x03:
-			/* trigger sound */
-			if ((m_sndregs[offset - 1] != 0) && (data != 0)){
-				if (!channel->active){
-					channel->active = 1;
-					channel->chunkNum = 0;
-					channel->loop = 0;
-					//bprintf(0, _T("(GAE1) Playing sample channel: %02d, type: %02x, bank: %02x, end: %08x, Length: %04x\n"), offset >> 3, (m_sndregs[offset - 2] >> 4) & 0x0f, m_sndregs[offset - 2] & 0x03, m_sndregs[offset - 1] << 8, data);
-				}
-			} else {
-				channel->active = 0;
+	switch (offset & 0x07)
+	{
+	case 0x03:
+		// if sample end position isn't 0, and length isn't 0
+		if ((m_sndregs[offset - 1] != 0) && (data != 0))
+		{
+			//LOG_SOUND(("(GAE1) Playing or Queuing 1st chunk in channel: %02d, type: %02x, bank: %02x, end: %08x, Length: %04x\n", offset >> 3, (m_sndregs[offset - 2] >> 4) & 0x0f, m_sndregs[offset - 2] & 0x03, m_sndregs[offset - 1] << 8, data));
+
+			channel->loop = 1;
+
+			if (!channel->active)
+			{
+				channel->chunkNum = 0;
 			}
 
-			break;
+			channel->active = 1;
+		}
+		else
+		{
+			//channel->loop = 0;
+			channel->active = 0;
+		}
 
-		case 0x07: /* enable/disable looping */
-			if ((m_sndregs[offset - 1] != 0) && (data != 0)){
-				//bprintf(0, _T("(GAE1) Looping in channel: %02d, type: %02x, bank: %02x, end: %08x, Length: %04x\n"), offset >> 3, (m_sndregs[offset - 2] >> 4) & 0x0f, m_sndregs[offset - 2] & 0x03, m_sndregs[offset - 1] << 8, data);
-				channel->loop = 1;
-			} else {
-				channel->loop = 0;
+		break;
+
+	case 0x07:
+		// if sample end position isn't 0, and length isn't 0
+		if ((m_sndregs[offset - 1] != 0) && (data != 0))
+		{
+			//LOG_SOUND(("(GAE1) Playing or Queuing 2nd chunk in channel: %02d, type: %02x, bank: %02x, end: %08x, Length: %04x\n", offset >> 3, (m_sndregs[offset - 2] >> 4) & 0x0f, m_sndregs[offset - 2] & 0x03, m_sndregs[offset - 1] << 8, data));
+
+			channel->loop = 1;
+
+			if (!channel->active)
+			{
+				channel->chunkNum = 1;
 			}
 
-			break;
+			channel->active = 1;
+		}
+		else
+		{
+			channel->loop = 0;
+			// channel->active = 0;
+		}
+
+		break;
 	}
 }
 
@@ -319,13 +297,7 @@ void gaelcosnd_start(UINT8 *soundrom, INT32 offs1, INT32 offs2, INT32 offs3, INT
 
 	gaelcosnd_reset();
 
-	// for resampling
-	sample_buffer = (INT16 *)BurnMalloc(8000 * sizeof(INT16) * 2); // more than enough :)
-	memset(sample_buffer, 0, 8000 * sizeof(INT16) * 2);
-
-	nSampleSize = (UINT32)8000 * (1 << 16) / nBurnSoundRate;
-	nFractionalPosition = 0;
-	nPosition = 0;
+	stream.init(1000000/128, nBurnSoundRate, 2, 0, sound_stream_update);
 
 	gaelcosnd_initted = 1;
 }
@@ -344,23 +316,19 @@ void gaelcosnd_exit()
 {
 	if (!gaelcosnd_initted) return;
 
-	BurnFree(sample_buffer);
-	sample_buffer = NULL;
+	stream.exit();
+
 	m_snd_data = NULL;
 	gaelcosnd_mono = 0;
 	gaelcosnd_swap_lr = 0;
+
+	gaelcosnd_initted = 0;
 }
 
 void gaelcosnd_scan(INT32 nAction, INT32 *)
 {
 	SCAN_VAR(m_channel);
 	SCAN_VAR(m_sndregs);
-
-	if (nAction & ACB_WRITE) {
-		nFractionalPosition = 0;
-		nPosition = 0;
-		memset(sample_buffer, 0, 8000 * sizeof(INT16) * 2);
-	}
 }
 
 void gaelcosnd_reset()

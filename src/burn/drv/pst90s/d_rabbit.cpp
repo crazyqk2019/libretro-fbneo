@@ -81,7 +81,7 @@ static void blitter_write()
 	UINT32 reg0 = (blitterregs[0]<<16)|(blitterregs[0]>>16);
 	UINT32 reg1 = (blitterregs[1]<<16)|(blitterregs[1]>>16);
 	UINT32 reg2 = (blitterregs[2]<<16)|(blitterregs[2]>>16);
-	
+
 	INT32 blt_source = (reg0&0x000fffff) >>  0;
 	INT32 blt_column = (reg1&0x00ff0000) >> 16; // should this be 0x7f?
 	INT32 blt_line  =  (reg1&0x000000ff) >>  0;
@@ -124,7 +124,7 @@ static void blitter_write()
 					INT32 blt_value = ((DrvGfxROM[0][blt_source^1]<<8)|(DrvGfxROM[0][blt_source^0]));
 					blt_source+=2;
 					INT32 writeoffs=blt_oddflg+blt_column;
-					tilemap_ram[blt_tilemp][writeoffs]=(tilemap_ram[blt_tilemp][writeoffs]&mask)|(blt_value<<shift);
+					tilemap_ram[blt_tilemp][writeoffs]= BURN_ENDIAN_SWAP_INT32((BURN_ENDIAN_SWAP_INT32(tilemap_ram[blt_tilemp][writeoffs])&mask)|(blt_value<<shift));
 					GenericTilemapSetTileDirty(blt_tilemp, writeoffs);
 					update_tilemap[blt_tilemp] = 1;
 					blt_column++;
@@ -142,7 +142,7 @@ static void blitter_write()
 				{
 					INT32 writeoffs=blt_oddflg+blt_column;
 
-					tilemap_ram[blt_tilemp][writeoffs]=(tilemap_ram[blt_tilemp][writeoffs]&mask)|(blt_value<<shift);
+					tilemap_ram[blt_tilemp][writeoffs]= BURN_ENDIAN_SWAP_INT32((BURN_ENDIAN_SWAP_INT32(tilemap_ram[blt_tilemp][writeoffs])&mask)|(blt_value<<shift));
 					GenericTilemapSetTileDirty(blt_tilemp, writeoffs);
 					update_tilemap[blt_tilemp] = 1;
 					blt_column++;
@@ -167,7 +167,7 @@ static void __fastcall rabbit_write_long(UINT32 address, UINT32 data)
 	data = (data << 16) | (data >> 16);
 
 	if ((address & 0xffffe0) == 0x400200) {
-		spriteregs[(address / 4) & 7] = data;
+		spriteregs[(address / 4) & 7] = BURN_ENDIAN_SWAP_INT32(data);
 		return;
 	}
 
@@ -183,13 +183,13 @@ static void __fastcall rabbit_write_word(UINT32 address, UINT16 data)
 {
 	if ((address & 0xffff80) == 0x400100) {
 		UINT16 *regs = (UINT16*)tilemapregs[(address / 0x20) & 3];
-		regs[(address / 2) & 0xf] = data;
+		regs[(address / 2) & 0xf] = BURN_ENDIAN_SWAP_INT16(data);
 		return;
 	}
 
 	if ((address & 0xffffe0) == 0x400200) {
 		UINT16 *regs = (UINT16*)spriteregs;
-		regs[(address / 2) & 0xf] = data;
+		regs[(address / 2) & 0xf] = BURN_ENDIAN_SWAP_INT16(data);
 		return;
 	}
 
@@ -259,10 +259,10 @@ static void __fastcall rabbit_videoram_write_long(UINT32 address, UINT32 data)
 	INT32 offset = (address & 0x3ffc) / 4;
 	INT32 select = (address / 0x4000) & 3;
 	UINT32 *ram = (UINT32*)(DrvVidRAM[select]);
-	if (ram[offset] != data) {
+	if (BURN_ENDIAN_SWAP_INT32(ram[offset]) != data) {
 		GenericTilemapSetTileDirty(select, offset);
 		update_tilemap[select] = 1;
-		ram[offset] = data;
+		ram[offset] = BURN_ENDIAN_SWAP_INT32(data);
 	}
 }
 
@@ -271,10 +271,10 @@ static void __fastcall rabbit_videoram_write_word(UINT32 address, UINT16 data)
 	INT32 offset = (address & 0x3ffe) / 2;
 	INT32 select = (address / 0x4000) & 3;
 	UINT16 *ram = (UINT16*)(DrvVidRAM[select]);
-	if (ram[offset] != data) {
+	if (BURN_ENDIAN_SWAP_INT16(ram[offset]) != data) {
 		GenericTilemapSetTileDirty(select, offset/2);
 		update_tilemap[select] = 1;
-		ram[offset] = data;
+		ram[offset] = BURN_ENDIAN_SWAP_INT16(data);
 	}
 }
 
@@ -298,14 +298,14 @@ static inline void palette_write(UINT16 i)
 static void __fastcall rabbit_paletteram_write_long(UINT32 address, UINT32 data)
 {
 	UINT32 *ram = (UINT32*)DrvPalRAM;
-	ram[(address & 0xfffc)/4] = (data << 16) | (data >> 16);
+	ram[(address & 0xfffc)/4] = BURN_ENDIAN_SWAP_INT32((data << 16) | (data >> 16));
 	palette_write(address & 0xfffc);
 }
 
 static void __fastcall rabbit_paletteram_write_word(UINT32 address, UINT16 data)
 {
 	UINT16 *ram = (UINT16*)DrvPalRAM;
-	ram[(address & 0xfffe)/2] = data;
+	ram[(address & 0xfffe)/2] = BURN_ENDIAN_SWAP_INT16(data);
 	palette_write(address & 0xfffc);
 }
 
@@ -317,7 +317,7 @@ static void __fastcall rabbit_paletteram_write_byte(UINT32 address, UINT8 data)
 }
 
 #define	get_tilemap_info(which, size)									\
-	UINT32 attr = *((UINT32*)(DrvVidRAM[which] + (offs * 4)));			\
+	UINT32 attr = BURN_ENDIAN_SWAP_INT32(*((UINT32*)(DrvVidRAM[which] + (offs * 4))));			\
 	INT32 depth = (attr & 0x00001000) >> 12;							\
 	INT32 code  = (attr & 0xffff0000) >> 16;							\
 	INT32 bank  = (attr & 0x0000000f) >>  0;							\
@@ -373,9 +373,11 @@ static INT32 DrvDoReset()
 
 	blitter_irq = 0;
 	for (INT32 i = 0; i < 4; i++) {
-		GenericTilemapAllTilesDirty(i);	
+		GenericTilemapAllTilesDirty(i);
 		update_tilemap[i] = 1;
 	}
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -399,13 +401,13 @@ static INT32 MemIndex()
 
 	AllRam			= Next;
 
-	Drv68KRAM		= Next; Next += 0x0100000;
-	DrvPalRAM		= Next; Next += 0x0100000;
-	DrvVidRAM[0]	= Next; Next += 0x0200000; // only first 4000 accessible by cpu
-	DrvVidRAM[1]	= Next; Next += 0x0200000; // ""
-	DrvVidRAM[2]	= Next; Next += 0x0200000; // ""
-	DrvVidRAM[3]	= Next; Next += 0x0200000; // ""
-	DrvSprRAM		= Next; Next += 0x0040000;
+	Drv68KRAM		= Next; Next += 0x010000;
+	DrvPalRAM		= Next; Next += 0x010000;
+	DrvVidRAM[0]	= Next; Next += 0x020000; // only first 4000 accessible by cpu
+	DrvVidRAM[1]	= Next; Next += 0x020000; // ""
+	DrvVidRAM[2]	= Next; Next += 0x020000; // ""
+	DrvVidRAM[3]	= Next; Next += 0x020000; // ""
+	DrvSprRAM		= Next; Next += 0x004000;
 
 	tilemapregs[0]	= (UINT32*)Next; Next += 0x000008 * sizeof(UINT32);
 	tilemapregs[1]	= (UINT32*)Next; Next += 0x000008 * sizeof(UINT32);
@@ -424,7 +426,7 @@ static INT32 MemIndex()
 
 static INT32 DrvInit()
 {
-	BurnAllocMemIndex();	
+	BurnAllocMemIndex();
 
 	{
 		INT32 k = 0;
@@ -540,8 +542,8 @@ static void DrvPaletteUpdate()
 
 static void clearspritebitmap()
 {
-	INT32 starty = (spriteregs[1]&0x00000fff) - 200;
-	INT32 startx =((spriteregs[0]&0x0fff0000)>>16) - 200;
+	INT32 starty = (BURN_ENDIAN_SWAP_INT32(spriteregs[1])&0x00000fff) - 200;
+	INT32 startx =((BURN_ENDIAN_SWAP_INT32(spriteregs[0])&0x0fff0000)>>16) - 200;
 	INT32 amountx = 650;
 	INT32 amounty = 600;
 
@@ -559,14 +561,14 @@ static void draw_sprites()
 {
 	UINT16 *ram = (UINT16*)DrvSprRAM;
 	
-	for (INT32 offs = (((spriteregs[5] & 0x0fff) - 1) * 4); offs >= 0; offs -= 4)
+	for (INT32 offs = (((BURN_ENDIAN_SWAP_INT32(spriteregs[5]) & 0x0fff) - 1) * 4); offs >= 0; offs -= 4)
 	{
-		INT32 sy    = ram[offs + 0] & 0x0fff;
-		INT32 sx    = ram[offs + 1] & 0x0fff;
-		INT32 flipx = ram[offs + 1] & 0x8000;
-		INT32 flipy = ram[offs + 1] & 0x4000;
-		INT32 color =(ram[offs + 2] >> 4) & 0xff;
-		INT32 code  =(ram[offs + 3] | (ram[offs + 2] << 16)) & 0x1ffff;
+		INT32 sy    = BURN_ENDIAN_SWAP_INT16(ram[offs + 0]) & 0x0fff;
+		INT32 sx    = BURN_ENDIAN_SWAP_INT16(ram[offs + 1]) & 0x0fff;
+		INT32 flipx = BURN_ENDIAN_SWAP_INT16(ram[offs + 1]) & 0x8000;
+		INT32 flipy = BURN_ENDIAN_SWAP_INT16(ram[offs + 1]) & 0x4000;
+		INT32 color =(BURN_ENDIAN_SWAP_INT16(ram[offs + 2]) >> 4) & 0xff;
+		INT32 code  =(BURN_ENDIAN_SWAP_INT16(ram[offs + 3]) | (BURN_ENDIAN_SWAP_INT16(ram[offs + 2]) << 16)) & 0x1ffff;
 
 		if (sx & 0x800) sx-=0x1000;
 
@@ -576,10 +578,10 @@ static void draw_sprites()
 
 static void draw_sprite_bitmap()
 {
-	INT32 startx = ((spriteregs[0]>>16)&0x00000fff) - (((spriteregs[1]>>16)&0x000001ff)>>1);
-	INT32 starty = ((spriteregs[1]&0x0fff)) - (((spriteregs[1]>>16)&0x000001ff)>>1);
-	UINT32 xsize = ((spriteregs[2]>>16)) + 0x80;
-	UINT32 ysize = ((spriteregs[3]>>16)) + 0x80;
+	INT32 startx = ((BURN_ENDIAN_SWAP_INT32(spriteregs[0])>>16)&0x00000fff) - (((BURN_ENDIAN_SWAP_INT32(spriteregs[1])>>16)&0x000001ff)>>1);
+	INT32 starty = ((BURN_ENDIAN_SWAP_INT32(spriteregs[1])&0x0fff)) - (((BURN_ENDIAN_SWAP_INT32(spriteregs[1])>>16)&0x000001ff)>>1);
+	UINT32 xsize = ((BURN_ENDIAN_SWAP_INT32(spriteregs[2])>>16)) + 0x80;
+	UINT32 ysize = ((BURN_ENDIAN_SWAP_INT32(spriteregs[3])>>16)) + 0x80;
 	UINT32 xstep = ((320*128)<<16) / xsize;
 	UINT32 ystep = ((224*128)<<16) / ysize;
 
@@ -596,7 +598,7 @@ static void draw_sprite_bitmap()
 			{
 				UINT32 xdrawpos = ((x>>7)*xstep) >> 16;
 				UINT16 pixdata = srcline[(startx+(x>>7))&0xfff];
-
+				//if (pixdata) { fprintf(fp, "pixdata: 0x%x \n", pixdata); fflush(fp); }
 				if (pixdata)
 					if (xdrawpos < (UINT32)nScreenWidth)
 						dstline[xdrawpos] = pixdata;
@@ -620,10 +622,10 @@ static void drawtilemap(INT32 whichtilemap) // line zoom
 	INT32 wmask = width - 1;
 	INT32 hmask = height - 1;
 
-	INT32 starty=((tilemapregs[whichtilemap][1]&0x0000ffff)) << 12;
-	INT32 startx=((tilemapregs[whichtilemap][1]&0xffff0000)>>16) << 12;
-	INT32 incyy= ((tilemapregs[whichtilemap][4]&0x00000fff)) << 5;
-	INT32 incxx= ((tilemapregs[whichtilemap][3]&0x0fff0000)>>16) << 5;
+	INT32 starty=((BURN_ENDIAN_SWAP_INT32(tilemapregs[whichtilemap][1])&0x0000ffff)) << 12;
+	INT32 startx=((BURN_ENDIAN_SWAP_INT32(tilemapregs[whichtilemap][1])&0xffff0000)>>16) << 12;
+	INT32 incyy= ((BURN_ENDIAN_SWAP_INT32(tilemapregs[whichtilemap][4])&0x00000fff)) << 5;
+	INT32 incxx= ((BURN_ENDIAN_SWAP_INT32(tilemapregs[whichtilemap][3])&0x0fff0000)>>16) << 5;
 
 	if (update_tilemap[whichtilemap])
 	{
@@ -660,10 +662,10 @@ static INT32 DrvDraw()
 
 	for (UINT32 prilevel = 0xf00; prilevel > 0; prilevel-=0x100)
 	{
-		if (prilevel == (tilemapregs[3][0] & 0x0f00)) drawtilemap(3);
-		if (prilevel == (tilemapregs[2][0] & 0x0f00)) drawtilemap(2);
-		if (prilevel == (tilemapregs[1][0] & 0x0f00)) drawtilemap(1);
-		if (prilevel == (tilemapregs[0][0] & 0x0f00)) drawtilemap(0);
+		if (prilevel == (BURN_ENDIAN_SWAP_INT32(tilemapregs[3][0]) & 0x0f00)) drawtilemap(3);
+		if (prilevel == (BURN_ENDIAN_SWAP_INT32(tilemapregs[2][0]) & 0x0f00)) drawtilemap(2);
+		if (prilevel == (BURN_ENDIAN_SWAP_INT32(tilemapregs[1][0]) & 0x0f00)) drawtilemap(1);
+		if (prilevel == (BURN_ENDIAN_SWAP_INT32(tilemapregs[0][0]) & 0x0f00)) drawtilemap(0);
 
 		if ((prilevel == 0x0900) && (nSpriteEnable & 1))
 		{
@@ -693,13 +695,14 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = 32;
-	INT32 nCyclesTotal = (INT32)((INT64)24000000 * nBurnCPUSpeedAdjust / (0x0100 * 60));
+	INT32 nCyclesTotal[1] = { (INT32)((INT64)24000000 * nBurnCPUSpeedAdjust / (0x0100 * 60)) };
+	INT32 nCyclesDone[1] = { 0 };
 
 	SekOpen(0);
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		SekRun(nCyclesTotal / nInterleave);
+		CPU_RUN(0, Sek);
 		if (blitter_irq) { SekSetIRQLine(4, CPU_IRQSTATUS_AUTO); blitter_irq = 0; }
 	}
 
@@ -743,11 +746,19 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(blitter_irq);
 	}
 
+	if (nAction & ACB_WRITE) {
+		for (INT32 i = 0; i < 4; i++) {
+			GenericTilemapAllTilesDirty(i);
+			update_tilemap[i] = 1;
+		}
+	}
+
 	return 0;
 }
 
 
 // Rabbit (Asia 3/6)
+// This is the Asian version sold in Korea but the devs forgot to update the region disclaimer.
 
 static struct BurnRomInfo rabbitRomDesc[] = {
 	{ "jpr0.0",				0x080000, 0x52bb18c0, 1 | BRF_PRG | BRF_ESS }, //  0 M68ec020 Code
@@ -767,6 +778,8 @@ static struct BurnRomInfo rabbitRomDesc[] = {
 	{ "jsn0.11",			0x400000, 0xe1f726e8, 4 | BRF_GRA },           // 11 i5000snd Samples
 
 	{ "rabbit.nv",			0x000080, 0x73d471ed, 5 | BRF_PRG | BRF_ESS }, // 12 Default EEPROM
+	
+	{ "epm7032.u1",			0x000798, 0xbb1c930e, 0 | BRF_OPT }, 		   // 13 plds
 };
 
 STD_ROM_PICK(rabbit)
@@ -776,14 +789,91 @@ struct BurnDriver BurnDrvRabbit = {
 	"rabbit", NULL, NULL, NULL, "1997",
 	"Rabbit (Asia 3/6)\0", NULL, "Aorn / Electronic Arts", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_VSFIGHT, 0,
 	NULL, rabbitRomInfo, rabbitRomName, NULL, NULL, NULL, NULL, RabbitInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x4000,
 	320, 224, 4, 3
 };
 
 
-// Rabbit (Japan, location test)
+// Rabbit (Asia 1/28?)
+// Sourced from a Taiwanese parts sellers, is this another Asian version?
+
+static struct BurnRomInfo rabbitaRomDesc[] = {
+	{ "pv00_mst.u82",	0x080000, 0xe23e738e, 1 | BRF_PRG | BRF_ESS }, //  0 M68ec020 Code
+	{ "pv01_mst.u84",	0x080000, 0x8c7ff335, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "pv02_mst.u83",	0x080000, 0xc4bee278, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "pv03_mst.u85",	0x080000, 0x062f524e, 1 | BRF_PRG | BRF_ESS }, //  3
+
+	{ "jfv0.00",		0x400000, 0xb2a4d3d3, 2 | BRF_GRA },           //  4 Sprites
+	{ "jfv1.01",		0x400000, 0x83f3926e, 2 | BRF_GRA },           //  5
+	{ "jfv2.02",		0x400000, 0xb264bfb5, 2 | BRF_GRA },           //  6
+	{ "jfv3.03",		0x400000, 0x3e1a9be2, 2 | BRF_GRA },           //  7
+
+	{ "jbg0.40",		0x200000, 0x89662944, 3 | BRF_GRA },           //  8 Background Tiles
+	{ "jbg1.50",		0x200000, 0x1fc7f6e0, 3 | BRF_GRA },           //  9
+	{ "jbg2.60",		0x200000, 0xaee265fc, 3 | BRF_GRA },           // 10
+
+	{ "jsn0.11",		0x400000, 0xe1f726e8, 4 | BRF_GRA },           // 11 i5000snd Samples
+
+	{ "rabbit.nv",		0x000080, 0x73d471ed, 5 | BRF_PRG | BRF_ESS }, // 12 Default EEPROM
+	
+	{ "epm7032.u1",		0x000798, 0xbb1c930e, 0 | BRF_OPT }, 		   // 13 plds
+};
+
+STD_ROM_PICK(rabbita)
+STD_ROM_FN(rabbita)
+
+struct BurnDriver BurnDrvRabbita = {
+	"rabbita", "rabbit", NULL, NULL, "1996",
+	"Rabbit (Asia 1/28?)\0", NULL, "Aorn / Electronic Arts", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_VSFIGHT, 0,
+	NULL, rabbitaRomInfo, rabbitaRomName, NULL, NULL, NULL, NULL, RabbitInputInfo, NULL,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x4000,
+	320, 224, 4, 3
+};
+
+
+// Rabbit (Japan 3/6?)
+
+static struct BurnRomInfo rabbitjRomDesc[] = {
+	{ "pvo0.u82",	0x080000, 0x56ee441b, 1 | BRF_PRG | BRF_ESS }, //  0 M68ec020 Code
+	{ "pvo1.u84",	0x080000, 0x7d8addc5, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "pvo2.u83",	0x080000, 0x4a333d89, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "pvo3.u85",	0x080000, 0x791bf835, 1 | BRF_PRG | BRF_ESS }, //  3
+
+	{ "jfv0.00",	0x400000, 0xb2a4d3d3, 2 | BRF_GRA },           //  4 Sprites
+	{ "jfv1.01",	0x400000, 0x83f3926e, 2 | BRF_GRA },           //  5
+	{ "jfv2.02",	0x400000, 0xb264bfb5, 2 | BRF_GRA },           //  6
+	{ "jfv3.03",	0x400000, 0x3e1a9be2, 2 | BRF_GRA },           //  7
+
+	{ "jbg0.40",	0x200000, 0x89662944, 3 | BRF_GRA },           //  8 Background Tiles
+	{ "jbg1.50",	0x200000, 0x1fc7f6e0, 3 | BRF_GRA },           //  9
+	{ "jbg2.60",	0x200000, 0xaee265fc, 3 | BRF_GRA },           // 10
+
+	{ "jsn0.11",	0x400000, 0xe1f726e8, 4 | BRF_GRA },           // 11 i5000snd Samples
+
+	{ "rabbit.nv",	0x000080, 0x73d471ed, 5 | BRF_PRG | BRF_ESS }, // 12 Default EEPROM
+	
+	{ "epm7032.u1",	0x000798, 0xbb1c930e, 0 | BRF_OPT }, 		   // 13 plds
+};
+
+STD_ROM_PICK(rabbitj)
+STD_ROM_FN(rabbitj)
+
+struct BurnDriver BurnDrvRabbitj = {
+	"rabbitj", "rabbit", NULL, NULL, "1997",
+	"Rabbit (Japan 3/6?)\0", NULL, "Aorn / Electronic Arts", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_VSFIGHT, 0,
+	NULL, rabbitjRomInfo, rabbitjRomName, NULL, NULL, NULL, NULL, RabbitInputInfo, NULL,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x4000,
+	320, 224, 4, 3
+};
+
+
+// Rabbit (Japan 1/28, location test)
 
 static struct BurnRomInfo rabbitjtRomDesc[] = {
 	{ "pvo0_mst_1-28.u82",	0x080000, 0xa1c30c91, 1 | BRF_PRG | BRF_ESS }, //  0 M68ec020 Code
@@ -803,6 +893,8 @@ static struct BurnRomInfo rabbitjtRomDesc[] = {
 	{ "jsn0.11",			0x400000, 0xe1f726e8, 4 | BRF_GRA },           // 11 i5000snd Samples
 
 	{ "rabbit.nv",			0x000080, 0x73d471ed, 5 | BRF_PRG | BRF_ESS }, // 12 Default EEPROM
+	
+	{ "epm7032.u1",			0x000798, 0xbb1c930e, 0 | BRF_OPT }, 		   // 13 plds
 };
 
 STD_ROM_PICK(rabbitjt)
@@ -810,9 +902,9 @@ STD_ROM_FN(rabbitjt)
 
 struct BurnDriver BurnDrvRabbitjt = {
 	"rabbitjt", "rabbit", NULL, NULL, "1996",
-	"Rabbit (Japan, location test)\0", NULL, "Aorn / Electronic Arts", "Miscellaneous",
+	"Rabbit (Japan 1/28, location test)\0", NULL, "Aorn / Electronic Arts", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_VSFIGHT, 0,
 	NULL, rabbitjtRomInfo, rabbitjtRomName, NULL, NULL, NULL, NULL, RabbitInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x4000,
 	320, 224, 4, 3

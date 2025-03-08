@@ -1,4 +1,4 @@
-// FB Alpha Chanbara driver module
+// FB Neo Chanbara driver module
 // Based on MAME driver by Tomasz Slanina and David Haywood
 // Todo:
 // 1) Figure out the sprite banking issue (strange blob of broken
@@ -157,6 +157,8 @@ static void chanbara_ay_writeB(UINT32, UINT32 data)
 
 	flipscreen = data & 0x02;
 
+	if (M6809GetActive() == -1) return;
+
 	bankswitch(data & 0x04);
 }
 
@@ -274,12 +276,7 @@ static void DrvGfxExpand()
 
 static INT32 DrvInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x08000,  0, 1)) return 1;
@@ -340,10 +337,10 @@ static INT32 DrvExit()
 	M6809Exit();
 
 	BurnYM2203Exit();
-	
+
 	GenericTilesExit();
-	
-	BurnFree(AllMem);
+
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -544,7 +541,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 }
 
 
-// Chanbara
+// Chanbara (Japan)
 
 static struct BurnRomInfo ChanbaraRomDesc[] = {
 	{ "cp01.16c",     0x4000, 0xa0c3c24c, 0 | BRF_ESS | BRF_PRG }, //  0 M6809 Code
@@ -576,7 +573,7 @@ STD_ROM_FN(Chanbara)
 
 struct BurnDriver BurnDrvChanbara = {
 	"chanbara", NULL, NULL, NULL, "1985",
-	"Chanbara\0", NULL, "Data East", "Miscellaneous",
+	"Chanbara (Japan)\0", NULL, "Data East Corporation", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL, 4, HARDWARE_PREFIX_DATAEAST, GBF_SCRFIGHT, 0,
 	NULL, ChanbaraRomInfo, ChanbaraRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,

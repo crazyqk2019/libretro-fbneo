@@ -80,6 +80,8 @@ void konamigx_precache_registers()
 
 void konamigx_mixer_init(INT32 objdma)
 {
+	KonamiIC_GX_MixerInUse = 1;
+
 	m_gx_objdma = 0;
 	m_gx_primode = 0;
 
@@ -114,6 +116,18 @@ void konamigx_mixer_exit()
 	BurnFree(gx_objpool);
 	m_gx_objdma = 0;
 	konamigx_mystwarr_kludge = 0;
+}
+
+void konamigx_scan(INT32 nAction)
+{
+	if (nAction & ACB_MEMORY_RAM) {
+//		ScanVar(gx_shdzbuf, 512 * 256 * 2, "gx shd z buf");    UNNECESSARY
+//		ScanVar(gx_objzbuf, 512 * 256 * 2, "gx obj z buf");    "" -dink
+		if (m_gx_objdma && gx_spriteram) {
+			ScanVar(gx_spriteram, 0x1000, "gx spriteram");
+		}
+		ScanVar(gx_objpool, GX_MAX_OBJECTS * sizeof(GX_OBJ), "gx obj pool");
+	}
 }
 
 static void gx_wipezbuf(INT32 noshadow)
@@ -169,8 +183,9 @@ static void gx_draw_basic_tilemaps(INT32 mixerflags, INT32 code)
 		*/
 		if (temp1!=0xff && temp2 /*&& temp3==3*/)
 		{
+			if (konamigx_mystwarr_kludge) temp2 = 1; // mixlev only on this layer via '338 for mystwarr
 			temp4 = K054338_set_alpha_level(temp2);
-
+//			bprintf(0, _T("%x layer, temp4 %x  temp2 %x\n"), code, temp4, temp2);
 			if (temp4 <= 0 && !konamigx_mystwarr_kludge) return; // alpha level so high that layer is completely invisible. mystwarr needs this disabled for tile-based alpha tile counting.
 			if (temp4 < 255) k = K056832_SET_ALPHA(temp4);
 		}
@@ -554,16 +569,16 @@ void konamigx_mixer(INT32 sub1 /*extra tilemap 1*/, INT32 sub1flags, INT32 sub2 
 	{
 		INT32 pri = 0;
 
-		if (!(gx_spriteram[offs] & 0x8000)) continue;
+		if (!(BURN_ENDIAN_SWAP_INT16(gx_spriteram[offs]) & 0x8000)) continue;
 
-		INT32 zcode = gx_spriteram[offs] & 0xff;
+		INT32 zcode = BURN_ENDIAN_SWAP_INT16(gx_spriteram[offs]) & 0xff;
 
 		// invert z-order when opset_pri is set (see p.51 OPSET PRI)
 		if (k053247_opset & 0x10) zcode = 0xff - zcode;
 
-		INT32 code  = gx_spriteram[offs+1];
-		INT32 color = k = gx_spriteram[offs+6];
-		l     = gx_spriteram[offs+7];
+		INT32 code  = BURN_ENDIAN_SWAP_INT16(gx_spriteram[offs+1]);
+		INT32 color = k = BURN_ENDIAN_SWAP_INT16(gx_spriteram[offs+6]);
+		l     = BURN_ENDIAN_SWAP_INT16(gx_spriteram[offs+7]);
 
 		K053247Callback(&code, &color, &pri);
 
@@ -637,6 +652,15 @@ void konamigx_mixer(INT32 sub1 /*extra tilemap 1*/, INT32 sub1flags, INT32 sub2 
 
 		switch (m_gx_primode & 0xf)
 		{
+			case 0xf:
+				// viostorm bad shadow grid st.2 fireworks (right side of screen)
+				if (code == 0xe140 && shdpri[0x02] == 0x28) continue;
+
+				// move shadows 1-pri behind sprites (first mid-boss, boss, throwing multiple enemies on train platform)
+				// note: this doesn't affect the fireworks
+				spri++;
+			break;
+
 			// Dadandarn zcode suppression
 			case  1:
 				zcode = 0;

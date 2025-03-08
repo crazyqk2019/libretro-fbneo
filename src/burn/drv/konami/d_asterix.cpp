@@ -136,7 +136,7 @@ static void __fastcall asterix_main_write_word(UINT32 address, UINT16 data)
 	}
 
 	if ((address & 0xffffe0) == 0x300000) {
-		K053244Write(0, (address & 0xe) / 2, data & 0xff);
+		K053244Write(0, (address & 0x1f) / 2, data & 0xff);
 		return;
 	}
 
@@ -185,7 +185,7 @@ static void __fastcall asterix_main_write_byte(UINT32 address, UINT8 data)
 	}
 
 	if ((address & 0xffffe1) == 0x300001) {
-		K053244Write(0, (address & 0xe) / 2, data);
+		K053244Write(0, (address & 0x1f) / 2, data);
 		return;
 	}
 
@@ -231,7 +231,7 @@ static UINT16 __fastcall asterix_main_read_word(UINT32 address)
 	}
 
 	if ((address & 0xffffe0) == 0x300000) {
-		return K053244Read(0, (address & 0xe)/2);
+		return K053244Read(0, (address & 0x1f)/2);
 	}
 
 	if ((address & 0xfff000) == 0x400000) {
@@ -261,7 +261,7 @@ static UINT8 __fastcall asterix_main_read_byte(UINT32 address)
 	}
 
 	if ((address & 0xffffe0) == 0x300000) {
-		return K053244Read(0, (address & 0xe)/2);
+		return K053244Read(0, (address & 0x1f)/2);
 	}
 
 	if ((address & 0xfff000) == 0x400000) {
@@ -391,6 +391,8 @@ static INT32 DrvDoReset()
 
 	BurnYM2151Reset();
 	K053260Reset(0);
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -541,9 +543,9 @@ static void DrvPaletteRecalc()
 
 	for (INT32 i = 0; i < 0x1000/2; i++)
 	{
-		INT32 r = (pal[i] & 0x1f);
-		INT32 g = (pal[i] >> 5) & 0x1f;
-		INT32 b = (pal[i] >> 10) & 0x1f;
+		INT32 r = (BURN_ENDIAN_SWAP_INT16(pal[i]) & 0x1f);
+		INT32 g = (BURN_ENDIAN_SWAP_INT16(pal[i]) >> 5) & 0x1f;
+		INT32 b = (BURN_ENDIAN_SWAP_INT16(pal[i]) >> 10) & 0x1f;
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
@@ -735,7 +737,7 @@ struct BurnDriver BurnDrvAsterix = {
 	"asterix", NULL, NULL, NULL, "1992",
 	"Asterix (ver EAD)\0", NULL, "Konami", "GX068",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, asterixRomInfo, asterixRomName, NULL, NULL, NULL, NULL, AsterixInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -770,7 +772,7 @@ struct BurnDriver BurnDrvAsterixeac = {
 	"asterixeac", "asterix", NULL, NULL, "1992",
 	"Asterix (ver EAC)\0", NULL, "Konami", "GX068",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, asterixeacRomInfo, asterixeacRomName, NULL, NULL, NULL, NULL, AsterixInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -805,7 +807,7 @@ struct BurnDriver BurnDrvAsterixeaa = {
 	"asterixeaa", "asterix", NULL, NULL, "1992",
 	"Asterix (ver EAA)\0", NULL, "Konami", "GX068",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, asterixeaaRomInfo, asterixeaaRomName, NULL, NULL, NULL, NULL, AsterixInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -840,7 +842,7 @@ struct BurnDriver BurnDrvAsterixaad = {
 	"asterixaad", "asterix", NULL, NULL, "1992",
 	"Asterix (ver AAD)\0", NULL, "Konami", "GX068",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, asterixaadRomInfo, asterixaadRomName, NULL, NULL, NULL, NULL, AsterixInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3
@@ -875,7 +877,7 @@ struct BurnDriver BurnDrvAsterixj = {
 	"asterixj", "asterix", NULL, NULL, "1992",
 	"Asterix (ver JAD)\0", NULL, "Konami", "GX068",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SCRFIGHT, 0,
 	NULL, asterixjRomInfo, asterixjRomName, NULL, NULL, NULL, NULL, AsterixInputInfo, NULL,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	288, 224, 4, 3

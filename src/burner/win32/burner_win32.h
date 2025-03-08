@@ -97,7 +97,7 @@ extern bool bDisableDebugConsole;                   // Disable debug console?
 extern HINSTANCE hAppInst;							// Application Instance
 extern HANDLE hMainThread;							// Handle to the main thread
 extern long int nMainThreadID;						// ID of the main thread
-extern int nAppThreadPriority;
+extern int nAppProcessPriority;
 extern int nAppShowCmd;
 
 extern HACCEL hAccel;
@@ -115,6 +115,8 @@ extern bool bAlwaysCreateSupportFolders;
 extern bool bAutoLoadGameList;
 
 extern bool bQuietLoading;
+extern bool bNoPopups;
+extern bool bShonkyProfileMode;
 
 extern bool bNoChangeNumLock;
 extern bool bMonitorAutoCheck;
@@ -132,6 +134,7 @@ char *utf8_from_astring(const CHAR *s);
 
 WCHAR *wstring_from_utf8(const char *s);
 char *utf8_from_wstring(const WCHAR *s);
+void tcharstrreplace(TCHAR *pszSRBuffer, const TCHAR *pszFind, const TCHAR *pszReplace);
 
 #ifdef _UNICODE
 #define tstring_from_utf8 wstring_from_utf8
@@ -171,6 +174,8 @@ void BurnerDoGameListLocalisation();
 void BurnerExitGameListLocalisation();
 int FBALocaliseGamelistLoadTemplate();
 int FBALocaliseGamelistCreateTemplate();
+
+INT32 BurnDrvSetFullNameW(TCHAR* szName, INT32 i = nBurnDrvActive);
 
 // popup_win32.cpp
 enum FBAPopupType { MT_NONE = 0, MT_ERROR, MT_WARNING, MT_INFO };
@@ -231,12 +236,21 @@ void NeoCDZRateChangeback();
 
 // burn_shift
 extern INT32 BurnShiftEnabled;
+// burn_gun
+extern bool bBurnGunDrawReticles;
 
 // run.cpp
 extern int bRunPause;
 extern int bAltPause;
 extern int bAlwaysDrawFrames;
+extern int nSlowMo;
+//extern INT32 bRunAhead;  // in burn.h! (partially platform agnostic feature)
 extern int kNetGame;
+extern int k_player_id;
+extern int k_numplayers;
+extern int k_bLoadNetgame;
+extern char k_game_str[255];
+
 int RunIdle();
 int RunFrame(int bDraw, int bPause);
 int RunMessageLoop();
@@ -263,9 +277,12 @@ void SetPauseMode(bool bPause);
 int ActivateChat();
 void DeActivateChat();
 int BurnerLoadDriver(TCHAR *szDriverName);
-int StartFromReset(TCHAR *szDriverName);
+int StartFromReset(TCHAR *szDriverName, bool bLoadSram);
 void PausedRedraw(void);
 INT32 is_netgame_or_recording();
+void ScrnInitLua();
+void ScrnExitLua();
+char* DecorateKailleraGameName(UINT32 nBurnDrv);
 
 // menu.cpp
 #define UM_DISPLAYPOPUP (WM_USER + 0x0100)
@@ -287,7 +304,7 @@ extern int nScreenSizeVer;	// For vertical orientation
 extern int nWindowSize;
 
 #define SHOW_PREV_GAMES		10
-extern TCHAR szPrevGames[SHOW_PREV_GAMES][32];
+extern TCHAR szPrevGames[SHOW_PREV_GAMES][64];
 
 extern bool bModelessMenu;
 
@@ -295,6 +312,9 @@ int MenuCreate();
 void MenuDestroy();
 int SetMenuPriority();
 void MenuUpdate();
+void MenuUpdateVolume();
+void MenuUpdateSlowMo();
+
 void CreateArcaderesItem();
 void MenuEnableItems();
 bool MenuHandleKeyboard(MSG*);
@@ -338,8 +358,8 @@ extern TCHAR szNeoCDGamesDir[MAX_PATH];
 
 HBITMAP ImageToBitmap(HWND hwnd, IMAGE* img);
 HBITMAP PNGLoadBitmap(HWND hWnd, FILE* fp, int nWidth, int nHeight, int nPreset);
-HBITMAP PNGLoadBitmapBuffer(HWND hWnd, unsigned char* buffer, int bufferLength, int nWidth, int nHeight, int nPreset);
 HBITMAP LoadBitmap(HWND hWnd, FILE* fp, int nWidth, int nHeight, int nPreset);
+int NeoCDList_CheckISO(TCHAR* pszFile, void (*pfEntryCallBack)(INT32, TCHAR*));
 
 // cona.cpp
 extern int nIniVersion;
@@ -403,6 +423,7 @@ int StatedSave(int nSlot);
 // numdial.cpp
 int NumDialCreate(int bDial);
 void GammaDialog();
+void HardFXShaderSettingsDialog();
 void ScanlineDialog();
 void PhosphorDialog();
 void ScreenAngleDialog();
@@ -441,6 +462,7 @@ int ReplayInput();
 int StartRecord();
 int StartReplay(const TCHAR* szFileName = NULL);
 void StopReplay();
+INT32 FreezeInputSize();
 int FreezeInput(unsigned char** buf, int* size);
 int UnfreezeInput(const unsigned char* buf, int size);
 void DisplayReplayProperties(HWND hDlg, bool bClear);
@@ -465,6 +487,10 @@ void LoadFavorites();
 void AddFavorite_Ext(UINT8 addf);
 INT32 CheckFavorites(char *name);
 
+// luaconsole.cpp
+extern HWND LuaConsoleHWnd;
+void UpdateLuaConsole(const wchar_t* fname);
+
 // ---------------------------------------------------------------------------
 // Debugger
 
@@ -478,12 +504,11 @@ int DebugCreate();
 int PaletteViewerDialogCreate(HWND hParentWND);
 
 // ips_manager.cpp
-extern int nIpsSelectedLanguage;
-int GetIpsNumPatches();
+extern INT32 nIpsSelectedLanguage;
+INT32 GetIpsNumPatches();
 void LoadIpsActivePatches();
-int GetIpsNumActivePatches();
-int IpsManagerCreate(HWND hParentWND);
-void IpsPatchExit();
+INT32 GetIpsNumActivePatches();
+INT32 IpsManagerCreate(HWND hParentWND);
 
 // localise_download.cpp
 int LocaliseDownloadCreate(HWND hParentWND);

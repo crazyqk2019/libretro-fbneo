@@ -20,8 +20,8 @@ typedef const RECT* LPCRECT;
 #include <windows.h>
 #endif
 
-typedef unsigned long   DWORD;
-typedef unsigned char   BYTE;
+typedef UINT32 DWORD;
+typedef UINT8 BYTE;
 
 #ifndef MAX_PATH
 #define MAX_PATH    511
@@ -43,7 +43,18 @@ extern bool  bAlwaysProcessKeyboardInput;
 extern TCHAR szAppBurnVer[16];
 extern bool  bAppFullscreen;
 extern bool bIntegerScale;
+extern int  nWindowScale;
+extern bool bAlwaysMenu;
+extern int 	nGameSelect;
+extern int 	nFilterSelect;
+extern bool bShowAvailableOnly;
+extern bool bShowClones;
+extern int gameSelectedFromFilter;
 
+#ifdef BUILD_SDL2
+extern SDL_Window* sdlWindow;
+extern int nJoystickCount;
+#endif
 extern TCHAR* GetIsoPath();
 
 TCHAR* ANSIToTCHAR(const char* pszInString, TCHAR* pszOutString, int nOutSize);
@@ -86,7 +97,21 @@ int MediaInit();
 int MediaExit();
 
 //inpdipsw.cpp
+#define DIP_MAX_NAME 64
+#define MAXDIPSWITCHES 32
+#define MAXDIPOPTIONS 32
+bool setDIPSwitchOption(int dipgroup, int dipoption);
+int InpDIPSWCreate();
 void InpDIPSWResetDIPs();
+
+struct GroupOfDIPSwitches
+{
+	BurnDIPInfo dipSwitch;
+	UINT16 DefaultDIPOption;
+	UINT16 SelectedDIPOption;
+	char OptionsNamesWithCheckBoxes[MAXDIPOPTIONS][DIP_MAX_NAME];
+	BurnDIPInfo dipSwitchesOptions[MAXDIPOPTIONS];
+};
 
 //interface/inp_interface.cpp
 int InputInit();
@@ -111,23 +136,6 @@ public:
 };
 
 // support_paths.cpp
-extern TCHAR szAppPreviewsPath[MAX_PATH];
-extern TCHAR szAppTitlesPath[MAX_PATH];
-extern TCHAR szAppSelectPath[MAX_PATH];
-extern TCHAR szAppVersusPath[MAX_PATH];
-extern TCHAR szAppHowtoPath[MAX_PATH];
-extern TCHAR szAppScoresPath[MAX_PATH];
-extern TCHAR szAppBossesPath[MAX_PATH];
-extern TCHAR szAppGameoverPath[MAX_PATH];
-extern TCHAR szAppFlyersPath[MAX_PATH];
-extern TCHAR szAppMarqueesPath[MAX_PATH];
-extern TCHAR szAppControlsPath[MAX_PATH];
-extern TCHAR szAppCabinetsPath[MAX_PATH];
-extern TCHAR szAppPCBsPath[MAX_PATH];
-extern TCHAR szAppCheatsPath[MAX_PATH];
-extern TCHAR szAppHistoryPath[MAX_PATH];
 extern TCHAR szAppListsPath[MAX_PATH];
 extern TCHAR szAppDatListsPath[MAX_PATH];
-extern TCHAR szAppIpsPath[MAX_PATH];
-extern TCHAR szAppIconsPath[MAX_PATH];
 extern TCHAR szAppArchivesPath[MAX_PATH];

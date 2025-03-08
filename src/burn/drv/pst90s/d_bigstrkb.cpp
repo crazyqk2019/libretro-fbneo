@@ -216,7 +216,7 @@ static tilemap_callback( tx )
 {
 	UINT16 *ram = (UINT16*)DrvTxRAM;
 
-	INT32 code = ram[offs];
+	INT32 code = BURN_ENDIAN_SWAP_INT16(ram[offs]);
 
 	TILE_SET_INFO(0, code & 0xfff, code >> 12, 0);
 }
@@ -225,7 +225,7 @@ static tilemap_callback( fg )
 {
 	UINT16 *ram = (UINT16*)DrvFgRAM;
 
-	INT32 code = ram[offs];
+	INT32 code = BURN_ENDIAN_SWAP_INT16(ram[offs]);
 
 	TILE_SET_INFO(1, code & 0xfff, code >> 12, 0);
 }
@@ -234,7 +234,7 @@ static tilemap_callback( bg )
 {
 	UINT16 *ram = (UINT16*)DrvBgRAM;
 
-	INT32 code = ram[offs];
+	INT32 code = BURN_ENDIAN_SWAP_INT16(ram[offs]);
 
 	TILE_SET_INFO(2, code & 0xfff, code >> 12, 0);
 }
@@ -250,6 +250,8 @@ static INT32 DrvDoReset()
 	MSM6295Reset();
 
 	memset (scroll, 0, 2 * 2 * sizeof(UINT16));
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -418,10 +420,10 @@ static void draw_sprites()
 
 	for (INT32 i = 0; i < 0x800 / 2; i+=8)
 	{
-		INT32 code  = ram[i + 0] & 0x0fff;
-		INT32 attr  = ram[i + 1];
-		INT32 sx    = ram[i + 2] - 126;
-		INT32 sy    =(ram[i + 3] ^ 0xffff) - 32;
+		INT32 code  = BURN_ENDIAN_SWAP_INT16(ram[i + 0]) & 0x0fff;
+		INT32 attr  = BURN_ENDIAN_SWAP_INT16(ram[i + 1]);
+		INT32 sx    = BURN_ENDIAN_SWAP_INT16(ram[i + 2]) - 126;
+		INT32 sy    =(BURN_ENDIAN_SWAP_INT16(ram[i + 3]) ^ 0xffff) - 32;
 		INT32 flipx = attr & 0x0100;
 		INT32 color = attr & 0x000f;
 
@@ -554,7 +556,7 @@ struct BurnDriver BurnDrvBigstrkb = {
 	"bigstrkb", "bigstrik", NULL, NULL, "1992",
 	"Big Striker (bootleg)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_POST90S, GBF_SPORTSFOOTBALL, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_SPORTSFOOTBALL, 0,
 	NULL, bigstrkbRomInfo, bigstrkbRomName, NULL, NULL, NULL, NULL, BigstrkbInputInfo, BigstrkbDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	256, 224, 4, 3
@@ -594,7 +596,7 @@ struct BurnDriver BurnDrvBigstrkba = {
 	"bigstrkba", "bigstrik", NULL, NULL, "1992",
 	"Big Striker (bootleg w/Italian teams)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_MISC_POST90S, GBF_SPORTSFOOTBALL, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_SPORTSFOOTBALL, 0,
 	NULL, bigstrkbaRomInfo, bigstrkbaRomName, NULL, NULL, NULL, NULL, BigstrkbInputInfo, BigstrkbDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	256, 224, 4, 3

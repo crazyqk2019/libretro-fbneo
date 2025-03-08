@@ -52,15 +52,15 @@ typedef struct tagIMAGE {
  #include "burner_qt.h"
 #endif
 
-#if defined (INCLUDE_LIB_PNGH)
- #include "png.h"
-#endif
-
 // ---------------------------------------------------------------------------
 // OS independent functionality
 
 #ifndef __LIBRETRO__
 #include "interface.h"
+#endif
+
+#if defined (INCLUDE_LUA_SUPPORT) || defined (BUILD_WIN32)
+#include "luaengine.h"
 #endif
 
 #define IMG_FREE		(1 << 0)
@@ -69,6 +69,11 @@ typedef struct tagIMAGE {
 #define SKIP_WS(s) while (_istspace(*s)) { s++; }			// Skip whitespace
 #define FIND_WS(s) while (*s && !_istspace(*s)) { s++; }	// Find whitespace
 #define FIND_QT(s) while (*s && *s != _T('\"')) { s++; }	// Find quote
+
+// burn/burn.cpp
+extern INT32 bRewindEnabled;
+extern INT64 nRewindMemory;
+
 
 // image.cpp
 extern int bPngImageOrientation;
@@ -92,14 +97,20 @@ extern INT32 nAnalogSpeed;
 
 extern INT32 nFireButtons;
 
+extern INT32 nSubDrvSelected;
+
 extern bool bStreetFighterLayout;
 extern bool bLeftAltkeyMapped;
+extern bool bResetDrv;
 
 INT32 GameInpInit();
 INT32 GameInpExit();
 TCHAR* InputCodeDesc(INT32 c);
 TCHAR* InpToDesc(struct GameInp* pgi);
 TCHAR* InpMacroToDesc(struct GameInp* pgi);
+TCHAR* InputNumToName(UINT32 i);
+TCHAR* InpToString(struct GameInp* pgi);
+TCHAR* InpMacroToString(struct GameInp* pgi);
 #ifndef __LIBRETRO__
 void GameInpCheckLeftAlt();
 void GameInpCheckMouse();
@@ -111,21 +122,50 @@ INT32 GameInpDefault();
 INT32 GameInpWrite(FILE* h);
 INT32 GameInpRead(TCHAR* szVal, bool bOverWrite);
 INT32 GameInpMacroRead(TCHAR* szVal, bool bOverWrite);
+INT32 GameMacroAutofireRead(TCHAR* szVal, bool bOverWrite);
 INT32 GameInpCustomRead(TCHAR* szVal, bool bOverWrite);
+
+struct tIniStruct {
+	TCHAR system[80];
+	TCHAR ini[MAX_PATH];
+	INT32 hw[8];
+	char gameinfotoken[80];
+};
+
+extern tIniStruct gamehw_cfg[];
+
+UINT32 GameInputGetHWFlag();
+
+void GetHistoryDatHardwareToken(char *to_string);
 
 // inp_interface.cpp
 extern INT32 nAutoFireRate;
 
 // Player Default Controls
-extern INT32 nPlayerDefaultControls[5];
+extern INT32 nPlayerDefaultControls[8];
 extern TCHAR szPlayerDefaultIni[5][MAX_PATH];
 
 // mappable System Macros for the Input Dialogue
 extern UINT8 macroSystemPause;
 extern UINT8 macroSystemFFWD;
+extern UINT8 macroSystemFrame;
 extern UINT8 macroSystemSaveState;
 extern UINT8 macroSystemLoadState;
+extern UINT8 macroSystemNextState;
+extern UINT8 macroSystemPreviousState;
 extern UINT8 macroSystemUNDOState;
+extern UINT8 macroSystemRewind;
+extern UINT8 macroSystemRewindCancel;
+extern UINT8 macroSystemSlowMo[5];
+extern UINT8 macroSystemLuaHotkey1;
+extern UINT8 macroSystemLuaHotkey2;
+extern UINT8 macroSystemLuaHotkey3;
+extern UINT8 macroSystemLuaHotkey4;
+extern UINT8 macroSystemLuaHotkey5;
+extern UINT8 macroSystemLuaHotkey6;
+extern UINT8 macroSystemLuaHotkey7;
+extern UINT8 macroSystemLuaHotkey8;
+extern UINT8 macroSystemLuaHotkey9;
 
 // scrn.cpp
 extern void scrnSSUndo();
@@ -165,26 +205,29 @@ extern INT32 bHardwareGammaOnly;
 extern double nGamma;
 
 INT32 SetBurnHighCol(INT32 nDepth);
+char* GameDecoration(UINT32 nBurnDrv);
 char* DecorateGameName(UINT32 nBurnDrv);
 TCHAR* DecorateGenreInfo();
 void ComputeGammaLUT();
 
 // dat.cpp
-#define DAT_ARCADE_ONLY		0
-#define DAT_MEGADRIVE_ONLY	1
-#define DAT_PCENGINE_ONLY	2
-#define DAT_TG16_ONLY		3
-#define DAT_SGX_ONLY		4
-#define DAT_SG1000_ONLY		5
-#define DAT_COLECO_ONLY		6
-#define DAT_MASTERSYSTEM_ONLY		7
+#define DAT_ARCADE_ONLY			0
+#define DAT_MEGADRIVE_ONLY		1
+#define DAT_PCENGINE_ONLY		2
+#define DAT_TG16_ONLY			3
+#define DAT_SGX_ONLY			4
+#define DAT_SG1000_ONLY			5
+#define DAT_COLECO_ONLY			6
+#define DAT_MASTERSYSTEM_ONLY	7
 #define DAT_GAMEGEAR_ONLY		8
-#define DAT_MSX_ONLY        9
-#define DAT_SPECTRUM_ONLY   10
-#define DAT_NEOGEO_ONLY		11
-#define DAT_NES_ONLY        12
-#define DAT_FDS_ONLY        13
-#define DAT_NGP_ONLY        14
+#define DAT_MSX_ONLY			9
+#define DAT_SPECTRUM_ONLY		10
+#define DAT_NEOGEO_ONLY			11
+#define DAT_NES_ONLY			12
+#define DAT_FDS_ONLY			13
+#define DAT_SNES_ONLY			14
+#define DAT_NGP_ONLY			15
+#define DAT_CHANNELF_ONLY		16
 
 INT32 write_datfile(INT32 bType, FILE* fDat);
 INT32 create_datfile(TCHAR* szFilename, INT32 bType);
@@ -203,6 +246,10 @@ INT32 BurnStateUNDO(TCHAR* szName);
 INT32 BurnStateCompress(UINT8** pDef, INT32* pnDefLen, INT32 bAll);
 INT32 BurnStateDecompress(UINT8* Def, INT32 nDefLen, INT32 bAll);
 
+// nvram.cpp
+INT32 BurnNvramLoad(TCHAR* szName);
+INT32 BurnNvramSave(TCHAR* szName);
+
 // zipfn.cpp
 struct ZipEntry { char* szName;	UINT32 nLen; UINT32 nCrc; };
 
@@ -211,6 +258,15 @@ INT32 ZipClose();
 INT32 ZipGetList(struct ZipEntry** pList, INT32* pnListCount);
 INT32 ZipLoadFile(UINT8* Dest, INT32 nLen, INT32* pnWrote, INT32 nEntry);
 INT32 __cdecl ZipLoadOneFile(char* arcName, const char* fileName, void** Dest, INT32* pnWrote);
+
+// retro_romdata.cpp
+
+extern TCHAR szRomdataName[MAX_PATH];
+
+// retro_ips.cpp 
+
+void IpsPatchInit();
+void IpsPatchExit();
 
 // bzip.cpp
 

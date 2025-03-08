@@ -352,13 +352,14 @@ int FBAPopupDisplay(int nFlags)
 
 	FBAPopupLog();
 
-	if (!(nPopupFlags & PUF_TYPE_LOGONLY) && hRiched) {
+	if (!(nPopupFlags & PUF_TYPE_LOGONLY) && hRiched && bNoPopups == false) {
 		DialogBox(hAppInst, MAKEINTRESOURCE(IDD_POPUP), hScrnWnd, (DLGPROC)FBAPopupProc);
-		FreeLibrary(hRiched);
-		hRiched = NULL;
 	}
 
 	FBAPopupDestroyText();
+
+	FreeLibrary(hRiched);
+	hRiched = NULL;
 
 	return 1;
 }

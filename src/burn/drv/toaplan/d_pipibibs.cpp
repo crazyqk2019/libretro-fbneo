@@ -11,34 +11,32 @@ static UINT8 DrvJoy2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInput[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static UINT8 DrvReset = 0;
-static UINT8 bDrawScreen;
-static bool bVBlank;
 
 static struct BurnInputInfo PipibibsInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvButton + 3,	"p1 coin"},
-	{"P1 Start",		BIT_DIGITAL,	DrvButton + 5,	"p1 start"},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"},
-	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"},
-	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"},
-	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"},
+	{"P1 Coin",			BIT_DIGITAL,	DrvButton + 3,	"p1 coin"	},
+	{"P1 Start",		BIT_DIGITAL,	DrvButton + 5,	"p1 start"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
+	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
+	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvButton + 4,	"p2 coin"},
-	{"P2 Start",		BIT_DIGITAL,	DrvButton + 6,	"p2 start"},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"},
-	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"},
-	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"},
-	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"},
+	{"P2 Coin",			BIT_DIGITAL,	DrvButton + 4,	"p2 coin"	},
+	{"P2 Start",		BIT_DIGITAL,	DrvButton + 6,	"p2 start"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
+	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"	},
+	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
+	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"},
-	{"Service",		BIT_DIGITAL,	DrvButton + 0,	"service"},
-	{"Tilt",		BIT_DIGITAL,	DrvButton + 1,	"tilt"},
-	{"Dip A",		BIT_DIPSWITCH,	DrvInput + 3,	"dip"},
-	{"Dip B",		BIT_DIPSWITCH,	DrvInput + 4,	"dip"},
-	{"Dip C",		BIT_DIPSWITCH,	DrvInput + 5,	"dip"},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvButton + 0,	"service"	},
+	{"Tilt",			BIT_DIGITAL,	DrvButton + 1,	"tilt"		},
+	{"Dip A",			BIT_DIPSWITCH,	DrvInput + 3,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvInput + 4,	"dip"		},
+	{"Dip C",			BIT_DIPSWITCH,	DrvInput + 5,	"dip"		},
 };
 
 STDINPUTINFO(Pipibibs)
@@ -158,7 +156,7 @@ static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
 
 	if (nAction & ACB_VOLATILE) {		// Scan volatile ram
 		memset(&ba, 0, sizeof(ba));
-    		ba.Data		= RamStart;
+		ba.Data		= RamStart;
 		ba.nLen		= RamEnd-RamStart;
 		ba.szName	= "All Ram";
 		BurnAcb(&ba);
@@ -178,26 +176,26 @@ static INT32 LoadRoms()
 {
 	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "pipibibsp")) {
 		// Load 68000 ROM
-		ToaLoadCode(Rom01, 0, 2);
+		if (ToaLoadCode(Rom01, 0, 2)) return 1;
 
 		// Load GP9001 tile data
 		ToaLoadGP9001Tiles(GP9001ROM[0], 2, 4, nGP9001ROMSize[0]);
 
-		BurnLoadRom(RomZ80, 6, 1);
+		if (BurnLoadRom(RomZ80, 6, 1)) return 1;
 	} else {
 		// Load 68000 ROM
-		ToaLoadCode(Rom01, 0, 2);
+		if (ToaLoadCode(Rom01, 0, 2)) return 1;
 
 		// Load GP9001 tile data
 		ToaLoadGP9001Tiles(GP9001ROM[0], 2, 2, nGP9001ROMSize[0]);
 
-		BurnLoadRom(RomZ80, 4, 1);
+		if (BurnLoadRom(RomZ80, 4, 1)) return 1;
 	}
 
 	return 0;
 }
 
-UINT8 __fastcall pipibibsReadByte(UINT32 sekAddress)
+static UINT8 __fastcall pipibibsReadByte(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 		case 0x19c031:								// Player 1 inputs
@@ -224,7 +222,7 @@ UINT8 __fastcall pipibibsReadByte(UINT32 sekAddress)
 	return 0;
 }
 
-UINT16 __fastcall pipibibsReadWord(UINT32 sekAddress)
+static UINT16 __fastcall pipibibsReadWord(UINT32 sekAddress)
 {
 	switch (sekAddress) {
 		case 0x19c030:								// Player 1 inputs
@@ -256,7 +254,7 @@ UINT16 __fastcall pipibibsReadWord(UINT32 sekAddress)
 	return 0;
 }
 
-void __fastcall pipibibsWriteByte(UINT32 /*sekAddress*/, UINT8 /*byteValue*/)
+static void __fastcall pipibibsWriteByte(UINT32 /*sekAddress*/, UINT8 /*byteValue*/)
 {
 //	switch (sekAddress) {
 //		default:
@@ -264,7 +262,7 @@ void __fastcall pipibibsWriteByte(UINT32 /*sekAddress*/, UINT8 /*byteValue*/)
 //	}
 }
 
-void __fastcall pipibibsWriteWord(UINT32 sekAddress, UINT16 wordValue)
+static void __fastcall pipibibsWriteWord(UINT32 sekAddress, UINT16 wordValue)
 {
 	switch (sekAddress) {
 
@@ -292,7 +290,7 @@ void __fastcall pipibibsWriteWord(UINT32 sekAddress, UINT16 wordValue)
 	}
 }
 
-void __fastcall pipibibs_sound_write(UINT16 address, UINT8 data)
+static void __fastcall pipibibs_sound_write(UINT16 address, UINT8 data)
 {
 	switch (address)
 	{
@@ -306,7 +304,7 @@ void __fastcall pipibibs_sound_write(UINT16 address, UINT8 data)
 	}
 }
 
-UINT8 __fastcall pipibibs_sound_read(UINT16 address)
+static UINT8 __fastcall pipibibs_sound_read(UINT16 address)
 {
 	switch (address)
 	{
@@ -325,15 +323,18 @@ inline static INT32 pipibibsSynchroniseStream(INT32 nSoundRate)
 
 static INT32 DrvDoReset()
 {
+	memset(RamStart, 0, RamEnd-RamStart);
+
 	SekOpen(0);
 	SekReset();
 	SekClose();
 
 	ZetOpen(0);
 	ZetReset();
+	BurnYM3812Reset();
 	ZetClose();
 
-	BurnYM3812Reset();
+	HiscoreReset();
 
 	return 0;
 }
@@ -397,7 +398,7 @@ static INT32 DrvInit()
 
 	nToa1Cycles68KSync = 0;
 	BurnYM3812Init(1, 3375000, &toaplan1FMIRQHandler, pipibibsSynchroniseStream, 0);
-	BurnTimerAttachYM3812(&ZetConfig, 3375000);
+	BurnTimerAttach(&ZetConfig, 3375000);
 	BurnYM3812SetRoute(0, BURN_SND_YM3812_ROUTE, 1.00, BURN_SND_ROUTE_BOTH);
 
 	nSpriteYOffset =  0x0001;
@@ -411,8 +412,6 @@ static INT32 DrvInit()
 	nToaPalLen = nColCount;
 	ToaPalSrc = RamPal;
 	ToaPalInit();
-
-	bDrawScreen = true;
 
 	DrvDoReset();			// Reset machine
 	return 0;
@@ -436,18 +435,11 @@ static INT32 DrvDraw()
 {
 	ToaClearScreen(0);
 
-	if (bDrawScreen) {
-		ToaGetBitmap();
-		ToaRenderGP9001();					// Render GP9001 graphics
-	}
+	ToaGetBitmap();
+	ToaRenderGP9001();						// Render GP9001 graphics
 
 	ToaPalUpdate();							// Update the palette
 
-	return 0;
-}
-
-inline static INT32 CheckSleep(INT32)
-{
 	return 0;
 }
 
@@ -483,7 +475,7 @@ static INT32 DrvFrame()
 	SekSetCyclesScanline(nCyclesTotal[0] / 262);
 	nToaCyclesDisplayStart = nCyclesTotal[0] - ((nCyclesTotal[0] * (TOA_VBLANK_LINES + 240)) / 262);
 	nToaCyclesVBlankStart = nCyclesTotal[0] - ((nCyclesTotal[0] * TOA_VBLANK_LINES) / 262);
-	bVBlank = false;
+	bool bVBlank = false;
 
 	for (INT32 i = 0; i < nInterleave; i++) {
 		INT32 nNext;
@@ -509,17 +501,13 @@ static INT32 DrvFrame()
 		}
 
 		nCyclesSegment = nNext - SekTotalCycles();
-		if (bVBlank || (!CheckSleep(0))) {
-			SekRun(nCyclesSegment);
-		} else {
-			SekIdle(nCyclesSegment);
-		}
-		
-		BurnTimerUpdateYM3812(i * (nCyclesTotal[1] / nInterleave));
+		SekRun(nCyclesSegment);
+
+		BurnTimerUpdate(i * (nCyclesTotal[1] / nInterleave));
 	}
 
 	nToa1Cycles68KSync = SekTotalCycles();
-	BurnTimerEndFrameYM3812(nCyclesTotal[1]);
+	BurnTimerEndFrame(nCyclesTotal[1]);
 	if (pBurnSoundOut) {
 		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
 	}
@@ -556,7 +544,7 @@ struct BurnDriver BurnDrvPipibibs = {
 	"pipibibs", NULL, NULL, NULL, "1991",
 	"Pipi & Bibis / Whoopee!! (Z80 sound cpu, set 1)\0", NULL, "Toaplan", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_TOAPLAN_68K_Zx80, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_68K_Zx80, GBF_PLATFORM, 0,
 	NULL, pipibibsRomInfo, pipibibsRomName, NULL, NULL, NULL, NULL, PipibibsInputInfo, PipibibsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	320, 240, 4, 3
@@ -582,7 +570,7 @@ struct BurnDriver BurnDrvPipibibsa = {
 	"pipibibsa", "pipibibs", NULL, NULL, "1991",
 	"Pipi & Bibis / Whoopee!! (Z80 sound cpu, set 2)\0", NULL, "Toaplan", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_TOAPLAN_68K_Zx80, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_68K_Zx80, GBF_PLATFORM, 0,
 	NULL, pipibibsaRomInfo, pipibibsaRomName, NULL, NULL, NULL, NULL, PipibibsInputInfo, PipibibsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	320, 240, 4, 3
@@ -610,7 +598,7 @@ struct BurnDriver BurnDrvPipibibsp = {
 	"pipibibsp", "pipibibs", NULL, NULL, "1991",
 	"Pipi & Bibis / Whoopee!! (prototype)\0", NULL, "Toaplan", "Toaplan GP9001 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE, 2, HARDWARE_TOAPLAN_68K_Zx80, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_68K_Zx80, GBF_PLATFORM, 0,
 	NULL, pipibibspRomInfo, pipibibspRomName, NULL, NULL, NULL, NULL, PipibibsInputInfo, PipibibsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	320, 240, 4, 3

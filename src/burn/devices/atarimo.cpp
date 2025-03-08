@@ -11,18 +11,6 @@
 
 #define MAX_GFX_ELEMENTS	MAX_GFX
 
-void sect_rect(rectangle *rect, const rectangle *cliprect)
-{
-	if (rect->min_x < cliprect->min_x) rect->min_x = cliprect->min_x;
-	if (rect->min_y < cliprect->min_y) rect->min_y = cliprect->min_y;
-	if (rect->max_x > cliprect->max_x) rect->max_x = cliprect->max_x;
-	if (rect->max_y > cliprect->max_y) rect->max_y = cliprect->max_y;
-	if (rect->min_y >= rect->max_y) rect->min_y = rect->max_y;
-	if (rect->min_x >= rect->max_x) rect->min_x = rect->max_x;
-
-	if (cliprect) return; // iq_132
-}
-
 /*##########################################################################
     TYPES & STRUCTURES
 ##########################################################################*/
@@ -109,6 +97,7 @@ struct atarimo_data
 	atarimo_entry *		activelist[ATARIMO_MAXPERBANK];	/* pointers to active motion objects */
 	atarimo_entry **	activelast;			/* pointer to the last pointer in the active list */
 	int					last_link;			/* previous starting point */
+	int                 rebase_last_link;   // runahead testfix
 
 	UINT8 *				dirtygrid;			/* grid of dirty rects for blending */
 	int					dirtywidth;			/* width of dirty grid */
@@ -384,6 +373,7 @@ int atarimo_init(int map, const atarimo_desc *desc)
 	mo->slipram       = (map == 0) ? atarimo_0_slipram : atarimo_1_slipram;
 
 	mo->last_link     = -1;
+	mo->rebase_last_link = 0;
 
 	/* allocate the temp bitmap */
 	BurnBitmapAllocate(31, nScreenWidth, nScreenHeight, false);
@@ -459,7 +449,7 @@ void atarimo_exit()
 			BurnFree(mo->gfxlookup);
 		}
 
-		memset (mo, 0, sizeof(atarimo_data));
+		memset ((void*)mo, 0, sizeof(atarimo_data));
 	}
 }
 
@@ -475,15 +465,21 @@ INT32 AtariMoScan(INT32 nAction, INT32 *pnMin)
 		for (INT32 i = 0; i < 2; i++)
 		{
 			atarimo_data *mo = &atarimo[i];
-
 			if (mo->tilewidth)
 			{
 				ScanVar(mo->spriteram, sizeof(atarimo_entry) * mo->spriteramsize, "AtariMO RAM");
 				SCAN_VAR(mo->bank);
 				SCAN_VAR(mo->xscroll);
 				SCAN_VAR(mo->yscroll);
-
+				SCAN_VAR(mo->last_link);
+				SCAN_VAR(mo->last_xpos);
+				SCAN_VAR(mo->next_xpos);
 			}
+
+			if (nAction & ACB_WRITE) {
+				mo->rebase_last_link = 1;
+			}
+
 		}
 	}
 
@@ -552,6 +548,7 @@ static void build_active_list(atarimo_data *mo, int link)
 
 	/* remember the last link */
 	mo->last_link = link;
+	mo->rebase_last_link = 0; // OK!
 
 	/* visit all the motion objects and copy their data into the display list */
 	for (i = 0, current = mo->activelist; i < mo->maxperline && !movisit[link]; i++)
@@ -722,7 +719,7 @@ UINT16 *atarimo_render(int map, const rectangle *cliprect, struct atarimo_rect_l
 		/* otherwise, grab the SLIP and compute the bandrect */
 		if (mo->slipshift != 0)
 		{
-			link = (mo->slipram[band & mo->sliprammask] >> mo->linkmask.shift) & mo->linkmask.mask;
+			link = (BURN_ENDIAN_SWAP_INT16(mo->slipram[band & mo->sliprammask]) >> mo->linkmask.shift) & mo->linkmask.mask;
 
 			/* compute minimum Y and wrap around if necessary */
 			bandclip.min_y = ((band << mo->slipshift) - mo->yscroll + mo->slipoffset) & mo->bitmapymask;
@@ -733,11 +730,11 @@ UINT16 *atarimo_render(int map, const rectangle *cliprect, struct atarimo_rect_l
 			bandclip.max_y = bandclip.min_y + (1 << mo->slipshift) - 1;
 
 			/* keep within the cliprect */
-		    sect_rect(&bandclip, cliprect);
+			bandclip &= *cliprect;
 		}
 
 		/* if this matches the last link, we don't need to re-process the list */
-		if (link != mo->last_link)
+		if (link != mo->last_link || mo->rebase_last_link)
 			build_active_list(mo, link);
 
 		/* set the start and end points */
@@ -758,7 +755,7 @@ UINT16 *atarimo_render(int map, const rectangle *cliprect, struct atarimo_rect_l
 		mo->next_xpos = 123456;
 
 		/* render the mos */
-		for (current = first; current != last; current += step)
+		for (current = first; /*last != NULL &&*/ current != last; current += step)
 			mo_render_object(mo, *current, &bandclip);
 	}
 
@@ -767,7 +764,7 @@ UINT16 *atarimo_render(int map, const rectangle *cliprect, struct atarimo_rect_l
 
 	/* clip the rectlist */
 	for (i = 0, rect = rectlist->rect; i < rectlist->numrects; i++, rect++)
-		sect_rect(rect, cliprect);
+		*rect &= *cliprect;
 
 	/* return the bitmap */
 	return mo->bitmap;

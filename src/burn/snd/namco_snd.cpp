@@ -74,7 +74,7 @@ static INT32 SyncInternal()
 
 static void UpdateStream(INT32 samples_len)
 {
-    if (!namco_buffered) return;
+    if (!namco_buffered || !pBurnSoundOut) return;
     if (samples_len > nBurnSoundLen) samples_len = nBurnSoundLen;
 
 	INT32 nSamplesNeeded = samples_len;
@@ -841,4 +841,6 @@ void NamcoSoundScan(INT32 nAction, INT32 *pnMin)
 	ba.nAddress = 0;
 	ba.szName	= szName;
 	BurnAcb(&ba);
+
+	SCAN_VAR(chip->sound_enable);
 }

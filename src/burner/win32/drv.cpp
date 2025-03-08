@@ -4,10 +4,28 @@
 
 int bDrvOkay = 0;						// 1 if the Driver has been initted okay, and it's okay to use the BurnDrv functions
 
-TCHAR szAppRomPaths[DIRS_MAX][MAX_PATH] = { { _T("") }, { _T("") }, { _T("") }, { _T("") }, { _T("") },
-											{ _T("roms/ngp/") }, { _T("roms/nes/") }, { _T("roms/nes_fds/") }, { _T("roms/nes_hb/") }, { _T("roms/spectrum/") },
-											{ _T("roms/msx/") }, { _T("roms/sms/") }, { _T("roms/gamegear/") }, { _T("roms/sg1000/") }, { _T("roms/coleco/") },
-											{ _T("roms/tg16/") }, { _T("roms/sgx/") }, { _T("roms/pce/") }, { _T("roms/megadrive/") }, { _T("roms/") } };
+TCHAR szAppRomPaths[DIRS_MAX][MAX_PATH] = {
+	{ _T("") },
+	{ _T("") },
+	{ _T("roms/romdata/") },
+	{ _T("roms/channelf/") },
+	{ _T("roms/ngp/") },
+	{ _T("roms/nes/") },
+	{ _T("roms/fds/") },
+	{ _T("roms/snes/") },
+	{ _T("roms/spectrum/") },
+	{ _T("roms/msx/") },
+	{ _T("roms/sms/") },
+	{ _T("roms/gamegear/") },
+	{ _T("roms/sg1000/") },
+	{ _T("roms/coleco/") },
+	{ _T("roms/tg16/") },
+	{ _T("roms/sgx/") },
+	{ _T("roms/pce/") },
+	{ _T("roms/megadrive/") },
+	{ _T("roms/arcade/") },
+	{ _T("roms/") }
+};
 
 static bool bSaveRAM = false;
 
@@ -52,19 +70,31 @@ static int DoLibInit()					// Do Init of Burn library driver
 {
 	int nRet = 0;
 
+	RomDataInit();
+
 	if (DrvBzipOpen()) {
+		RomDataExit();
 		return 1;
 	}
 
 	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) != HARDWARE_SNK_MVS) {
-		if (!bQuietLoading) ProgressCreate();
+		if (!bQuietLoading) {
+			ProgressCreate();
+			if (BurnDrvGetTextA(DRV_SAMPLENAME) != NULL) { // has samples
+				BurnSetProgressRange(0.99); // Increase range for samples
+			}
+		}
 	}
 
 	nRet = BurnDrvInit();
 
+	RomDataSetFullName();
+
 	BzipClose();
 
 	if (!bQuietLoading) ProgressDestroy();
+
+	IpsPatchExit(); // done loading roms, disable ips patcher
 
 	if (nRet) {
 		return 3;
@@ -103,7 +133,12 @@ int __cdecl DrvCartridgeAccess(BurnCartrigeCommand nCommand)
 {
 	switch (nCommand) {
 		case CART_INIT_START:
-			if (!bQuietLoading) ProgressCreate();
+			if (!bQuietLoading) {
+				ProgressCreate();
+				if (BurnDrvGetTextA(DRV_SAMPLENAME) != NULL) { // has samples
+					BurnSetProgressRange(0.99); // Increase range for samples
+				}
+			}
 			if (DrvBzipOpen()) {
 				return 1;
 			}
@@ -174,10 +209,12 @@ int DrvInit(int nDrvNum, bool bRestore)
 		NeoCDZRateChange();
 	}
 
-	{ // Init input and audio, save blitter init for later. (reduce # of mode changes, nice for emu front-ends)
-		bVidOkay = 1;
+	{ // Init input, save audio and blitter init for later. (reduce # of mode changes, nice for emu front-ends)
+		bVidOkay = 1; // don't init video yet
+		bAudOkay = 1; // don't init audio yet, but grab soundcard params (nBurnSoundRate) so soundcores can init.
 		MediaInit();
 		bVidOkay = 0;
+		bAudOkay = 0;
 	}
 
 	// Define nMaxPlayers early; GameInpInit() needs it (normally defined in DoLibInit()).
@@ -204,6 +241,12 @@ int DrvInit(int nDrvNum, bool bRestore)
 
 			FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_BURN_INIT), BurnDrvGetText(DRV_FULLNAME));
 			FBAPopupDisplay(PUF_TYPE_WARNING);
+
+			// When romdata loading fails, the data within the structure must be emptied to restore the original data content.
+			// The time to quit must be after the correct name of the game corresponding to Romdata has been displayed.
+			if (NULL != pDataRomDesc) {
+				RomDataExit();
+			}
 		}
 
 		NeoCDZRateChangeback();
@@ -236,9 +279,8 @@ int DrvInit(int nDrvNum, bool bRestore)
 		if (bRestore) {
 			StatedAuto(0);
 			bSaveRAM = true;
-
-			ConfigCheatLoad();
 		}
+		ConfigCheatLoad();
 	}
 
 	nBurnLayer = 0xFF;				// show all layers
@@ -248,6 +290,7 @@ int DrvInit(int nDrvNum, bool bRestore)
 
 	VidExit();
 	POST_INITIALISE_MESSAGE;
+	CallRegisteredLuaFunctions(LUACALL_ONSTART);
 
 	return 0;
 }
@@ -295,7 +338,7 @@ int DrvExit()
 
 	bRunPause = 0;					// Don't pause when exitted
 
-	if (bAudOkay) {
+	if (bAudOkay && pBurnSoundOut) {
 		// Write silence into the sound buffer on exit, and for drivers which don't use pBurnSoundOut
 		memset(nAudNextSound, 0, nAudSegLen << 2);
 	}
@@ -303,6 +346,8 @@ int DrvExit()
 	CDEmuExit();
 
 	BurnExtCartridgeSetupCallback = NULL;
+
+	RomDataExit();
 
 	nBurnDrvActive = ~0U;			// no driver selected
 

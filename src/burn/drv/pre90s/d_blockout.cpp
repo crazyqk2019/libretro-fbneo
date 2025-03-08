@@ -168,7 +168,7 @@ STDDIPINFO(Agress)
 
 static void palette_write(INT32 offset)
 {
-	UINT16 rgb = *((UINT16*)(DrvPalRAM + offset));
+	UINT16 rgb = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPalRAM + offset)));
 
 	INT32 bit0,bit1,bit2,bit3;
 	INT32 r,g,b;
@@ -207,8 +207,8 @@ static void update_pixels(INT32 offset)
 	UINT16 *src = (UINT16*)DrvVidRAM0 + ((y << 8) | x);
 	UINT16 *dst = DrvTmpBmp + (y-y_offs) * 320 + x * 2;
 
-	INT32 front = src[0x00000];
-	INT32 back  = src[0x10000];
+	INT32 front = BURN_ENDIAN_SWAP_INT16(src[0x00000]);
+	INT32 back  = BURN_ENDIAN_SWAP_INT16(src[0x10000]);
 
 	if (front >> 8)   dst[0] = front >> 8;
 	else              dst[0] = (back >> 8) | 0x100;
@@ -240,14 +240,14 @@ static void __fastcall blockout_write_byte(UINT32 address, UINT8 data)
 static void __fastcall blockout_write_word(UINT32 address, UINT16 data)
 {
 	if (address >= 0x280200 && address <= 0x2805ff) {
-		*((UINT16*)(DrvPalRAM + (address - 0x280200))) = data;
+		*((UINT16*)(DrvPalRAM + (address - 0x280200))) = BURN_ENDIAN_SWAP_INT16(data);
 		palette_write(address & 0x3fe);
 		return;
 	}
 
 	if (address >= 0x180000 && address <= 0x1bffff) {
 		address &= 0x3fffe;
-		*((UINT16*)(DrvVidRAM0 + address)) = data;
+		*((UINT16*)(DrvVidRAM0 + address)) = BURN_ENDIAN_SWAP_INT16(data);
 		update_pixels(address>>1);
 		return;
 	}
@@ -260,7 +260,7 @@ static void __fastcall blockout_write_word(UINT32 address, UINT16 data)
 		return;
 
 		case 0x280002: // front color
-			*((UINT16*)(DrvPalRAM + 0x400)) = data;
+			*((UINT16*)(DrvPalRAM + 0x400)) = BURN_ENDIAN_SWAP_INT16(data);
 			palette_write(0x400);
 		return;
 	}
@@ -370,6 +370,7 @@ static INT32 DrvDoReset()
 
 	MSM6295Reset(0);
 	BurnYM2151Reset();
+	HiscoreReset();
 
 	return 0;
 }
@@ -507,7 +508,7 @@ static INT32 DrvDraw()
 		{
 			for (INT32 x = 0; x < nScreenWidth; x+=8)
 			{
-				INT32 d = vram[(y << 6) + (x >> 3)];
+				INT32 d = BURN_ENDIAN_SWAP_INT16(vram[(y << 6) + (x >> 3)]);
 
 				for (INT32 xi = 0; xi < 8; xi++)
 				{
@@ -633,7 +634,7 @@ struct BurnDriver BurnDrvBlockout = {
 	"blockout", NULL, NULL, NULL, "1989",
 	"Block Out (set 1)\0", NULL, "Technos Japan / California Dreams", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
 	NULL, blockoutRomInfo, blockoutRomName, NULL, NULL, NULL, NULL, BlockoutInputInfo, BlockoutDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x201,
 	320, 240, 4, 3
@@ -660,7 +661,7 @@ struct BurnDriver BurnDrvBlckout2 = {
 	"blockout2", "blockout", NULL, NULL, "1989",
 	"Block Out (set 2)\0", NULL, "Technos Japan / California Dreams", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
 	NULL, blckout2RomInfo, blckout2RomName, NULL, NULL, NULL, NULL, BlockoutInputInfo, BlockoutDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x201,
 	320, 240, 4, 3
@@ -687,7 +688,7 @@ struct BurnDriver BurnDrvBlckout3 = {
 	"blockout3", "blockout", NULL, NULL, "1989",
 	"Block Out (Europe and Oceania)\0", NULL, "Technos Japan / California Dreams", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
 	NULL, blckout3RomInfo, blckout3RomName, NULL, NULL, NULL, NULL, BlockoutInputInfo, BlockoutDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x201,
 	320, 240, 4, 3
@@ -714,14 +715,14 @@ struct BurnDriver BurnDrvBlckoutj = {
 	"blockoutj", "blockout", NULL, NULL, "1989",
 	"Block Out (Japan)\0", NULL, "Technos Japan / California Dreams", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
 	NULL, blckoutjRomInfo, blckoutjRomName, NULL, NULL, NULL, NULL, BlckoutjInputInfo, BlockoutDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x201,
 	320, 240, 4, 3
 };
 
 
-// Agress
+// Agress - Missile Daisenryaku (Japan)
 
 static struct BurnRomInfo agressRomDesc[] = {
 	{ "palco1.81",		0x20000, 0x3acc917a, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -739,16 +740,16 @@ STD_ROM_FN(agress)
 
 struct BurnDriver BurnDrvAgress = {
 	"agress", NULL, NULL, NULL, "1991",
-	"Agress\0", NULL, "Palco", "Miscellaneous",
+	"Agress - Missile Daisenryaku (Japan)\0", NULL, "Palco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
 	NULL, agressRomInfo, agressRomName, NULL, NULL, NULL, NULL, BlockoutInputInfo, AgressDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x201,
 	320, 240, 4, 3
 };
 
 
-// Agress (English bootleg)
+// Agress - Missile Daisenryaku (English bootleg)
 
 static struct BurnRomInfo agressbRomDesc[] = {
 	{ "palco1.ic81",		0x20000, 0xa1875175, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -766,9 +767,9 @@ STD_ROM_FN(agressb)
 
 struct BurnDriver BurnDrvAgressb = {
 	"agressb", "agress", NULL, NULL, "2003",
-	"Agress (English bootleg)\0", NULL, "Palco", "Miscellaneous",
+	"Agress - Missile Daisenryaku (English bootleg)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TECHNOS, GBF_PUZZLE, 0,
 	NULL, agressbRomInfo, agressbRomName, NULL, NULL, NULL, NULL, BlockoutInputInfo, AgressDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x201,
 	320, 240, 4, 3

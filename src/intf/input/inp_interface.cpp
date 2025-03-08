@@ -1,16 +1,20 @@
 // Burner Input module
 #include "burner.h"
+
+#if defined(__APPLE__)
 #include <vector>
+#endif
 
 UINT32 nInputSelect = 0;
 bool bInputOkay = false;
+INT32 nInputIntfMouseDivider = 1;
 
 static bool bCinpOkay;
 
 #if defined (BUILD_WIN32)
 	extern struct InputInOut InputInOutDInput;
 #elif defined (BUILD_MACOS)
-    extern struct InputInOut InputInOutMacOS;
+	extern struct InputInOut InputInOutMacOS;
 #elif defined (BUILD_SDL)
 	extern struct InputInOut InputInOutSDL;
 #elif defined (BUILD_SDL2)
@@ -18,7 +22,7 @@ static bool bCinpOkay;
 #elif defined (_XBOX)
 	extern struct InputInOut InputInOutXInput2;
 #elif defined (BUILD_QT)
-    extern struct InputInOut InputInOutQt;
+	extern struct InputInOut InputInOutQt;
 #endif
 
 static struct InputInOut *pInputInOut[]=
@@ -26,7 +30,7 @@ static struct InputInOut *pInputInOut[]=
 #if defined (BUILD_WIN32)
 	&InputInOutDInput,
 #elif defined (BUILD_MACOS)
-    &InputInOutMacOS,
+	&InputInOutMacOS,
 #elif defined (BUILD_SDL2)
 		&InputInOutSDL2,
 #elif defined (BUILD_SDL)
@@ -34,19 +38,21 @@ static struct InputInOut *pInputInOut[]=
 #elif defined (_XBOX)
 	&InputInOutXInput2,
 #elif defined (BUILD_QT)
-    &InputInOutQt,
+	&InputInOutQt,
 #endif
 };
 
 #define INPUT_LEN (sizeof(pInputInOut) / sizeof(pInputInOut[0]))
 
+#if defined(__APPLE__)
 std::vector<const InputInOut *> InputGetInterfaces()
 {
-    std::vector<const InputInOut *> list;
-    for (unsigned int i = 0; i < INPUT_LEN; i++)
-        list.push_back(pInputInOut[i]);
-    return list;
+	std::vector<const InputInOut *> list;
+	for (unsigned int i = 0; i < INPUT_LEN; i++)
+		list.push_back(pInputInOut[i]);
+	return list;
 }
+#endif
 
 static InterfaceInfo InpInfo = { NULL, NULL, NULL };
 
@@ -120,7 +126,9 @@ static INT32 InputTick()
 		nAdd *= pgi->Input.Slider.nSliderSpeed;
 		nAdd /= 0x100;
 
-		if (pgi->Input.Slider.nSliderCenter && !bGotKey) {						// Attact to center
+		//		if (pgi->Input.Slider.nSliderCenter && !bGotKey) {						// Attact to center
+		// checking !bGotKey here causes the slider to lag -dink jan, 2023
+		if (pgi->Input.Slider.nSliderCenter) {						// Attact to center
 			if (pgi->Input.Slider.nSliderCenter == 1) {
 				// Fastest Auto-Center speed, center immediately when key/button is released
 				pgi->Input.Slider.nSliderValue = 0x8000;
@@ -135,11 +143,11 @@ static INT32 InputTick()
 
 		pgi->Input.Slider.nSliderValue += nAdd;
 		// Limit slider
-		if (pgi->Input.Slider.nSliderValue < 0x0000) {
-			pgi->Input.Slider.nSliderValue = 0x0000;
+		if (pgi->Input.Slider.nSliderValue < 0x0100) {
+			pgi->Input.Slider.nSliderValue = 0x0100;
 		}
-		if (pgi->Input.Slider.nSliderValue > 0xFFFF) {
-			pgi->Input.Slider.nSliderValue = 0xFFFF;
+		if (pgi->Input.Slider.nSliderValue > 0xFF00) {
+			pgi->Input.Slider.nSliderValue = 0xFF00;
 		}
 	}
 	return 0;
@@ -191,11 +199,20 @@ INT32 InputSetCooperativeLevel(const bool bExclusive, const bool bForeground)
 	return pInputInOut[nInputSelect]->SetCooperativeLevel(bExclusive, bForeground);
 }
 
-static bool bLastAF[1000];
+// Auto-Fire!  git 'r dun!!
+static INT32 AF[1000] = { 0, };
 INT32 nAutoFireRate = 12;
 
-static inline INT32 AutofirePick() {
-	return ((nCurrentFrame % nAutoFireRate) > nAutoFireRate-4);
+static inline INT32 AutofirePick(INT32 buttonOffset)
+{
+	INT32 onTime = nAutoFireRate - ((nAutoFireRate < 4) ? nAutoFireRate : 4);
+
+	return ((nCurrentFrame - AF[buttonOffset] + onTime) % nAutoFireRate) > onTime;
+}
+
+static inline void AutofireOff(INT32 buttonOffset)
+{
+	AF[buttonOffset] = nCurrentFrame;
 }
 
 // This will process all PC-side inputs and optionally update the emulated game side.
@@ -217,6 +234,15 @@ INT32 InputMake(bool bCopy)
 	for (i = 0, pgi = GameInp; i < nGameInpCount; i++, pgi++) {
 		if (pgi->Input.pVal == NULL) {
 			continue;
+		}
+
+		if (pgi->nIdent == GK_RESET) {
+			if (bResetDrv) {
+				// Click the reset key (from UI)
+				*(pgi->Input.pVal) = 1;
+				bResetDrv = false;
+				break;
+			}
 		}
 
 		switch (pgi->nInput) {
@@ -283,6 +309,11 @@ INT32 InputMake(bool bCopy)
 			}
 			case GIT_MOUSEAXIS:	{					// Mouse axis
 				INT32 nMouse = CinpMouseAxis(pgi->Input.MouseAxis.nMouse, pgi->Input.MouseAxis.nAxis) * nAnalogSpeed;
+
+				if (pgi->Input.MouseAxis.nAxis != 2) { // X/Y axis only, exclude wheel
+					nMouse /= nInputIntfMouseDivider;
+				}
+
 				// Clip axis to 16 bits (signed)
 				if (nMouse < -32768) {
 					nMouse = -32768;
@@ -390,20 +421,26 @@ INT32 InputMake(bool bCopy)
 			if (CinpState(pgi->Macro.Switch.nCode)) {
 				if (pgi->Macro.pVal[0]) {
 					*(pgi->Macro.pVal[0]) = pgi->Macro.nVal[0];
-					if (pgi->Macro.nSysMacro==15) { //Auto-Fire mode!
-						if (AutofirePick() || bLastAF[i]==0)
-							*(pgi->Macro.pVal[0]) = pgi->Macro.nVal[0];
+					if (pgi->Macro.nSysMacro == 15) { //Auto-Fire mode!
+						if (AutofirePick(i)) {
+							for (INT32 j = 0; j < 4; j++) {
+								if (pgi->Macro.pVal[j]) {
+									*(pgi->Macro.pVal[j]) = pgi->Macro.nVal[j];
+								}
+							}
+						}
 						else
 							*(pgi->Macro.pVal[0]) = 0;
-						bLastAF[i] = 1;
 					}
 				}
-			} else { // Disable System-Macro when key up
+			}
+			else { // Disable System-Macro when key up
 				if (pgi->Macro.pVal[0] && pgi->Macro.nSysMacro == 1) {
 					*(pgi->Macro.pVal[0]) = 0;
-				} else {
+				}
+				else {
 					if (pgi->Macro.nSysMacro == 15)
-						bLastAF[i] = 0;
+						AutofireOff(i);
 				}
 			}
 		}
@@ -485,7 +522,7 @@ INT32 InputFind(const INT32 nFlags)
 				INT32 nMouseDelta = CinpMouseAxis((nInputCode >> 8) & 0x3F, (nInputCode >> 1) & 0x07);
 				if (nFind == -1 || ((nInputCode & 1) ? nMouseDelta > 0 : nMouseDelta < 0)) {
 					nDelay++;
-					if (nDelay > 128) {
+					if (nDelay > 64) {
 						return -1;
 					}
 				} else {
@@ -527,7 +564,7 @@ InterfaceInfo* InputGetInfo()
 	if (bInputOkay) {
 		InpInfo.pszModuleName = pInputInOut[nInputSelect]->szModuleName;
 
-	 	if (pInputInOut[nInputSelect]->GetPluginSettings) {
+		if (pInputInOut[nInputSelect]->GetPluginSettings) {
 			pInputInOut[nInputSelect]->GetPluginSettings(&InpInfo);
 		}
 

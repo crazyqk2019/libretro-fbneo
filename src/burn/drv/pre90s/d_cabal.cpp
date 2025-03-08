@@ -542,12 +542,7 @@ static void adpcm_decode(UINT8 *rom)
 
 static INT32 DrvInit(INT32 select)
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	// joystick version
 	if (select == 0)
@@ -650,7 +645,7 @@ static INT32 DrvExit()
 
 	BurnTrackballExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	is_joyver = 0;
 
@@ -684,8 +679,8 @@ static void draw_bg_layer()
 
 		sy -= 16;
 
-		INT32 code  = ram[offs] & 0xfff;
-		INT32 color = ram[offs] >> 12;
+		INT32 code  = BURN_ENDIAN_SWAP_INT16(ram[offs]) & 0xfff;
+		INT32 color = BURN_ENDIAN_SWAP_INT16(ram[offs]) >> 12;
 
 		Render16x16Tile_Clip(pTransDraw, code, sx, sy, color, 4, 0x200, DrvGfxROM1);
 	}
@@ -702,8 +697,8 @@ static void draw_tx_layer()
 
 		sy -= 16;
 
-		INT32 code  = ram[offs] & 0x3ff;
-		INT32 color = ram[offs] >> 10;
+		INT32 code  = BURN_ENDIAN_SWAP_INT16(ram[offs]) & 0x3ff;
+		INT32 color = BURN_ENDIAN_SWAP_INT16(ram[offs]) >> 10;
 
 		Render8x8Tile_Mask_Clip(pTransDraw, code, sx, sy, color, 2, 3, 0, DrvGfxROM0);
 	}
@@ -715,9 +710,9 @@ static void draw_sprites()
 
 	for (INT32 offs = 0x800/2 - 4; offs >= 0; offs -= 4)
 	{
-		INT32 data0 = ram[offs+0];
-		INT32 data1 = ram[offs+1];
-		INT32 data2 = ram[offs+2];
+		INT32 data0 = BURN_ENDIAN_SWAP_INT16(ram[offs+0]);
+		INT32 data1 = BURN_ENDIAN_SWAP_INT16(ram[offs+1]);
+		INT32 data2 = BURN_ENDIAN_SWAP_INT16(ram[offs+2]);
 
 		if (data0 & 0x0100)
 		{
@@ -827,7 +822,6 @@ static INT32 DrvFrame()
 	INT32 nInterleave = 256;
 	INT32 nCyclesTotal[2] = { 10000000 / 60, 3579545 / 60 };
 	INT32 nCyclesDone[2] = { 0, 0 };
-	INT32 nSoundBufferPos = 0;
 
 	SekOpen(0);
 	ZetOpen(0);
@@ -836,31 +830,20 @@ static INT32 DrvFrame()
 	{
 		CPU_RUN(0, Sek);
 
-		CPU_RUN(1, Zet);
+		CPU_RUN_TIMER(1);
 
 		if ((i%64) == 63 && !is_joyver) {
 			BurnTrackballUpdate(0);
 			BurnTrackballUpdate(1);
 		}
 
-		if (i == 240)
+		if (i == 240) {
 			SekSetIRQLine(1, CPU_IRQSTATUS_AUTO);
-
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			seibu_sound_update(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
 		}
-
 	}
 
 	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-		if (nSegmentLength > 0) {
-			seibu_sound_update(pSoundBuf, nSegmentLength);
-		}
+		seibu_sound_update(pBurnSoundOut, nBurnSoundLen);
 		seibu_sound_update_cabal(pBurnSoundOut, nBurnSoundLen);
 	}
 
@@ -896,7 +879,11 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 		seibu_sound_scan(nAction, pnMin);
 
-		if (!is_joyver)	BurnTrackballScan();
+		SCAN_VAR(TballPrev); // joy and tball!
+
+		if (!is_joyver)	{
+			BurnTrackballScan();
+		}
 	}
 
 	return 0;
@@ -937,6 +924,9 @@ static struct BurnRomInfo cabalRomDesc[] = {
 	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           // 23 ADPCM #0 Code
 
 	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 24 ADPCM #1 Code
+	
+	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 25 Proms
+	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 26
 };
 
 STD_ROM_PICK(cabal)
@@ -975,11 +965,14 @@ static struct BurnRomInfo cabalaRomDesc[] = {
 
 	{ "tad-2.7s",		0x80000, 0x13ca7ae1, 4 | BRF_GRA },           //  7 Background Tiles
 	
-	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           // 15 Sprites
+	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           //  8 Sprites
 	
-	{ "epr-a-2.1s",		0x10000, 0x850406b4, 6 | BRF_SND },           // 23 ADPCM #0 Code
+	{ "epr-a-2.1s",		0x10000, 0x850406b4, 6 | BRF_SND },           //  9 ADPCM #0 Code
 
-	{ "epr-a-1.1u",		0x10000, 0x8b3e0789, 7 | BRF_SND },           // 24 ADPCM #1 Code
+	{ "epr-a-1.1u",		0x10000, 0x8b3e0789, 7 | BRF_SND },           // 10 ADPCM #1 Code
+	
+	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 11 Proms
+	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(cabala)
@@ -993,8 +986,8 @@ static INT32 CabalaInit()
 }
 
 struct BurnDriver BurnDrvCabala = {
-	"cabala", "cabal", NULL, NULL, "1988",
-	"Cabal (korea?, Joystick)\0", NULL, "TAD Corporation (Alpha Trading license)", "Miscellaneous",
+	"cabala", "cabal", NULL, NULL, "1989",
+	"Cabal (Korea?, Joystick)\0", NULL, "TAD Corporation (Alpha Trading license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, cabalaRomInfo, cabalaRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
@@ -1018,11 +1011,14 @@ static struct BurnRomInfo cabalukRomDesc[] = {
 
 	{ "tad-2.7s",		0x80000, 0x13ca7ae1, 4 | BRF_GRA },           //  7 Background Tiles
 	
-	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           // 15 Sprites
+	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           //  8 Sprites
 	
-	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           // 23 ADPCM #0 Code
+	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           //  9 ADPCM #0 Code
 
-	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 24 ADPCM #1 Code
+	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 10 ADPCM #1 Code
+	
+	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 11 Proms
+	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(cabaluk)
@@ -1034,7 +1030,7 @@ static INT32 CabalukInit()
 }
 
 struct BurnDriver BurnDrvCabaluk = {
-	"cabaluk", "cabal", NULL, NULL, "1988",
+	"cabaluk", "cabal", NULL, NULL, "1989",
 	"Cabal (UK, Trackball)\0", NULL, "TAD Corporation (Electrocoin license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
@@ -1078,6 +1074,9 @@ static struct BurnRomInfo cabalukjRomDesc[] = {
 	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           // 23 ADPCM #0 Code
 
 	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 24 ADPCM #1 Code
+	
+	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 25 Proms
+	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 26
 };
 
 STD_ROM_PICK(cabalukj)
@@ -1091,7 +1090,7 @@ static INT32 CabalukjInit()
 }
 
 struct BurnDriver BurnDrvCabalukj = {
-	"cabalukj", "cabal", NULL, NULL, "1988",
+	"cabalukj", "cabal", NULL, NULL, "1989",
 	"Cabal (UK, Joystick)\0", NULL, "TAD Corporation (Electrocoin license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
@@ -1116,14 +1115,14 @@ static struct BurnRomInfo cabalusRomDesc[] = {
 
 	{ "tad-2.7s",		0x80000, 0x13ca7ae1, 4 | BRF_GRA },           //  7 Background Tiles
 	
-	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           // 15 Sprites
+	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           //  8 Sprites
 	
-	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           // 23 ADPCM #0 Code
+	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           //  9 ADPCM #0 Code
 
-	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 24 ADPCM #1 Code
+	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 10 ADPCM #1 Code
 	
-	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 25 Proms
-	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 26 
+	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 11 Proms
+	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 12 
 };
 
 STD_ROM_PICK(cabalus)
@@ -1138,7 +1137,7 @@ struct BurnDriver BurnDrvCabalus = {
 	"cabalus", "cabal", NULL, NULL, "1988",
 	"Cabal (US set 1, Trackball)\0", NULL, "TAD Corporation (Fabtek license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, cabalusRomInfo, cabalusRomName, NULL, NULL, NULL, NULL, DrvTrkInputInfo, DrvTrkDIPInfo,
 	CabalusInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	256, 224, 4, 3
@@ -1160,14 +1159,14 @@ static struct BurnRomInfo cabalus2RomDesc[] = {
 
 	{ "tad-2.7s",		0x80000, 0x13ca7ae1, 4 | BRF_GRA },           //  7 Background Tiles
 	
-	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           // 15 Sprites
+	{ "tad-1.5e",		0x80000, 0x8324a7fe, 5 | BRF_GRA },           //  8 Sprites
 	
-	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           // 23 ADPCM #0 Code
+	{ "2-1s",			0x10000, 0x850406b4, 6 | BRF_SND },           //  9 ADPCM #0 Code
 
-	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 24 ADPCM #1 Code
+	{ "1-1u",			0x10000, 0x8b3e0789, 7 | BRF_SND },           // 10 ADPCM #1 Code
 	
-	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 25 Proms
-	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 26 
+	{ "prom05.8e",		0x00100, 0xa94b18c2, 8 | BRF_OPT },           // 11 Proms
+	{ "prom10.4j",		0x00100, 0x261c93bc, 8 | BRF_OPT },           // 12 
 };
 
 STD_ROM_PICK(cabalus2)
@@ -1182,7 +1181,7 @@ struct BurnDriver BurnDrvCabalus2 = {
 	"cabalus2", "cabal", NULL, NULL, "1988",
 	"Cabal (US set 2, Trackball)\0", NULL, "TAD Corporation (Fabtek license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, cabalus2RomInfo, cabalus2RomName, NULL, NULL, NULL, NULL, DrvTrkInputInfo, DrvTrkDIPInfo,
 	Cabalus2Init, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	256, 224, 4, 3

@@ -10,6 +10,7 @@ UINT8 BootlegBgPage[4];
 INT32 System16ScrollX[4] = {0, 0, 0, 0};
 INT32 System16ScrollY[4] = {0, 0, 0, 0};
 INT32 System16VideoEnable;
+INT32 System16AVideoEnableDelayed; // for 16a
 INT32 System18VdpEnable;
 INT32 System18VdpMixing;
 INT32 System16ScreenFlip = 0;
@@ -17,6 +18,7 @@ INT32 System16ScreenFlipXoffs = 0; // 16B
 INT32 System16ScreenFlipYoffs = 0; // 16B
 INT32 System16SpriteShadow;
 INT32 System16SpriteXOffset = 0;
+INT32 System16SpriteYOffset = 0; // only sys16b/c (fantznps2), only positive #'s!
 INT32 System16ColScroll = 0;
 INT32 System16RowScroll = 0;
 INT32 System16RoadControl = 0;
@@ -50,9 +52,13 @@ static UINT16 *pSys16BgAltTileMapPri1 = NULL;
 static UINT16 *pSys16FgAltTileMapPri0 = NULL;
 static UINT16 *pSys16FgAltTileMapPri1 = NULL;
 
+static UINT16 *pSpriteBitmap = NULL;
+
 static UINT8 System16PaletteNormal[32];
 static UINT8 System16PaletteShadow[32];
 static UINT8 System16PaletteHilight[32];
+
+static INT32 AltModeKludge = 0; // a couple System 16B games have slightly different rendering (dunkshot, timescan)
 
 /*====================================================
 Scan Function
@@ -61,15 +67,16 @@ Scan Function
 void System16GfxScan(INT32 nAction)
 {
 	if (nAction & ACB_DRIVER_DATA) {
-		if (nAction & ACB_WRITE) {		
+		SCAN_VAR(System16VideoEnable);
+		SCAN_VAR(System16AVideoEnableDelayed);
+
+		if (nAction & ACB_WRITE) {
 			if (((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_SYSTEM16A) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_HANGON))  {
 				System16RecalcBgTileMap = 1;
 				System16RecalcFgTileMap = 1;
 			}
-		
+
 			if (((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_SYSTEM16B) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_SYSTEM18) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_OUTRUN) || ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_SYSTEMX)) {
-				System16RecalcFgAltTileMap = 1;
-				System16RecalcBgAltTileMap = 1;
 				System16RecalcBgTileMap = 1;
 				System16RecalcBgAltTileMap = 1;
 				System16RecalcFgTileMap = 1;
@@ -201,6 +208,8 @@ void System16ATileMapsInit(INT32 bOpaque)
 	pSys16BgTileMapPri1 = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
 	pSys16FgTileMapPri0 = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
 	pSys16FgTileMapPri1 = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
+
+	pSpriteBitmap = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
 }
 
 void System16BTileMapsInit(INT32 bOpaque)
@@ -219,6 +228,8 @@ void System16BTileMapsInit(INT32 bOpaque)
 	pSys16BgAltTileMapPri1 = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
 	pSys16FgAltTileMapPri0 = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
 	pSys16FgAltTileMapPri1 = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
+
+	pSpriteBitmap = (UINT16*)BurnMalloc(1024 * 512 * sizeof(UINT16));
 }
 
 void System16TileMapsExit()
@@ -233,6 +244,10 @@ void System16TileMapsExit()
 	BurnFree(pSys16BgAltTileMapPri1);
 	BurnFree(pSys16FgAltTileMapPri0);
 	BurnFree(pSys16FgAltTileMapPri1);
+
+	BurnFree(pSpriteBitmap);
+
+	AltModeKludge = 0;
 }
 
 static void System16ACreateBgTileMaps()
@@ -493,7 +508,7 @@ static void System16BCreateFgTileMaps()
 				Code = System16TileBanks[Code / System16TileBankSize] * System16TileBankSize + Code % System16TileBankSize;
 				Code &= (System16NumTiles - 1);
 				Colour = (Attr >> 6) & 0x7f;
-			
+
 				ColourOff = System16TilemapColorOffset;
 				if (Colour >= 0x20) ColourOff = (0x100 * ColourOffsMultiplier) | System16TilemapColorOffset;
 				if (Colour >= 0x40) ColourOff = (0x200 * ColourOffsMultiplier) | System16TilemapColorOffset;
@@ -777,14 +792,14 @@ static void System16BCreateTileMaps()
 	if (System16RecalcFgAltTileMap) {
 		System16RecalcFgAltTileMap = 0;
 		for (i = 0xf80/2 + 0 * 0x40/2; i < 0xf80/2 + 0 * 0x40/2 + 224/8; i++) {
-			if (TextRam[i] & 0x8000) System16RecalcFgAltTileMap = 1;
+			if (BURN_ENDIAN_SWAP_INT16(TextRam[i]) & 0x8000) System16RecalcFgAltTileMap = 1;
 		}
 	}
 	
 	if (System16RecalcBgAltTileMap) {
 		System16RecalcBgAltTileMap = 0;
 		for (i = 0xf80/2 + 1 * 0x40/2; i < 0xf80/2 + 1 * 0x40/2 + 224/8; i++) {
-			if (TextRam[i] & 0x8000) System16RecalcBgAltTileMap = 1;
+			if (BURN_ENDIAN_SWAP_INT16(TextRam[i]) & 0x8000) System16RecalcBgAltTileMap = 1;
 		}
 	}
 
@@ -818,14 +833,14 @@ static void System16BAltCreateTileMaps()
 	if (System16RecalcFgAltTileMap) {
 		System16RecalcFgAltTileMap = 0;
 		for (i = 0xf80/2 + 0 * 0x40/2; i < 0xf80/2 + 0 * 0x40/2 + 224/8; i++) {
-			if (TextRam[i] & 0x8000) System16RecalcFgAltTileMap = 1;
+			if (BURN_ENDIAN_SWAP_INT16(TextRam[i]) & 0x8000) System16RecalcFgAltTileMap = 1;
 		}
 	}
 	
 	if (System16RecalcBgAltTileMap) {
 		System16RecalcBgAltTileMap = 0;
 		for (i = 0xf80/2 + 1 * 0x40/2; i < 0xf80/2 + 1 * 0x40/2 + 224/8; i++) {
-			if (TextRam[i] & 0x8000) System16RecalcBgAltTileMap = 1;
+			if (BURN_ENDIAN_SWAP_INT16(TextRam[i]) & 0x8000) System16RecalcBgAltTileMap = 1;
 		}
 	}
 
@@ -865,11 +880,11 @@ void System16ATileWordWrite(UINT32 Offset, UINT16 d)
 	UINT32 BgPage4Addr = (((System16Page[1] >> 12) & 0xf) * (32 * 64)) << 1;
 	
 	if ((Offset >= FgPage1Addr && Offset <= (FgPage1Addr + 0xfff)) || (Offset >= FgPage2Addr && Offset <= (FgPage2Addr + 0xfff)) || (Offset >= FgPage3Addr && Offset <= (FgPage3Addr + 0xfff)) || (Offset >= FgPage4Addr && Offset <= (FgPage4Addr + 0xfff))) {
-		if (TileRam[Offset >> 1] != BURN_ENDIAN_SWAP_INT16(d)) System16RecalcFgTileMap = 1;
+		if (BURN_ENDIAN_SWAP_INT16(TileRam[Offset >> 1]) != d) System16RecalcFgTileMap = 1;
 	}
 	
 	if ((Offset >= BgPage1Addr && Offset <= (BgPage1Addr + 0xfff)) || (Offset >= BgPage2Addr && Offset <= (BgPage2Addr + 0xfff)) || (Offset >= BgPage3Addr && Offset <= (BgPage3Addr + 0xfff)) || (Offset >= BgPage4Addr && Offset <= (BgPage4Addr + 0xfff))) {
-		if (TileRam[Offset >> 1] != BURN_ENDIAN_SWAP_INT16(d)) System16RecalcBgTileMap = 1;
+		if (BURN_ENDIAN_SWAP_INT16(TileRam[Offset >> 1]) != d) System16RecalcBgTileMap = 1;
 	}
 	
 	TileRam[Offset >> 1] = BURN_ENDIAN_SWAP_INT16(d);
@@ -923,19 +938,19 @@ void System16BTileWordWrite(UINT32 Offset, UINT16 d)
 	UINT32 BgAltPage4Addr = (((System16Page[3] >> 12) & 0xf) * (32 * 64)) << 1;
 	
 	if ((Offset >= FgPage1Addr && Offset <= (FgPage1Addr + 0xfff)) || (Offset >= FgPage2Addr && Offset <= (FgPage2Addr + 0xfff)) || (Offset >= FgPage3Addr && Offset <= (FgPage3Addr + 0xfff)) || (Offset >= FgPage4Addr && Offset <= (FgPage4Addr + 0xfff))) {
-		if (TileRam[Offset >> 1] != BURN_ENDIAN_SWAP_INT16(d)) System16RecalcFgTileMap = 1;
+		if (BURN_ENDIAN_SWAP_INT16(TileRam[Offset >> 1]) != d) System16RecalcFgTileMap = 1;
 	}
 	
 	if ((Offset >= BgPage1Addr && Offset <= (BgPage1Addr + 0xfff)) || (Offset >= BgPage2Addr && Offset <= (BgPage2Addr + 0xfff)) || (Offset >= BgPage3Addr && Offset <= (BgPage3Addr + 0xfff)) || (Offset >= BgPage4Addr && Offset <= (BgPage4Addr + 0xfff))) {
-		if (TileRam[Offset >> 1] != BURN_ENDIAN_SWAP_INT16(d)) System16RecalcBgTileMap = 1;
+		if (BURN_ENDIAN_SWAP_INT16(TileRam[Offset >> 1]) != d) System16RecalcBgTileMap = 1;
 	}
 	
 	if ((Offset >= FgAltPage1Addr && Offset <= (FgAltPage1Addr + 0xfff)) || (Offset >= FgAltPage2Addr && Offset <= (FgAltPage2Addr + 0xfff)) || (Offset >= FgAltPage3Addr && Offset <= (FgAltPage3Addr + 0xfff)) || (Offset >= FgAltPage4Addr && Offset <= (FgAltPage4Addr + 0xfff))) {
-		if (TileRam[Offset >> 1] != BURN_ENDIAN_SWAP_INT16(d)) System16RecalcFgAltTileMap = 1;
+		if (BURN_ENDIAN_SWAP_INT16(TileRam[Offset >> 1]) != d) System16RecalcFgAltTileMap = 1;
 	}
 	
 	if ((Offset >= BgAltPage1Addr && Offset <= (BgAltPage1Addr + 0xfff)) || (Offset >= BgAltPage2Addr && Offset <= (BgAltPage2Addr + 0xfff)) || (Offset >= BgAltPage3Addr && Offset <= (BgAltPage3Addr + 0xfff)) || (Offset >= BgAltPage4Addr && Offset <= (BgAltPage4Addr + 0xfff))) {
-		if (TileRam[Offset >> 1] != BURN_ENDIAN_SWAP_INT16(d)) System16RecalcBgAltTileMap = 1;
+		if (BURN_ENDIAN_SWAP_INT16(TileRam[Offset >> 1]) != d) System16RecalcBgAltTileMap = 1;
 	}	
 	
 	TileRam[Offset >> 1] = BURN_ENDIAN_SWAP_INT16(d);
@@ -982,7 +997,7 @@ void System16BTileByteWrite(UINT32 Offset, UINT8 d)
 	System16TileRam[Offset] = d;
 }
 
-static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Transparent)
+static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Transparent, INT32 Priority)
 {
 	INT32 xScroll, yScroll, x, y;
 	UINT16 *TextRam = (UINT16*)System16TextRam;
@@ -998,16 +1013,17 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 	if (System16ColScroll && System16RowScroll) {
 		for (y = 0; y < nScreenHeight; y++) {
 			pTileMapDest = pTransDraw + (y * nScreenWidth);
-		
+			UINT8 *pPrio = pPrioDraw + (y * nScreenWidth);
+
 			RowScrollIndex = y / 8;
 			if (System16ScreenFlip) RowScrollIndex = (216 - y) / 8;
-		
+
 			xEffScroll = BURN_ENDIAN_SWAP_INT16(TextRam[0xf80/2 + RowScrollIndex * 2 + Page]) & 0x1ff;
 			if (System16ScreenFlip) xEffScroll += 17;
-			
+
 			for (x = 0; x < nScreenWidth; x++) {
 				yEffScroll = BURN_ENDIAN_SWAP_INT16(TextRam[0xf30/2 + (x/16) * 2 + Page]) & 0xff;
-		
+
 				ySrcOff = (y + yEffScroll) & 0x1ff;
 				if (System16ScreenFlip) ySrcOff = ((216 - y) + yEffScroll) & 0x1ff;
 				
@@ -1023,9 +1039,13 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 				Pix = pTileMapSrc[xSrcOff];
 
 				if (Transparent) {
-					if (Pix) pTileMapDest[x] = Pix;
+					if (Pix) {
+						pTileMapDest[x] = Pix;
+						pPrio[x] |= Priority;
+					}
 				} else {
 					pTileMapDest[x] = Pix;
+					pPrio[x] |= Priority;
 				}
 			}
 		}
@@ -1033,13 +1053,14 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 		if (System16ColScroll) {
 			for (y = 0; y < nScreenHeight; y++) {
 				pTileMapDest = pTransDraw + (y * nScreenWidth);
-				
+				UINT8 *pPrio = pPrioDraw + (y * nScreenWidth);
+
 				xEffScroll = xScroll;
 				if (System16ScreenFlip) xEffScroll += 17;
-		
+
 				for (x = 0; x < nScreenWidth; x++) {
 					yEffScroll = BURN_ENDIAN_SWAP_INT16(TextRam[0xf30/2 + (x/16) * 2 + Page]) & 0xff;
-		
+
 					ySrcOff = (y + yEffScroll) & 0x1ff;
 					if (System16ScreenFlip) ySrcOff = ((216 - y) + yEffScroll) & 0x1ff;
 					
@@ -1055,9 +1076,13 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 					Pix = pTileMapSrc[xSrcOff];
 
 					if (Transparent) {
-						if (Pix) pTileMapDest[x] = Pix;
+						if (Pix) {
+							pTileMapDest[x] = Pix;
+							pPrio[x] |= Priority;
+						}
 					} else {
 						pTileMapDest[x] = Pix;
+						pPrio[x] |= Priority;
 					}
 				}
 			}
@@ -1065,7 +1090,8 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 			if (System16RowScroll) {
 				for (y = 0; y < nScreenHeight; y++) {
 					pTileMapDest = pTransDraw + (y * nScreenWidth);
-		
+					UINT8 *pPrio = pPrioDraw + (y * nScreenWidth);
+
 					RowScrollIndex = y / 8;
 					if (System16ScreenFlip) RowScrollIndex = (216 - y) / 8;
 		
@@ -1090,16 +1116,21 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 						Pix = pTileMapSrc[xSrcOff];
 
 						if (Transparent) {
-							if (Pix) pTileMapDest[x] = Pix;
+							if (Pix) {
+								pTileMapDest[x] = Pix;
+								pPrio[x] |= Priority;
+							}
 						} else {
 							pTileMapDest[x] = Pix;
+							pPrio[x] |= Priority;
 						}
 					}
 				}	
 			} else {
 				for (y = 0; y < nScreenHeight; y++) {
 					pTileMapDest = pTransDraw + (y * nScreenWidth);
-					
+					UINT8 *pPrio = pPrioDraw + (y * nScreenWidth);
+
 					if (System16ScreenFlip) xScroll += 17;
 			
 					ySrcOff = (y + yScroll) & 0x1ff;
@@ -1118,9 +1149,13 @@ static void System16ARenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Trans
 						Pix = pTileMapSrc[xSrcOff];
 
 						if (Transparent) {
-							if (Pix) pTileMapDest[x] = Pix;
+							if (Pix) {
+								pTileMapDest[x] = Pix;
+								pPrio[x] |= Priority;
+							}
 						} else {
 							pTileMapDest[x] = Pix;
+							pPrio[x] |= Priority;
 						}
 					}
 				}
@@ -1458,7 +1493,7 @@ static void BootlegRenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Transpa
 	}
 }
 
-static void System16ARenderTextLayer(INT32 PriorityDraw)
+static void System16ARenderTextLayer(INT32 PriorityDraw, INT32 tpri)
 {
 	INT32 mx, my, Code, Colour, x, y, Priority, TileIndex = 0;
 
@@ -1480,23 +1515,22 @@ static void System16ARenderTextLayer(INT32 PriorityDraw)
 				if (System16ScreenFlip) {
 					x = 312 - x;
 					y = 216 - y;
-					
-					if (x > 7 && x < 312 && y > 7 && y < 216) {
-						Render8x8Tile_Mask_FlipXY(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, System16Tiles);
-					} else {
-						Render8x8Tile_Mask_FlipXY_Clip(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, System16Tiles);
-					}
 
+					if (x > 7 && x < 312 && y > 7 && y < 216) {
+						Render8x8Tile_Prio_Mask_FlipXY(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, tpri, System16Tiles);
+					} else {
+						Render8x8Tile_Prio_Mask_FlipXY_Clip(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, tpri, System16Tiles);
+					}
 				} else {
 					if (x > 7 && x < 312 && y > 7 && y < 216) {
-						Render8x8Tile_Mask(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, System16Tiles);
+						Render8x8Tile_Prio_Mask(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, tpri, System16Tiles);
 					} else {
-						Render8x8Tile_Mask_Clip(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, System16Tiles);
+						Render8x8Tile_Prio_Mask_Clip(pTransDraw, Code, x, y, Colour, 3, 0, System16TilemapColorOffset, tpri, System16Tiles);
 					}
 				}
 			}
 
-			TileIndex +=2;
+			TileIndex += 2;
 		}
 	}
 }
@@ -1544,7 +1578,7 @@ static void System16BRenderTextLayer(INT32 PriorityDraw)
 				}
 			}
 
-			TileIndex +=2 ;
+			TileIndex += 2;
 		}
 	}
 }
@@ -1598,60 +1632,69 @@ static void System16BAltRenderTextLayer(INT32 PriorityDraw)
 Sprite Rendering
 ====================================================*/
 
-static void System16DrawPixel(INT32 x, INT32 pix, INT32 colour, UINT16* pPixel, UINT16* PalRAM)
+static void System16ADrawPixel(INT32 x, INT32 pix, INT32 colour, UINT16* pPixel)
 {
 	x += System16SpriteXOffset;
+
 	if (x >= 0 && x <= 319 && pix != 0 && pix != 15) {
-		if (colour == (0x3f << 4)) {
-			pPixel[x] &= (System16PaletteEntries - 1);
-			pPixel[x] += (PalRAM[pPixel[x]] & 0x8000) ? (System16PaletteEntries * 2) : System16PaletteEntries;
-		} else {
-			pPixel[x] = (pix | colour | System16SpritePalOffset) & (System16PaletteEntries - 1);
-		}
+		pPixel[x] = pix | colour;
 	}
 }
 
-static void System16ARenderSpriteLayer(INT32 Priority)
+static void System16ARenderSpriteLayer()
 {
 	UINT8 numbanks = System16SpriteRomSize / 0x10000;
 
 	const UINT16 *spritebase = (const UINT16*)System16Sprites;
 	UINT16 *data;
-	
-	UINT16 *PalRAM = (UINT16*)System16PaletteRam;
-		
-	for (data = (UINT16*)System16SpriteRam; data < (UINT16*)System16SpriteRam + System16SpriteRamSize / 2; data += 8) {
-		if ((BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) > 0xf0) break;
-		INT32 sprpri  = 1 << ((BURN_ENDIAN_SWAP_INT16(data[4]) >> 0) & 0x3);
-				
-#if 1 && defined FBNEO_DEBUG
-		if (sprpri != 1 && sprpri != 2 && sprpri != 4 && sprpri != 8) bprintf(PRINT_IMPORTANT, _T("Unknown Sprite Priority - %x\n"), sprpri);
+
+#if 0
+	// debug - dink
+	INT32 pos = 0;
+
+	UINT16 *sf = (UINT16*)System16SpriteRam;
+	sf += 0x10;
+	extern int counter;
+
+	if (counter) {
+		bprintf(0, _T("--- spr start \n"));
+		bprintf(0, _T("%04x  %04x  %04x  %04x  %04x\n\n"), sf[0], sf[1], sf[2], sf[3], sf[4]);
+	}
 #endif
-		
-		if (sprpri != Priority) continue;
+
+	for (data = (UINT16*)System16SpriteRam; data < (UINT16*)System16SpriteRam + System16SpriteRamSize / 2; data += 8/*,pos+=8 dinkdebug*/) {
+		if ((BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) > 0xf0) break;
 		
 		INT32 bottom  = (BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) + 1;
 		INT32 top     = (BURN_ENDIAN_SWAP_INT16(data[0]) & 0xff) + 1;
 		INT32 xpos    = (BURN_ENDIAN_SWAP_INT16(data[1]) & 0x1ff) - 0xbd;
 		INT32 pitch   = (INT16)BURN_ENDIAN_SWAP_INT16(data[2]);
 		UINT16 addr = BURN_ENDIAN_SWAP_INT16(data[3]);
-		INT32 color   = ((BURN_ENDIAN_SWAP_INT16(data[4]) >> 8) & 0x3f) << 4;
+		INT32 color   = ((BURN_ENDIAN_SWAP_INT16(data[4]) >> 4) & 0x3f0) | ((BURN_ENDIAN_SWAP_INT16(data[4]) & 3) << 10);
 		INT32 bank    = System16SpriteBanks[(BURN_ENDIAN_SWAP_INT16(data[4]) >> 4) & 0x7];
 		const UINT16 *spritedata;
 		INT32 x, y, pix, xdelta = 1;
 		
 		/* initialize the end address to the start address */
-		data[7] = addr;
+		//data[7] = addr;
+		UINT16 d7 = addr; // data[7] cache
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if ((top >= bottom) || bank == 255)
+		if ((top >= bottom) || bank == 255) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
 			bank %= numbanks;
 		spritedata = spritebase + 0x8000 * bank;
-		
+
+#if 0
+		if (counter) {
+			bprintf(0, _T("%x  %x  %x   pri %x  pos %x\n"), addr, bank, color, color >> 10, pos);
+		}
+#endif
 		if (System16ScreenFlip) {
 			INT32 temp = top;
 			top = 224 - bottom;
@@ -1663,36 +1706,52 @@ static void System16ARenderSpriteLayer(INT32 Priority)
 		for (y = top; y < bottom; y++) {
 			addr += pitch;
 			if (y >= 0 && y <= 223) {
-				UINT16* pPixel = pTransDraw + (y * 320);
+				UINT16* pPixel = pSpriteBitmap + (y * 320);
 				if (!(addr & 0x8000)) {
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++data[7] & 0x7fff]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++d7 & 0x7fff]);
 				
-						pix = (pixels >> 12) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
-						pix = (pixels >>  8) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
-						pix = (pixels >>  4) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
-						pix = (pixels >>  0) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
+						pix = (pixels >> 12) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
+						pix = (pixels >>  8) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
+						pix = (pixels >>  4) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
+						pix = (pixels >>  0) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
 				
 						if (pix == 15) break;
 					}
 				} else {
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--data[7] & 0x7fff]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--d7 & 0x7fff]);
 
 						/* draw four pixels */
-						pix = (pixels >>  0) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
-						pix = (pixels >>  4) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
-						pix = (pixels >>  8) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
-						pix = (pixels >> 12) & 0xf; System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta;
+						pix = (pixels >>  0) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
+						pix = (pixels >>  4) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
+						pix = (pixels >>  8) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
+						pix = (pixels >> 12) & 0xf; System16ADrawPixel(x, pix, color, pPixel); x += xdelta;
 
 						/* stop if the last pixel in the group was 0xf */
 						if (pix == 15) break;
 					}
 				}
 			}
+		}
+		data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
+	}
+}
+
+static void System16BDrawPixel(INT32 x, INT32 pix, INT32 colour, UINT16* pPixel, UINT16* PalRAM)
+{
+	x += System16SpriteXOffset;
+	if (x >= 0 && x <= 319 && pix != 0 && pix != 15) {
+		if (colour == (0x3f << 4)) {
+			pPixel[x] &= (System16PaletteEntries - 1);
+			pPixel[x] += (PalRAM[pPixel[x]] & 0x8000) ? (System16PaletteEntries * 2) : System16PaletteEntries;
+		} else {
+			pPixel[x] = (pix | colour | System16SpritePalOffset) & (System16PaletteEntries - 1);
 		}
 	}
 }
@@ -1711,11 +1770,7 @@ static void System16BRenderSpriteLayer(INT32 Priority)
 	for (data = (UINT16*)System16SpriteRam; data < (UINT16*)System16SpriteRam + System16SpriteRamSize / 2; data += 8) {
 		if (BURN_ENDIAN_SWAP_INT16(data[2]) & 0x8000) break;
 		INT32 sprpri  = 1 << ((BURN_ENDIAN_SWAP_INT16(data[4]) >> 6) & 0x3);
-				
-#if 1 && defined FBNEO_DEBUG
-		if (sprpri != 1 && sprpri != 2 && sprpri != 4 && sprpri != 8) bprintf(PRINT_IMPORTANT, _T("Unknown Sprite Priority - %x\n"), sprpri);
-#endif
-		
+
 		if (Priority && sprpri != Priority) continue;
 		
 		INT32 bottom  = BURN_ENDIAN_SWAP_INT16(data[0]) >> 8;
@@ -1733,11 +1788,14 @@ static void System16BRenderSpriteLayer(INT32 Priority)
 		INT32 x, y, pix, xdelta = 1;
 
 		/* initialize the end address to the start address */
-		data[7] = addr;
+		//data[7] = addr;
+		UINT16 d7 = addr; // data[7] cache
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if (hide || (top >= bottom) || bank == 255)
+		if (hide || (top >= bottom) || bank == 255) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
@@ -1745,7 +1803,7 @@ static void System16BRenderSpriteLayer(INT32 Priority)
 		spritedata = spritebase + 0x10000 * bank;
 
 		/* reset the yzoom counter */
-		data[5] &= 0x03ff;
+		data[5] &= BURN_ENDIAN_SWAP_INT16(0x03ff);
 		
 		if (System16ScreenFlip) {
 			INT32 temp = top;
@@ -1761,10 +1819,10 @@ static void System16BRenderSpriteLayer(INT32 Priority)
 			addr += pitch;
 
 			/* accumulate zoom factors; if we carry into the high bit, skip an extra row */
-			data[5] += vzoom << 10;
-			if (data[5] & 0x8000) {
+			data[5] += BURN_ENDIAN_SWAP_INT16(vzoom << 10);
+			if (data[5] & BURN_ENDIAN_SWAP_INT16(0x8000)) {
 				addr += pitch;
-				data[5] &= ~0x8000;
+				data[5] &= BURN_ENDIAN_SWAP_INT16(~0x8000);
 			}
 			
 			/* skip drawing if not within the cliprect */
@@ -1778,30 +1836,32 @@ static void System16BRenderSpriteLayer(INT32 Priority)
 				/* non-flipped case */
 				if (!flip) {
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++data[7]]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++d7]);
 
 						/* draw four pixels */
-						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
-						pix = (pixels >>  8) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
-						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
-						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >>  8) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
 
 						/* stop if the last pixel in the group was 0xf */
 						if (pix == 15) break;
 					}
 				} else {
 					/* start at the word after because we predecrement below */
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--data[7]]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--d7]);
 
 						/* draw four pixels */
-						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
-						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
-						pix = (pixels >>  8) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
-						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16DrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >>  8) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
+						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System16BDrawPixel(x, pix, color, pPixel, PalRAM); x += xdelta; }
 
 						/* stop if the last pixel in the group was 0xf */
 						if (pix == 15) break;
@@ -1836,9 +1896,6 @@ static void OutrunRenderSpriteLayer(INT32 Priority)
 		if (BURN_ENDIAN_SWAP_INT16(data[0]) & 0x8000) break;
 		INT32 sprpri  = 1 << ((BURN_ENDIAN_SWAP_INT16(data[3]) >> 12) & 3);
 				
-#if 1 && defined FBNEO_DEBUG
-		if (sprpri != 1 && sprpri != 2 && sprpri != 4 && sprpri != 8) bprintf(PRINT_IMPORTANT, _T("Unknown Sprite Priority - %x\n"), sprpri);
-#endif
 		if (sprpri != Priority) continue;
 		
 		INT32 hide    = (BURN_ENDIAN_SWAP_INT16(data[0]) & 0x5000);
@@ -1866,11 +1923,14 @@ static void OutrunRenderSpriteLayer(INT32 Priority)
 		xpos -= 0xbe;
 
 		/* initialize the end address to the start address */
-		data[7] = BURN_ENDIAN_SWAP_INT16(addr);
+		//data[7] = BURN_ENDIAN_SWAP_INT16(addr);
+		UINT16 d7 = addr; // data[7] cache
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if (hide || height == 0)
+		if (hide || height == 0) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
@@ -1894,10 +1954,11 @@ static void OutrunRenderSpriteLayer(INT32 Priority)
 				if (!flip)
 				{
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; (xdelta > 0 && x <= 319) || (xdelta < 0 && x >= 0); )
 					{
-						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[++data[7]]);
+						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[++d7]);
 
 						/* draw four pixels */
 						pix = (pixels >> 28) & 0xf; while (xacc < 0x200) { OutrunDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x += xdelta; xacc += hzoom; } xacc -= 0x200;
@@ -1919,10 +1980,11 @@ static void OutrunRenderSpriteLayer(INT32 Priority)
 				else
 				{
 					/* start at the word after because we predecrement below */
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; (xdelta > 0 && x <= 319) || (xdelta < 0 && x >= 0); )
 					{
-						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[--data[7]]);
+						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[--d7]);
 
 						/* draw four pixels */
 						pix = (pixels >>  0) & 0xf; while (xacc < 0x200) { OutrunDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x += xdelta; xacc += hzoom; } xacc -= 0x200;
@@ -1974,10 +2036,6 @@ static void HangonRenderSpriteLayer(INT32 Priority)
 		if ((BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) > 0xf0) break;	
 		INT32 sprpri  = ((BURN_ENDIAN_SWAP_INT16(data[2]) >> 14) & 1) ? (1<<3) : (1<<1);
 		
-#if 1 && defined FBNEO_DEBUG
-		if (sprpri != 1 && sprpri != 2 && sprpri != 4 && sprpri != 8) bprintf(PRINT_IMPORTANT, _T("Unknown Sprite Priority - %x\n"), sprpri);
-#endif
-		
 		if (sprpri != Priority) continue;
 		
 		INT32 bottom  = (BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) + 1;
@@ -1994,11 +2052,14 @@ static void HangonRenderSpriteLayer(INT32 Priority)
 		const UINT32 *spritedata;
 		
 		/* initialize the end address to the start address */
-		data[7] = addr;
+		//data[7] = addr;
+		UINT16 d7 = addr; // data[7] cache
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if ((top >= bottom) || bank == 255)
+		if ((top >= bottom) || bank == 255) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
@@ -2022,9 +2083,10 @@ static void HangonRenderSpriteLayer(INT32 Priority)
 				
 				if (!(addr & 0x8000)) {
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; x <= 319; ) {
-						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[++data[7] & 0x7fff]);
+						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[++d7 & 0x7fff]);
 					
 						pix = (pixels >> 28) & 0xf; xacc = (xacc & 0xff) + hzoom; if (xacc < 0x100) { if (x >= 0) HangonDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x++; }
 						pix = (pixels >> 24) & 0xf; xacc = (xacc & 0xff) + hzoom; if (xacc < 0x100) { if (x >= 0) HangonDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x++; }
@@ -2038,9 +2100,10 @@ static void HangonRenderSpriteLayer(INT32 Priority)
 						if (pix == 15) break;
 					}
 				} else {
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; x <= 319; ) {
-						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[--data[7] & 0x7fff]);
+						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[--d7 & 0x7fff]);
 
 						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0xff) + hzoom; if (xacc < 0x100) { if (x >= 0) HangonDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x++; }
 						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0xff) + hzoom; if (xacc < 0x100) { if (x >= 0) HangonDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x++; }
@@ -2083,10 +2146,6 @@ static void HangonAltRenderSpriteLayer(INT32 Priority)
 		if ((BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) > 0xf0) break;
 		INT32 sprpri  = 1 << ((BURN_ENDIAN_SWAP_INT16(data[4]) >> 0) & 0x3);
 		
-#if 1 && defined FBNEO_DEBUG
-		if (sprpri != 1 && sprpri != 2 && sprpri != 4 && sprpri != 8) bprintf(PRINT_IMPORTANT, _T("Unknown Sprite Priority - %x\n"), sprpri);
-#endif
-		
 		if (sprpri != Priority) continue;
 		
 		INT32 bottom  = (BURN_ENDIAN_SWAP_INT16(data[0]) >> 8) + 1;
@@ -2103,11 +2162,14 @@ static void HangonAltRenderSpriteLayer(INT32 Priority)
 		const UINT16 *spritedata;
 
 		/* initialize the end address to the start address */
-		data[7] = addr;
+		//data[7] = addr;
+		UINT16 d7 = addr; // data[7] cache
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if ((top >= bottom) || bank == 255)
+		if ((top >= bottom) || bank == 255) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
@@ -2142,10 +2204,11 @@ static void HangonAltRenderSpriteLayer(INT32 Priority)
 				if (!(addr & 0x8000))
 				{
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; x <= 319; )
 					{
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++data[7] & 0x7fff]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++d7 & 0x7fff]);
 
 						/* draw four pixels */
 						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0xff) + hzoom; if (xacc < 0x100) { if (x >= 0) HangonAltDrawPixel(x, pix, color, pPixel); x++; }
@@ -2163,10 +2226,11 @@ static void HangonAltRenderSpriteLayer(INT32 Priority)
 				else
 				{
 					/* start at the word after because we predecrement below */
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; x <= 319; )
 					{
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--data[7] & 0x7fff]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--d7 & 0x7fff]);
 
 						/* draw four pixels */
 						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0xff) + hzoom; if (xacc < 0x100) { if (x >= 0) HangonAltDrawPixel(x, pix, color, pPixel); x++; }
@@ -2208,9 +2272,6 @@ static void XBoardRenderSpriteLayer(INT32 Priority)
 		if (BURN_ENDIAN_SWAP_INT16(data[0]) & 0x8000) break;
 		INT32 sprpri  = 1 << ((BURN_ENDIAN_SWAP_INT16(data[3]) >> 12) & 3);
 		
-#if 1 && defined FBNEO_DEBUG
-		if (sprpri != 1 && sprpri != 2 && sprpri != 4 && sprpri != 8) bprintf(PRINT_IMPORTANT, _T("Unknown Sprite Priority - %x\n"), sprpri);
-#endif
 		if (sprpri != Priority) continue;
 		
 		INT32 hide    = (BURN_ENDIAN_SWAP_INT16(data[0]) & 0x5000);
@@ -2238,11 +2299,14 @@ static void XBoardRenderSpriteLayer(INT32 Priority)
 		xpos -= 0xbe;
 
 		/* initialize the end address to the start address */
-		data[7] = addr;
+		//data[7] = addr;
+		UINT16 d7 = addr; // data[7] cache
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if (hide || height == 0)
+		if (hide || height == 0) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
@@ -2266,10 +2330,11 @@ static void XBoardRenderSpriteLayer(INT32 Priority)
 				if (!flip)
 				{
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; (xdelta > 0 && x <= 319) || (xdelta < 0 && x >= 0); )
 					{
-						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[++data[7]]);
+						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[++d7]);
 						
 						/* draw four pixels */
 						pix = (pixels >> 28) & 0xf; while (xacc < 0x200) { BoardXDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x += xdelta; xacc += hzoom; } xacc -= 0x200;
@@ -2291,10 +2356,11 @@ static void XBoardRenderSpriteLayer(INT32 Priority)
 				else
 				{
 					/* start at the word after because we predecrement below */
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; (xdelta > 0 && x <= 319) || (xdelta < 0 && x >= 0); )
 					{
-						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[--data[7]]);
+						UINT32 pixels = BURN_ENDIAN_SWAP_INT32(spritedata[--d7]);
 						
 						/* draw four pixels */
 						pix = (pixels >>  0) & 0xf; while (xacc < 0x200) { BoardXDrawPixel(x, pix, color, shadow, pPixel, PalRAM); x += xdelta; xacc += hzoom; } xacc -= 0x200;
@@ -2351,7 +2417,7 @@ static void YBoardSystem16BRenderSpriteLayer()
 
 	for (data = (UINT16*)System16SpriteRam; data < (UINT16*)System16SpriteRam + System16SpriteRamSize / 2; data += 8) {
 		if (BURN_ENDIAN_SWAP_INT16(data[2]) & 0x8000) break;
-		INT32 sprpri  = (data[1] >> 8) & 0x1e;
+		INT32 sprpri  = (BURN_ENDIAN_SWAP_INT16(data[1]) >> 8) & 0x1e;
 				
 		INT32 bottom  = BURN_ENDIAN_SWAP_INT16(data[0]) >> 8;
 		INT32 top     = BURN_ENDIAN_SWAP_INT16(data[0]) & 0xff;
@@ -2368,11 +2434,14 @@ static void YBoardSystem16BRenderSpriteLayer()
 		INT32 x, y, pix, xdelta = 1;
 		
 		/* initialize the end address to the start address */
-		data[7] = addr;
+		//data[7] = BURN_ENDIAN_SWAP_INT16(addr);
+		UINT16 d7 = addr;
 
 		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
-		if (hide || (top >= bottom) || bank == 255)
+		if (hide || (top >= bottom) || bank == 255) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
 			continue;
+		}
 
 		/* clamp to within the memory region size */
 		if (numbanks)
@@ -2380,7 +2449,7 @@ static void YBoardSystem16BRenderSpriteLayer()
 		spritedata = spritebase + 0x10000 * bank;
 
 		/* reset the yzoom counter */
-		data[5] &= 0x03ff;
+		data[5] &= BURN_ENDIAN_SWAP_INT16(0x03ff);
 
 		/* loop from top to bottom */
 		for (y = top; y < bottom; y++) {
@@ -2388,10 +2457,10 @@ static void YBoardSystem16BRenderSpriteLayer()
 			addr += pitch;
 
 			/* accumulate zoom factors; if we carry into the high bit, skip an extra row */
-			data[5] += vzoom << 10;
-			if (data[5] & 0x8000) {
+			data[5] += BURN_ENDIAN_SWAP_INT16(vzoom << 10);
+			if (data[5] & BURN_ENDIAN_SWAP_INT16(0x8000)) {
 				addr += pitch;
-				data[5] &= ~0x8000;
+				data[5] &= BURN_ENDIAN_SWAP_INT16(~0x8000);
 			}
 
 			/* skip drawing if not within the cliprect */
@@ -2406,9 +2475,10 @@ static void YBoardSystem16BRenderSpriteLayer()
 				/* non-flipped case */
 				if (!flip) {
 					/* start at the word before because we preincrement below */
-					data[7] = addr - 1;
+					//data[7] = addr - 1;
+					d7 = addr - 1;
 					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++data[7]]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++d7]);
 
 						/* draw four pixels */
 						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { YBoardSystem16BDrawPixel(x, pix, sprpri, color, pPixel, pPrio, PalRAM); x += xdelta; }
@@ -2421,9 +2491,10 @@ static void YBoardSystem16BRenderSpriteLayer()
 					}
 				} else {
 					/* start at the word after because we predecrement below */
-					data[7] = addr + 1;
+					//data[7] = addr + 1;
+					d7 = addr + 1;
 					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
-						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--data[7]]);
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--d7]);
 
 						/* draw four pixels */
 						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { YBoardSystem16BDrawPixel(x, pix, sprpri, color, pPixel, pPrio, PalRAM); x += xdelta; }
@@ -2537,7 +2608,10 @@ static void YBoardRenderSpriteLayer()
 						offs = addr - 1;
 						for (x = xpos; (xdelta > 0 && x <= maxx) || (xdelta < 0 && x >= minx); )
 						{
-							UINT64 pixels = BURN_ENDIAN_SWAP_INT64(spritedata[++offs]);
+							UINT64 pixels = spritedata[++offs];
+#ifndef LSB_FIRST
+							pixels = BURN_ENDIAN_SWAP_INT64(pixels);
+#endif
 
 							/* draw four pixels */
 							pix = (pixels >> 60) & 0xf; ind = BURN_ENDIAN_SWAP_INT16(indirect[pix]); while (xacc < 0x200) { YBoardDrawPixel(x, ind, colorpri, pPixel); x += xdelta; xacc += zoom; } xacc -= 0x200;
@@ -2570,7 +2644,10 @@ static void YBoardRenderSpriteLayer()
 						offs = addr + 1;
 						for (x = xpos; (xdelta > 0 && x <= maxx) || (xdelta < 0 && x >= minx); )
 						{
-							UINT64 pixels = BURN_ENDIAN_SWAP_INT64(spritedata[--offs]);
+							UINT64 pixels = spritedata[--offs];
+#ifndef LSB_FIRST
+							pixels = BURN_ENDIAN_SWAP_INT64(pixels);
+#endif
 
 							/* draw four pixels */
 							pix = (pixels >>  0) & 0xf; ind = BURN_ENDIAN_SWAP_INT16(indirect[pix]); while (xacc < 0x200) { YBoardDrawPixel(x, ind, colorpri, pPixel); x += xdelta; xacc += zoom; } xacc -= 0x200;
@@ -2968,14 +3045,15 @@ void System16RotateDraw()
 Genesis VDP Rendering
 ====================================================*/
 
-static void System18DrawVDP()
+static void System18DrawVDP(INT32 prio)
 {
 	INT32 x, y;
 
 	for (y = 0; y < 224; y++)
 	{
-		UINT16 *src = pTempDraw + (y * 320);
+		UINT16 *src = pTempDraw + (y * 512);
 		UINT16 *dst = pTransDraw + (y * 320);
+		UINT8  *pri = pPrioDraw + (y * 320);
 
 		for (x = 0; x < 320; x++)
 		{
@@ -2983,6 +3061,7 @@ static void System18DrawVDP()
 			if (pix != 0xffff)
 			{
 				dst[x] = pix;
+				pri[x] |= prio;
 			}
 		}
 	}
@@ -2991,7 +3070,7 @@ static void System18DrawVDP()
 void UpdateSystem18VDP()
 {
 	for (INT32 y = 0; y < 224; y++) {
-		UINT16* pPixel = pTempDraw + (y * 320);
+		UINT16* pPixel = pTempDraw + (y * 512);
 		vdp_drawline(pPixel, y, 0xffff);
 	}
 }
@@ -2999,6 +3078,14 @@ void UpdateSystem18VDP()
 /*====================================================
 Palette Generation
 ====================================================*/
+
+static INT32 rgbclamp(INT32 in)
+{
+	if (in > 255) in = 255;
+	if (in < 0) in = 0;
+
+	return in;
+}
 
 void System16PaletteInit()
 {
@@ -3019,7 +3106,10 @@ void System16PaletteInit()
 		INT32 i1 = (value >> 1) & 1;
 		INT32 i0 = (value >> 0) & 1;
 		System16PaletteNormal[value] = combine_6_weights(weights_normal, i0, i1, i2, i3, i4, 0);
-		System16PaletteShadow[value] = combine_6_weights(weights_sh, i0, i1, i2, i3, i4, 0);
+
+		// Out Run hw gets slightly darker shadows, to match pcb
+		INT32 c = combine_6_weights(weights_sh, i0, i1, i2, i3, i4, ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_OUTRUN) ? -0.30 : 0);
+		System16PaletteShadow[value] = rgbclamp(c);
 		System16PaletteHilight[value] = combine_6_weights(weights_sh, i0, i1, i2, i3, i4, 1);
 	}
 }
@@ -3098,8 +3188,16 @@ inline static void System16AUpdateTileValues()
 
 INT32 System16ARender()
 {
-	if (!System16VideoEnable) {
-		BurnTransferClear();
+	// clear sprite mixer buffer
+	memset(pSpriteBitmap, 0xff, nScreenHeight * nScreenWidth * sizeof(UINT16));
+
+	// tiles_generic priority mixer: mix-all
+	GenericTilesPRIMASK = 0xff;
+
+	BurnTransferClear(System16PaletteEntries * 3); // BLACK
+
+	if (!System16AVideoEnableDelayed) {
+		BurnTransferCopy(System16Palette);
 		return 0;
 	}
 	
@@ -3107,17 +3205,43 @@ INT32 System16ARender()
 	System16ACreateTileMaps();
 	
 	System16CalcPalette();
-	System16ARenderTileLayer(1, 0, 0);
-	System16ARenderSpriteLayer(1);
-	System16ARenderTileLayer(1, 0, 1);
-	System16ARenderSpriteLayer(2);
-	System16ARenderTileLayer(1, 1, 1);
-	System16ARenderTileLayer(0, 0, 1);
-	System16ARenderSpriteLayer(4);
-	System16ARenderTileLayer(0, 1, 1);
-	System16ARenderTextLayer(0);
-	System16ARenderSpriteLayer(8);
-	System16ARenderTextLayer(1);
+
+	System16ARenderTileLayer(1, 0, 0, 0);
+	System16ARenderTileLayer(1, 0, 1, 0);
+
+	System16ARenderTileLayer(1, 0, 1, 1);
+	System16ARenderTileLayer(1, 1, 1, 2);
+
+	System16ARenderTileLayer(0, 0, 1, 2);
+	System16ARenderTileLayer(0, 1, 1, 4);
+
+	System16ARenderTextLayer(0, 4);
+	System16ARenderTextLayer(1, 8);
+
+	if (nSpriteEnable & 1) System16ARenderSpriteLayer();
+
+	for (INT32 y = 0; y < nScreenHeight; y++) {
+		for (INT32 x = 0; x < nScreenWidth; x++) {
+			UINT16* pPixel = pSpriteBitmap + (y * 320);
+			UINT8*    pPri = pPrioDraw  + (y * nScreenWidth);
+			UINT16*  pDest = pTransDraw + (y * 320);
+
+			UINT16 pix = pPixel[x];
+			INT32 pri = (pix >> 10) & 3;
+
+			if (pix != 0xffff) {
+				if ((1<<pri) > pPri[x]) {
+
+					if ((pix & 0x3f0) == 0x3f0) {
+						pDest[x] += System16PaletteEntries;
+					} else {
+						pDest[x] = ((pix & 0x3ff) | System16SpritePalOffset);
+					}
+				}
+			}
+		}
+	}
+
 	BurnTransferCopy(System16Palette);
 
 	return 0;
@@ -3176,108 +3300,447 @@ inline static void System16BUpdateTileValues()
 	}
 }
 
-INT32 System16BRender()
+// System 18 / 16B v dink.01
+static void System18RenderTileLayer(INT32 Page, INT32 PriorityDraw, INT32 Transparent, INT32 Priority)
 {
-	if (!System16IgnoreVideoEnable) {
-		if (!System16VideoEnable) {
-			BurnTransferClear();
-			return 0;
+	INT32 xScroll, yScroll, x, y;
+	UINT16 *TextRam = (UINT16*)System16TextRam;
+
+	xScroll = System16ScrollX[Page];
+	yScroll = System16ScrollY[Page];
+	UINT16 Pix;
+
+	UINT16 *pTileMapSrc = NULL;
+	UINT16 *pTileMapDest = NULL;
+	INT32 xSrcOff, ySrcOff, RowScrollIndex, RowScroll, xEffScroll, yEffScroll;
+
+	if (yScroll & 0x8000) {
+		for (y = 0; y < nScreenHeight; y++) {
+			pTileMapDest = pTransDraw + (y * nScreenWidth);
+			UINT8 *pPrio = pPrioDraw + (y * nScreenWidth);
+
+			RowScrollIndex = y / 8;
+			if (System16ScreenFlip) RowScrollIndex = (216 - y) / 8;
+
+			RowScroll = BURN_ENDIAN_SWAP_INT16(TextRam[0xf80/2 + 0x40/2 * Page + RowScrollIndex]);
+			xEffScroll = (xScroll & 0x8000) ? RowScroll : xScroll;
+
+			for (x = 0; x < nScreenWidth; x++) {
+				yEffScroll = BURN_ENDIAN_SWAP_INT16(TextRam[0xf16/2 + 0x40/2 * Page + (x+9)/16]);
+
+				if (RowScroll & 0x8000) {
+					xEffScroll = System16ScrollX[Page + 2];
+					yEffScroll = System16ScrollY[Page + 2];
+
+					ySrcOff = (y + yEffScroll) & 0x1ff;
+					if (System16ScreenFlip) ySrcOff = (((216 + System16ScreenFlipYoffs) - y) + yEffScroll) & 0x1ff;
+
+					if (Page == 0 && PriorityDraw == 0) pTileMapSrc = pSys16FgAltTileMapPri0 + (ySrcOff * 1024);
+					if (Page == 0 && PriorityDraw == 1) pTileMapSrc = pSys16FgAltTileMapPri1 + (ySrcOff * 1024);
+					if (Page == 1 && PriorityDraw == 0) pTileMapSrc = pSys16BgAltTileMapPri0 + (ySrcOff * 1024);
+					if (Page == 1 && PriorityDraw == 1) pTileMapSrc = pSys16BgAltTileMapPri1 + (ySrcOff * 1024);
+					if (Page == 1 && Transparent == 0) pTileMapSrc = pSys16BgAltTileMapOpaque + (ySrcOff * 1024);
+				} else {
+					ySrcOff = (y + yEffScroll) & 0x1ff;
+					if (System16ScreenFlip) ySrcOff = (((216 + System16ScreenFlipYoffs) - y) + yEffScroll) & 0x1ff;
+
+					if (Page == 0 && PriorityDraw == 0) pTileMapSrc = pSys16FgTileMapPri0 + (ySrcOff * 1024);
+					if (Page == 0 && PriorityDraw == 1) pTileMapSrc = pSys16FgTileMapPri1 + (ySrcOff * 1024);
+					if (Page == 1 && PriorityDraw == 0 && Transparent == 1) pTileMapSrc = pSys16BgTileMapPri0 + (ySrcOff * 1024);
+					if (Page == 1 && PriorityDraw == 1 && Transparent == 1) pTileMapSrc = pSys16BgTileMapPri1 + (ySrcOff * 1024);
+					if (Page == 1 && Transparent == 0) pTileMapSrc = pSys16BgTileMapOpaque + (ySrcOff * 1024);
+				}
+
+				xSrcOff = (x - xEffScroll + 192) & 0x3ff;
+
+				if (System16ScreenFlip) xSrcOff = (((312 + System16ScreenFlipXoffs) - x) - xEffScroll + 192) & 0x3ff;
+
+				Pix = pTileMapSrc[xSrcOff];
+
+				if (Transparent) {
+					if (Pix) {
+						pTileMapDest[x] = Pix;
+						pPrio[x] |= Priority;
+					}
+				} else {
+					pTileMapDest[x] = Pix;
+					pPrio[x] |= Priority;
+				}
+			}
+		}
+	} else {
+		for (y = 0; y < nScreenHeight; y++) {
+			pTileMapDest = pTransDraw + (y * nScreenWidth);
+			UINT8 *pPrio = pPrioDraw + (y * nScreenWidth);
+
+			RowScrollIndex = y / 8;
+			if (System16ScreenFlip) RowScrollIndex = (216 - y) / 8;
+
+			RowScroll = BURN_ENDIAN_SWAP_INT16(TextRam[0xf80/2 + 0x40/2 * Page + RowScrollIndex]);
+			xEffScroll = (xScroll & 0x8000) ? RowScroll : xScroll;
+			yEffScroll = yScroll;
+
+			if (RowScroll & 0x8000) {
+				xEffScroll = System16ScrollX[Page + 2];
+				yEffScroll = System16ScrollY[Page + 2];
+
+				ySrcOff = (y + yEffScroll) & 0x1ff;
+				if (System16ScreenFlip) ySrcOff = (((216 + System16ScreenFlipYoffs) - y) + yEffScroll) & 0x1ff;
+
+				if (Page == 0 && PriorityDraw == 0) pTileMapSrc = pSys16FgAltTileMapPri0 + (ySrcOff * 1024);
+				if (Page == 0 && PriorityDraw == 1) pTileMapSrc = pSys16FgAltTileMapPri1 + (ySrcOff * 1024);
+				if (Page == 1 && PriorityDraw == 0) pTileMapSrc = pSys16BgAltTileMapPri0 + (ySrcOff * 1024);
+				if (Page == 1 && PriorityDraw == 1) pTileMapSrc = pSys16BgAltTileMapPri1 + (ySrcOff * 1024);
+				if (Page == 1 && Transparent == 0) pTileMapSrc = pSys16BgAltTileMapOpaque + (ySrcOff * 1024);
+			} else {
+				ySrcOff = (y + yEffScroll) & 0x1ff;
+				if (System16ScreenFlip) ySrcOff = (((216 + System16ScreenFlipYoffs) - y) + yEffScroll) & 0x1ff;
+
+				if (Page == 0 && PriorityDraw == 0) pTileMapSrc = pSys16FgTileMapPri0 + (ySrcOff * 1024);
+				if (Page == 0 && PriorityDraw == 1) pTileMapSrc = pSys16FgTileMapPri1 + (ySrcOff * 1024);
+				if (Page == 1 && PriorityDraw == 0) pTileMapSrc = pSys16BgTileMapPri0 + (ySrcOff * 1024);
+				if (Page == 1 && PriorityDraw == 1) pTileMapSrc = pSys16BgTileMapPri1 + (ySrcOff * 1024);
+				if (Page == 1 && Transparent == 0) pTileMapSrc = pSys16BgTileMapOpaque + (ySrcOff * 1024);
+			}
+
+			for (x = 0; x < nScreenWidth; x++) {
+				xSrcOff = (x - xEffScroll + 192) & 0x3ff;
+
+				if (System16ScreenFlip) xSrcOff = (((312 + System16ScreenFlipXoffs) - x) - xEffScroll + 192) & 0x3ff;
+
+				Pix = pTileMapSrc[xSrcOff];
+
+				if (Transparent) {
+					if (Pix) {
+						pTileMapDest[x] = Pix;
+						pPrio[x] |= Priority;
+					}
+				} else {
+					pTileMapDest[x] = Pix;
+					pPrio[x] |= Priority;
+				}
+			}
 		}
 	}
-	
+}
+
+static void System18RenderTextLayer(INT32 PriorityDraw, INT32 tpri)
+{
+	INT32 mx, my, Code, Colour, x, y, Priority, TileIndex = 0;
+
+	INT32 ColourDepth = 3;
+	if (Lockonph) ColourDepth = 4;
+
+	for (my = 0; my < 32; my++) {
+		for (mx = 0; mx < 64; mx++) {
+			Code = (System16TextRam[TileIndex + 1] << 8) | System16TextRam[TileIndex + 0];
+			Priority = (Code >> 15) & 1;
+
+			if (Priority == PriorityDraw) {
+				Colour = (Code >> ((AltModeKludge) ? 8 : 9)) & 0x07;
+				Code &= (AltModeKludge) ? 0xff : 0x1ff;
+
+				Code += System16TileBanks[0] * System16TileBankSize;
+
+				Code &= (System16NumTiles - 1);
+
+				x = 8 * mx;
+				y = 8 * my;
+
+				x -= 192;
+
+				if (System16ScreenFlip) {
+					x = 312 - x;
+					y = 216 - y;
+
+					if (x > 7 && x < 312 && y > 7 && y < 216) {
+						Render8x8Tile_Prio_Mask_FlipXY(pTransDraw, Code, x, y, Colour, ColourDepth, 0, System16TilemapColorOffset, tpri, System16Tiles);
+					} else {
+						Render8x8Tile_Prio_Mask_FlipXY_Clip(pTransDraw, Code, x, y, Colour, ColourDepth, 0, System16TilemapColorOffset, tpri, System16Tiles);
+					}
+				} else {
+					if (x > 7 && x < 312 && y > 7 && y < 216) {
+						Render8x8Tile_Prio_Mask(pTransDraw, Code, x, y, Colour, ColourDepth, 0, System16TilemapColorOffset, tpri, System16Tiles);
+					} else {
+						Render8x8Tile_Prio_Mask_Clip(pTransDraw, Code, x, y, Colour, ColourDepth, 0, System16TilemapColorOffset, tpri, System16Tiles);
+					}
+				}
+			}
+
+			TileIndex += 2;
+		}
+	}
+}
+
+static void System18DrawPixel(INT32 x, INT32 pix, INT32 colour, UINT16* pPixel)
+{
+	x += System16SpriteXOffset;
+	if (x >= 0 && x <= 319 && pix != 0 && pix != 15) {
+		pPixel[x] = pix | colour;
+	}
+}
+
+static void System18RenderSpriteLayer()
+{
+	UINT8 numbanks;
+	const UINT16 *spritebase;
+	UINT16 *data;
+
+	spritebase = (const UINT16 *)System16Sprites;
+	numbanks = System16SpriteRomSize / 0x20000;
+
+	for (data = (UINT16*)System16SpriteRam; data < (UINT16*)System16SpriteRam + System16SpriteRamSize / 2; data += 8) {
+		if (BURN_ENDIAN_SWAP_INT16(data[2]) & 0x8000) break;
+		INT32 bottom  = BURN_ENDIAN_SWAP_INT16(data[0]) >> 8;
+		INT32 top     = BURN_ENDIAN_SWAP_INT16(data[0]) & 0xff;
+		INT32 xpos    = (BURN_ENDIAN_SWAP_INT16(data[1]) & 0x1ff) - 0xb8;
+		INT32 hide    = BURN_ENDIAN_SWAP_INT16(data[2]) & 0x4000;
+		INT32 flip    = BURN_ENDIAN_SWAP_INT16(data[2]) & 0x100;
+		INT32 pitch   = (INT8)(BURN_ENDIAN_SWAP_INT16(data[2]) & 0xff);
+		UINT16 addr   = BURN_ENDIAN_SWAP_INT16(data[3]);
+		INT32 bank    = System16SpriteBanks[(BURN_ENDIAN_SWAP_INT16(data[4]) >> 8) & 0xf];
+		INT32 color   = ((BURN_ENDIAN_SWAP_INT16(data[4]) & 0xff) << 4);// | ((BURN_ENDIAN_SWAP_INT16(data[1]) & 0x1e00) << 3); <- this is for yboard, only
+
+		INT32 vzoom   = (BURN_ENDIAN_SWAP_INT16(data[5]) >> 5) & 0x1f;
+		INT32 hzoom   = BURN_ENDIAN_SWAP_INT16(data[5]) & 0x1f;
+		const UINT16 *spritedata;
+		INT32 x, y, pix, xdelta = 1;
+
+		/* initialize the end address to the start address */
+		//data[7] = addr;
+		UINT16 d7 = addr; // data[7] cache
+
+		/* if hidden, or top greater than/equal to bottom, or invalid bank, punt */
+		if (hide || (top >= bottom) || bank == 255) {
+			data[7] = BURN_ENDIAN_SWAP_INT16(d7); // un-cache d7
+			continue;
+		}
+
+		/* clamp to within the memory region size */
+		if (numbanks)
+			bank %= numbanks;
+		spritedata = spritebase + 0x10000 * bank;
+
+		/* reset the yzoom counter */
+		data[5] &= BURN_ENDIAN_SWAP_INT16(0x03ff);
+
+		if (System16ScreenFlip) {
+			INT32 temp = top;
+			top = 224 - bottom;
+			bottom = 224 - temp;
+			xpos = 320 - xpos;
+			xdelta = -1;
+		}
+
+		/* loop from top to bottom */
+		for (y = top; y < bottom; y++) {
+			/* advance a row */
+			addr += pitch;
+
+			/* accumulate zoom factors; if we carry into the high bit, skip an extra row */
+			data[5] += BURN_ENDIAN_SWAP_INT16(vzoom << 10);
+			if (data[5] & BURN_ENDIAN_SWAP_INT16(0x8000)) {
+				addr += pitch;
+				data[5] &= BURN_ENDIAN_SWAP_INT16(~0x8000);
+			}
+
+			/* skip drawing if not within the cliprect */
+			if (y >= 0 && y <= 223) {
+				UINT16* pPixel = pSpriteBitmap + (y * 320);
+				int xacc;
+
+				/* compute the initial X zoom accumulator; this is verified on the real PCB */
+				xacc = 4 * hzoom;
+
+				/* non-flipped case */
+				if (!flip) {
+					/* start at the word before because we preincrement below */
+					//data[7] = addr - 1;
+					d7 = addr - 1;
+					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[++d7]);
+
+						/* draw four pixels */
+						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+						pix = (pixels >>  8) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+
+						/* stop if the last pixel in the group was 0xf */
+						if (pix == 15) break;
+					}
+				} else {
+					/* start at the word after because we predecrement below */
+					//data[7] = addr + 1;
+					d7 = addr + 1;
+					for (x = xpos; ((xpos - x) & 0x1ff) != 1; ) {
+						UINT16 pixels = BURN_ENDIAN_SWAP_INT16(spritedata[--d7]);
+
+						/* draw four pixels */
+						pix = (pixels >>  0) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+						pix = (pixels >>  4) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+						pix = (pixels >>  8) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+						pix = (pixels >> 12) & 0xf; xacc = (xacc & 0x3f) + hzoom; if (xacc < 0x40) { System18DrawPixel(x, pix, color, pPixel); x += xdelta; }
+
+						/* stop if the last pixel in the group was 0xf */
+						if (pix == 15) break;
+					}
+				}
+			}
+		}
+	}
+}
+
+
+INT32 System18Render()
+{
+	BurnTransferClear();
+
+	// clear sprite mixer buffer
+	memset(pSpriteBitmap, 0xff, nScreenHeight * nScreenWidth * sizeof(UINT16));
+
+	// tiles_generic priority mixer: mix-all
+	GenericTilesPRIMASK = 0xff;
+
+	if (!System16VideoEnable) {
+		return 0;
+	}
+
+	INT32 VDPLayer = (System18VdpMixing >> 1) & 3;
+	INT32 VDPPri = (System18VdpMixing & 1) ? (1 << VDPLayer) : 0;
+
 	System16BUpdateTileValues();
 	System16BCreateTileMaps();
-	
-	if (Lockonph) {
-		PhilkoCalcPalette();
-	} else {
-		System16CalcPalette();
+
+	System16CalcPalette();
+	GenesisPaletteRecalc();
+
+	INT32 VDP_Enable = System18VdpEnable;
+	if (~nSpriteEnable & 0x80) VDP_Enable = 0;
+
+	if (VDP_Enable) UpdateSystem18VDP();
+
+	if (nBurnLayer & 1) System18RenderTileLayer(1, 0, 0, 0);
+	if (nBurnLayer & 1) System18RenderTileLayer(1, 1, 0, 0);
+	if (VDP_Enable && VDPLayer == 0) System18DrawVDP(VDPPri);
+
+	if (nBurnLayer & 2) System18RenderTileLayer(1, 0, 1, 1);
+	if (nBurnLayer & 4) System18RenderTileLayer(1, 1, 1, 2);
+	if (VDP_Enable && VDPLayer == 1) System18DrawVDP(VDPPri);
+
+	if (nBurnLayer & 8)    System18RenderTileLayer(0, 0, 1, 2);
+	if (nSpriteEnable & 1) System18RenderTileLayer(0, 1, 1, 4);
+	if (VDP_Enable && VDPLayer == 2) System18DrawVDP(VDPPri);
+
+	if (nSpriteEnable & 2) System18RenderTextLayer(0, 4);
+	if (nSpriteEnable & 4) System18RenderTextLayer(1, 8);
+	if (VDP_Enable && VDPLayer == 3) System18DrawVDP(VDPPri);
+
+	if (nSpriteEnable & 8) System18RenderSpriteLayer();
+
+	for (INT32 y = 0; y < nScreenHeight; y++) {
+		for (INT32 x = 0; x < nScreenWidth; x++) {
+			UINT16* pPixel = pSpriteBitmap + (y * 320);
+			UINT8*    pPri = pPrioDraw  + (y * nScreenWidth);
+			UINT16*  pDest = pTransDraw + (y * 320);
+			UINT16 *PalRAM = (UINT16*)System16PaletteRam;
+
+			UINT16 pix = pPixel[x];
+			INT32 pri = (pix >> 10) & 3;
+
+			if (pix != 0xffff) {
+				if ((1<<pri) > pPri[x]) {
+
+					if ((pix & 0x3f0) == 0x3f0) {
+						pDest[x] += (PalRAM[pPixel[x]] & 0x8000) ? (System16PaletteEntries * 2) : System16PaletteEntries;
+					} else {
+						pDest[x] = ((pix & 0x3ff) | System16SpritePalOffset);
+					}
+				}
+			}
+		}
 	}
-	
-	System16BRenderTileLayer(1, 0, 0);
-	System16BRenderSpriteLayer(1);
-	System16BRenderTileLayer(1, 0, 1);
-	System16BRenderSpriteLayer(2);
-	System16BRenderTileLayer(1, 1, 1);
-	System16BRenderTileLayer(0, 0, 1);
-	System16BRenderSpriteLayer(4);
-	System16BRenderTileLayer(0, 1, 1);
-	System16BRenderTextLayer(0);
-	System16BRenderSpriteLayer(8);
-	System16BRenderTextLayer(1);
+
 	BurnTransferCopy(System16Palette);
+
+	BurnGunDrawTargets();
 
 	return 0;
 }
 
 INT32 System16BAltRender()
 {
-	if (!System16VideoEnable) {
-		BurnTransferClear();
-		return 0;
-	}
-
-	System16BUpdateTileValues();
-	System16BAltCreateTileMaps();
-	
-	System16CalcPalette();
-	System16BRenderTileLayer(1, 0, 0);
-	System16BRenderSpriteLayer(1);
-	System16BRenderTileLayer(1, 0, 1);
-	System16BRenderSpriteLayer(2);
-	System16BRenderTileLayer(1, 1, 1);
-	System16BRenderTileLayer(0, 0, 1);
-	System16BRenderSpriteLayer(4);
-	System16BRenderTileLayer(0, 1, 1);
-	System16BAltRenderTextLayer(0);
-	System16BRenderSpriteLayer(8);
-	System16BAltRenderTextLayer(1);
-	BurnTransferCopy(System16Palette);
-
-	return 0;
+	AltModeKludge = 1;
+	return System16BRender();
 }
 
-INT32 System18Render()
+INT32 System16BRender()
 {
-	if (!System16VideoEnable) {
-		BurnTransferClear();
-		return 0;
+	BurnTransferClear();
+
+	// clear sprite mixer buffer
+	memset(pSpriteBitmap, 0xff, nScreenHeight * nScreenWidth * sizeof(UINT16));
+
+	// tiles_generic priority mixer: mix-all
+	GenericTilesPRIMASK = 0xff;
+
+	if (!System16IgnoreVideoEnable) {
+		if (!System16VideoEnable) {
+			return 0;
+		}
 	}
-	
-	INT32 VDPLayer = (System18VdpMixing >> 1) & 3;
-	INT32 VDPPri = (System18VdpMixing & 1) ? (1 << VDPLayer) : 0;
-	
 	System16BUpdateTileValues();
-	System16BCreateTileMaps();
-	
-	System16CalcPalette();
-	
-	if (System18VdpEnable) UpdateSystem18VDP();
-	
-	System16BRenderTileLayer(1, 0, 0);
-	if (System18VdpEnable && VDPLayer == 0 && !VDPPri) System18DrawVDP();
-	System16BRenderSpriteLayer(1);
-	if (System18VdpEnable && VDPLayer == 0 && VDPPri) System18DrawVDP();
-	System16BRenderTileLayer(1, 0, 1);
-	if (System18VdpEnable && VDPLayer == 1 && !VDPPri) System18DrawVDP();
-	System16BRenderSpriteLayer(2);
-	if (System18VdpEnable && VDPLayer == 1 && VDPPri) System18DrawVDP();
-	System16BRenderTileLayer(1, 1, 1);
-	System16BRenderTileLayer(0, 0, 1);
-	if (System18VdpEnable && VDPLayer == 2 && !VDPPri) System18DrawVDP();
-	System16BRenderSpriteLayer(4);
-	if (System18VdpEnable && VDPLayer == 2 && VDPPri) System18DrawVDP();
-	System16BRenderTileLayer(0, 1, 1);
-	System16BRenderTextLayer(0);
-	if (System18VdpEnable && VDPLayer == 3 && !VDPPri) System18DrawVDP();
-	System16BRenderSpriteLayer(8);
-	if (System18VdpEnable && VDPLayer == 3 && VDPPri) System18DrawVDP();
-	System16BRenderTextLayer(1);
+
+	if (AltModeKludge) {
+		System16BAltCreateTileMaps();
+	} else {
+		System16BCreateTileMaps();
+	}
+
+	if (Lockonph) {
+		PhilkoCalcPalette();
+	} else {
+		System16CalcPalette();
+	}
+
+	if (nBurnLayer & 1) System18RenderTileLayer(1, 0, 0, 0);
+	if (nBurnLayer & 1) System18RenderTileLayer(1, 1, 0, 0);
+
+	if (nBurnLayer & 2) System18RenderTileLayer(1, 0, 1, 1);
+	if (nBurnLayer & 4) System18RenderTileLayer(1, 1, 1, 2);
+
+	if (nBurnLayer & 8)    System18RenderTileLayer(0, 0, 1, 2);
+	if (nSpriteEnable & 1) System18RenderTileLayer(0, 1, 1, 4);
+
+	if (nSpriteEnable & 2) System18RenderTextLayer(0, 4);
+	if (nSpriteEnable & 4) System18RenderTextLayer(1, 8);
+
+	if (nSpriteEnable & 8) System18RenderSpriteLayer();
+
+	for (INT32 y = System16SpriteYOffset; y < (nScreenHeight - System16SpriteYOffset); y++) {
+		for (INT32 x = 0; x < nScreenWidth; x++) {
+			UINT16* pPixel = pSpriteBitmap + ((y - System16SpriteYOffset) * 320);
+			UINT8*    pPri = pPrioDraw  + (y * nScreenWidth);
+			UINT16*  pDest = pTransDraw + (y * 320);
+
+			UINT16 pix = pPixel[x];
+			INT32 pri = (pix >> 10) & 3;
+
+			if (pix != 0xffff) {
+				if ((1<<pri) > pPri[x]) {
+					if ((pix & 0x3f0) == 0x3f0) {
+						pDest[x] += System16PaletteEntries;
+					} else {
+						pDest[x] = ((pix & 0x3ff) | System16SpritePalOffset);
+					}
+				}
+			}
+		}
+	}
+
 	BurnTransferCopy(System16Palette);
 
-	for (INT32 i = 0; i < nBurnGunNumPlayers; i++) {
-		BurnGunDrawTarget(i, BurnGunX[i] >> 8, BurnGunY[i] >> 8);
-	}
+	AltModeKludge = 0;
 
 	return 0;
 }
@@ -3296,16 +3759,16 @@ INT32 HangonRender()
 	
 	HangonRenderRoadLayer(0);
 	HangonRenderSpriteLayer(1);
-	System16ARenderTileLayer(1, 0, 1);
+	System16ARenderTileLayer(1, 0, 1, 0);
 	HangonRenderSpriteLayer(2);
-	System16ARenderTileLayer(1, 1, 1);
-	System16ARenderTileLayer(0, 0, 1);
+	System16ARenderTileLayer(1, 1, 1, 0);
+	System16ARenderTileLayer(0, 0, 1, 0);
 	HangonRenderSpriteLayer(4);
-	System16ARenderTileLayer(0, 1, 1);
+	System16ARenderTileLayer(0, 1, 1, 0);
 	HangonRenderRoadLayer(1);
 	HangonRenderSpriteLayer(8);
-	System16ARenderTextLayer(0);
-	System16ARenderTextLayer(1);
+	System16ARenderTextLayer(0, 0);
+	System16ARenderTextLayer(1, 0);
 	BurnTransferCopy(System16Palette);
 
 	return 0;
@@ -3325,16 +3788,16 @@ INT32 HangonAltRender()
 	
 	HangonRenderRoadLayer(0);
 	HangonAltRenderSpriteLayer(1);
-	System16ARenderTileLayer(1, 0, 1);
+	System16ARenderTileLayer(1, 0, 1, 0);
 	HangonAltRenderSpriteLayer(2);
-	System16ARenderTileLayer(1, 1, 1);
-	System16ARenderTileLayer(0, 0, 1);
+	System16ARenderTileLayer(1, 1, 1, 0);
+	System16ARenderTileLayer(0, 0, 1, 0);
 	HangonAltRenderSpriteLayer(4);
-	System16ARenderTileLayer(0, 1, 1);
+	System16ARenderTileLayer(0, 1, 1, 0);
 	HangonRenderRoadLayer(1);
 	HangonAltRenderSpriteLayer(8);
-	System16ARenderTextLayer(0);
-	System16ARenderTextLayer(1);
+	System16ARenderTextLayer(0, 0);
+	System16ARenderTextLayer(1, 0);
 	BurnTransferCopy(System16Palette);
 
 	return 0;
@@ -3423,9 +3886,7 @@ INT32 XBoardRender()
 	System16BRenderTextLayer(1);
 	BurnTransferCopy(System16Palette);
 	
-	for (INT32 i = 0; i < nBurnGunNumPlayers; i++) {
-		BurnGunDrawTarget(i, BurnGunX[i] >> 8, BurnGunY[i] >> 8);
-	}
+	BurnGunDrawTargets();
 
 	return 0;
 }
@@ -3443,9 +3904,7 @@ INT32 YBoardRender()
 	YBoardSystem16BRenderSpriteLayer();
 	BurnTransferCopy(System16Palette);
 	
-	for (INT32 i = 0; i < nBurnGunNumPlayers; i++) {
-		BurnGunDrawTarget(i, BurnGunX[i] >> 8, BurnGunY[i] >> 8);
-	}
+	BurnGunDrawTargets();
 
 	if (System16HasGears) BurnShiftRender();
 

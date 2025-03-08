@@ -426,7 +426,7 @@ static void draw_layer(UINT8 *ram, INT32 col, INT32 scrollx, INT32 scrolly, INT3
 
 		INT32 ofst = (offs & 0x1f) | ((offs & 0x7c0)>>1) | ((offs & 0x20) << 5);
 
-		INT32 attr = vram[ofst];
+		INT32 attr = BURN_ENDIAN_SWAP_INT16(vram[ofst]);
 		INT32 code = (attr & 0x3ff) | (DrvGfxBank[(attr >> 10) & 3] << 10);
 		INT32 color = (attr >> 12) | col;
 
@@ -440,13 +440,13 @@ static void draw_sprites()
 
 	for (INT32 offs = 0; offs < 0x800/2; offs += 4)
 	{
-		INT32 sx     = 0x13b - ((vram[offs + 2] + 0x10) & 0x1ff);
-		INT32 sy     = vram[offs + 0] + 8;
-		INT32 code   = vram[offs + 1] & 0x3fff;
-		INT32 color  = vram[offs + 2] >> 9;
-		INT32 height = 1 << ((vram[offs + 0] & 0x0600) >> 9);
-		INT32 flipx  = vram[offs + 0] & 0x2000;
-		INT32 flipy  = vram[offs + 0] & 0x4000;
+		INT32 sx     = 0x13b - ((BURN_ENDIAN_SWAP_INT16(vram[offs + 2]) + 0x10) & 0x1ff);
+		INT32 sy     = BURN_ENDIAN_SWAP_INT16(vram[offs + 0]) + 8;
+		INT32 code   = BURN_ENDIAN_SWAP_INT16(vram[offs + 1]) & 0x3fff;
+		INT32 color  = BURN_ENDIAN_SWAP_INT16(vram[offs + 2]) >> 9;
+		INT32 height = 1 << ((BURN_ENDIAN_SWAP_INT16(vram[offs + 0]) & 0x0600) >> 9);
+		INT32 flipx  = BURN_ENDIAN_SWAP_INT16(vram[offs + 0]) & 0x2000;
+		INT32 flipy  = BURN_ENDIAN_SWAP_INT16(vram[offs + 0]) & 0x4000;
 
 		for (INT32 y = 0; y < height; y++)
 		{
@@ -476,7 +476,7 @@ static INT32 DrvDraw()
 		UINT16 *pal = (UINT16*)DrvPalRAM;
 
 		for (INT32 i = 0; i < 0x600/2; i++) {
-			INT32 d = pal[i];
+			INT32 d = BURN_ENDIAN_SWAP_INT16(pal[i]);
 
 			r = (d >> 10) & 0x1f;
 			g = (d >>  5) & 0x1f;
@@ -622,7 +622,7 @@ STD_ROM_FN(gotcha)
 
 struct BurnDriver BurnDrvGotcha = {
 	"gotcha", NULL, NULL, NULL, "1997",
-	"Got-cha Mini Game Festival\0", NULL, "Dongsung", "Miscellaneous",
+	"Got-cha Mini Game Festival\0", NULL, "Dongsung / Para", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING, 3, HARDWARE_MISC_POST90S, GBF_MINIGAMES, 0,
 	NULL, gotchaRomInfo, gotchaRomName, NULL, NULL, NULL, NULL, GotchaInputInfo, GotchaDIPInfo,
@@ -631,7 +631,7 @@ struct BurnDriver BurnDrvGotcha = {
 };
 
 
-// Pasha Pasha Champ Mini Game Festival
+// Pasha Pasha Champ Mini Game Festival (Korea, set 1)
 
 static struct BurnRomInfo ppchampRomDesc[] = {
 	{ "u3",		0x40000, 0xf56c0fc2, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -657,10 +657,45 @@ STD_ROM_FN(ppchamp)
 
 struct BurnDriver BurnDrvPpchamp = {
 	"ppchamp", "gotcha", NULL, NULL, "1997",
-	"Pasha Pasha Champ Mini Game Festival\0", NULL, "Dongsung", "Miscellaneous",
+	"Pasha Pasha Champ Mini Game Festival (Korea, set 1)\0", NULL, "Dongsung / Para", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE, 3, HARDWARE_MISC_POST90S, GBF_MINIGAMES, 0,
 	NULL, ppchampRomInfo, ppchampRomName, NULL, NULL, NULL, NULL, GotchaInputInfo, GotchaDIPInfo,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x300,
+	320, 240, 4, 3
+};
+
+
+// Pasha Pasha Champ Mini Game Festival (Korea, set 2)
+
+static struct BurnRomInfo ppchampaRomDesc[] = {
+	{ "d8-d15.u8",	0x40000, 0xe7f8b97a, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "d0-d7.u2",	0x40000, 0x35ee8ad7, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "uz02",		0x10000, 0xf4f6e16b, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+
+	{ "u42a",		0x80000, 0xf0b521d1, 3 | BRF_GRA },           //  3 Tiles
+	{ "u42b",		0x80000, 0x1107918e, 3 | BRF_GRA },           //  4
+	{ "u41a",		0x80000, 0x3f567d33, 3 | BRF_GRA },           //  5
+	{ "u41b",		0x80000, 0x18a3497e, 3 | BRF_GRA },           //  6
+
+	{ "u56",		0x80000, 0x160e46b3, 4 | BRF_GRA },           //  7 Sprites
+	{ "u55",		0x80000, 0x7351b61c, 4 | BRF_GRA },           //  8
+	{ "u54",		0x80000, 0xa3d8c5ef, 4 | BRF_GRA },           //  9
+	{ "u53",		0x80000, 0x10ca65c4, 4 | BRF_GRA },           // 10
+
+	{ "uz11",		0x80000, 0x3d96274c, 5 | BRF_SND },           // 11 Samples
+};
+
+STD_ROM_PICK(ppchampa)
+STD_ROM_FN(ppchampa)
+
+struct BurnDriver BurnDrvPpchampa = {
+	"ppchampa", "gotcha", NULL, NULL, "1997",
+	"Pasha Pasha Champ Mini Game Festival (Korea, set 2)\0", NULL, "Dongsung / Para", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 3, HARDWARE_MISC_POST90S, GBF_MINIGAMES, 0,
+	NULL, ppchampaRomInfo, ppchampaRomName, NULL, NULL, NULL, NULL, GotchaInputInfo, GotchaDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x300,
 	320, 240, 4, 3
 };

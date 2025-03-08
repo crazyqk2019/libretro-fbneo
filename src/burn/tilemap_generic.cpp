@@ -1,7 +1,8 @@
 #include "tiles_generic.h"
 
-#define MAX_TILEMAPS	32	// number of tile maps allowed
+#define MAX_TILEMAPS	64	// number of tile maps allowed
 #define MAX_GFXNUM
+#define MAX_SPLIT_CATEGORY 16
 
 struct GenericTilemap {
 	UINT8 initialized;
@@ -22,7 +23,7 @@ struct GenericTilemap {
 	INT32 xoffset[2]; // not flipscreen, flipscreen
 	INT32 yoffset[2]; // not flipscreen, flipscreen
 	UINT32 flags;
-	UINT8 *transparent[256];	// 0 draw, 1 skip
+	UINT8 *transparent[257];	// 0 draw, 1 skip
 	INT32 transcolor;
 	UINT8 *dirty_tiles;			// 1 skip, 0 draw
 	INT32 dirty_tiles_enable;
@@ -88,6 +89,8 @@ void GenericTilemapInit(INT32 which, INT32 (*pScan)(INT32 col, INT32 row), void 
 	cur_map->yoffset[0] = cur_map->yoffset[1] = 0;
 
 	cur_map->transparent[0] = (UINT8*)BurnMalloc(0x100); // allocate 0 by default
+	cur_map->transparent[0x100] = (UINT8*)BurnMalloc(0x100);
+	memset (cur_map->transparent[0x100], 0, 0x100); // opaque table!
 
 	cur_map->priority = -1;
 	cur_map->flags = 0;
@@ -156,7 +159,9 @@ void GenericTilemapExit()
 		cur_map = &maps[i];
 		if (cur_map->scrolly_table) BurnFree(cur_map->scrolly_table);
 		if (cur_map->scrollx_table) BurnFree(cur_map->scrollx_table);
-		if (cur_map->transparent[0]) BurnFree(cur_map->transparent[0]);
+		for (INT32 j = 0; j < 257; j++) {
+			if (cur_map->transparent[j]) BurnFree(cur_map->transparent[j]);
+		}
 		if (cur_map->dirty_tiles) BurnFree(cur_map->dirty_tiles);
 
 		for (INT32 j = 0; j < MAX_GFX; j++) {
@@ -370,16 +375,23 @@ void GenericTilemapSetTransSplit(INT32 which, INT32 category, UINT16 layer0, UIN
 		bprintf (PRINT_ERROR, _T("GenericTilemapSetTransSplit(%d, %d, 0x%4.4x, 0x%4.4x); called with impossible tilemap number!\n"), which, category, layer0, layer1);
 		return;
 	}
+
+	if (category >= MAX_SPLIT_CATEGORY) {
+		bprintf(PRINT_ERROR, _T("GenericTilemapSetTransSplit(): increase MAX_SPLIT_CATEGORY!\n"));
+		return;
+	}
 #endif
 
 	cur_map = &maps[which];
 
 	if (category == 0) {
-		GenericTilemapCategoryConfig(0, 4);
+		GenericTilemapCategoryConfig(which, MAX_SPLIT_CATEGORY);
 	}
 
-	GenericTilemapSetTransMask(0, 0 | (category & 1), layer0); // TMAP_DRAWLAYER0
-	GenericTilemapSetTransMask(0, 2 | (category & 1), layer1); // TMAP_DRAWLAYER1
+	GenericTilemapSetTransMask(which, (category * 2) | 0, layer0); // TMAP_DRAWLAYER0
+	GenericTilemapSetTransMask(which, (category * 2) | 1, layer1); // TMAP_DRAWLAYER1
+
+	cur_map->flags |= TMAP_TRANSSPLIT;
 }
 
 void GenericTilemapSetTransMask(INT32 which, INT32 category, UINT16 transmask)
@@ -890,9 +902,26 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 		if (maxy >= nScreenHeight) maxy = nScreenHeight;
 	}
 
+	// where should we start drawing from?
+	// only used by "scrollx and scrolly" at this time
+	INT32 start_x = minx;
+	INT32 start_y = miny;
+	INT32 end_x = maxx;
+	INT32 end_y = maxy;
+
+	if (cur_map->flags & TMAP_FLIPX) {
+		start_x = nScreenWidth - maxx;
+		end_x = nScreenWidth - minx;
+	}
+
+	if (cur_map->flags & TMAP_FLIPY) {
+		start_y = nScreenHeight - maxy;
+		end_y = nScreenHeight - miny;
+	}
+
 	GenericTilesPRIMASK = priority_mask;
 
-	INT32 category_or = (priority & TMAP_DRAWLAYER1) ? 2 : 0;
+	INT32 category_or = (priority & TMAP_DRAWLAYER1) ? 1 : 0;
 	INT32 opaque = priority & TMAP_FORCEOPAQUE;
 	INT32 opaque2 = priority & TMAP_DRAWOPAQUE;
 	INT32 tgroup = (priority >> 8) & 0xff;
@@ -918,7 +947,7 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 				if (cur_map->scrollx_table != NULL)
 					sx = (x + cur_map->scrollx_table[(y * cur_map->scroll_rows) / scrymod] - x_offset) % scrxmod;
 				else
-					sx = (x + cur_map->scrolly - x_offset) % scrxmod;
+					sx = (x + cur_map->scrollx - x_offset) % scrxmod;
 
 				INT32 sy = (y + cur_map->scrolly_table[(sx * cur_map->scroll_cols) / scrxmod] - y_offset) % scrymod;
 
@@ -946,8 +975,10 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 
 				cur_map->pTile(offset, &sTileData);
 
-				UINT32 category = sTileData.category | category_or;
-				
+				UINT32 category = (cur_map->flags & TMAP_TRANSSPLIT) ?
+					((sTileData.category * 2) | category_or) :
+					(sTileData.category | category_or);
+
 				if (category && (cur_map->flags & TMAP_TRANSMASK)) {
 					if (cur_map->transparent[category] == NULL) {
 						category = 0;
@@ -1002,7 +1033,7 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 
 				UINT8 *gfxsrc = gfx->gfxbase + (sTileData.code * cur_map->twidth * cur_map->theight) + goffs;
 
-				UINT8 *trans_ptr = cur_map->transparent[category];
+				UINT8 *trans_ptr = cur_map->transparent[(opaque||opaque2) ? 0x100 : category];
 
 				if (trans_ptr[*gfxsrc] == 0)
 				{
@@ -1036,7 +1067,7 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 
 			INT32 sy = y;
 			if (cur_map->flags & TMAP_FLIPY) {
-				sy = ((maxy - miny) - cur_map->theight) - sy;
+				sy = ((maxy - miny) - 1) - sy;
 			}
 
 			dest = Bitmap + sy * nScreenWidth;
@@ -1057,8 +1088,10 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 
 				cur_map->pTile(offset, &sTileData);
 
-				UINT32 category = sTileData.category | category_or;
-				
+				UINT32 category = (cur_map->flags & TMAP_TRANSSPLIT) ?
+					((sTileData.category * 2) | category_or) :
+					(sTileData.category | category_or);
+
 				if (category && (cur_map->flags & TMAP_TRANSMASK)) {
 					if (cur_map->transparent[category] == NULL) {
 						category = 0;
@@ -1121,7 +1154,7 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 				}
 
 				UINT8 *gfxsrc = gfx->gfxbase + (sTileData.code * cur_map->twidth * cur_map->theight) + (scy * cur_map->twidth);
-				UINT8 *trans_ptr = cur_map->transparent[category];
+				UINT8 *trans_ptr = cur_map->transparent[(opaque||opaque2) ? 0x100 : category];
 
 				if (flipx)
 				{
@@ -1166,26 +1199,19 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 		INT32 scrollx = ((cur_map->scrollx - x_offset) / cur_map->twidth) * cur_map->twidth;
 
 		// start drawing at tile-border, and let RenderCustomTile..Clip() take care of the sub-tile clipping.
-		INT32 starty = miny - (miny % cur_map->theight);
-		INT32 startx = minx - (minx % cur_map->twidth);
-		INT32 endx = maxx + cur_map->twidth;
-		INT32 endy = maxy + cur_map->theight;
+		INT32 starty = start_y - (start_y % cur_map->theight);
+		INT32 startx = start_x - (start_x % cur_map->twidth);
+		INT32 endx = end_x + cur_map->twidth;
+		INT32 endy = end_y + cur_map->theight;
+
 #if 0
-		// akka arrh buggy (clip) fix
-		// after reimpl, test:
+		// if anything changes, be sure to test:
+		// akka arrh (zoom screen)
 		// bwings, zaviga, squaitsa, botanicf, bagman
 		// if they are weirdly-offset, something is wrong.
-		if (cur_map->flags & TMAP_FLIPX) {
-			INT32 tmp = ((cur_map->mwidth - 1) * cur_map->twidth) - (endx - cur_map->twidth);
-			endx = (((cur_map->mwidth - 1) * cur_map->twidth) - startx) + cur_map->twidth;
-			startx = tmp;
-		}
-
-		if (cur_map->flags & TMAP_FLIPY) {
-			INT32 tmp = ((cur_map->mheight - 1) * cur_map->theight) - (endy - cur_map->theight);
-			endy = (((cur_map->mheight - 1) * cur_map->theight) - starty) + cur_map->theight;
-			starty = tmp;
-		}
+		bprintf(0, _T("start/end x/y:  %d-%d  %d-%d\n"), startx, endx, starty, endy);
+		bprintf(0, _T("clipp     x/y:  %d-%d  %d-%d\n"), minx, maxx, miny, maxy);
+		bprintf(0, _T("theight/width %d %d\n"), cur_map->theight, cur_map->twidth);
 #endif
 		for (INT32 y = starty; y < endy; y += cur_map->theight)
 		{
@@ -1206,7 +1232,9 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 
 				cur_map->pTile(offset, &sTileData);
 
-				UINT32 category = sTileData.category | category_or;
+				UINT32 category = (cur_map->flags & TMAP_TRANSSPLIT) ?
+					((sTileData.category * 2) | category_or) :
+					(sTileData.category | category_or);
 
 				if (category && (cur_map->flags & TMAP_TRANSMASK)) {
 					if (cur_map->transparent[category] == NULL) {
@@ -1259,16 +1287,12 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 				INT32 flipy = sTileData.flags & TILE_FLIPY;
 
 				if (cur_map->flags & TMAP_FLIPY) {
-					// part of clip fix (save for reimpl)
-					//sy = ((cur_map->mheight - 1) * cur_map->theight) - sy;
-					sy = ((maxy - miny) - cur_map->theight) - sy;
+					sy = (nScreenHeight - cur_map->theight) - sy;
 					flipy ^= TILE_FLIPY;
 				}
 
 				if (cur_map->flags & TMAP_FLIPX) {
-					// part of clipc fix (save for reimpl)
-					//sx = ((cur_map->mwidth - 1) * cur_map->twidth) - sx;
-					sx = ((maxx - minx) - cur_map->twidth) - sx;
+					sx = (nScreenWidth - cur_map->twidth) - sx;
 					flipx ^= TILE_FLIPX;
 				}
 
@@ -1402,7 +1426,9 @@ void GenericTilemapDraw(INT32 which, UINT16 *Bitmap, INT32 priority, INT32 prior
 
 		cur_map->pTile(offset, &sTileData);
 
-		UINT32 category = sTileData.category | category_or;
+		UINT32 category = (cur_map->flags & TMAP_TRANSSPLIT) ?
+			((sTileData.category * 2) | category_or) :
+			(sTileData.category | category_or);
 
 		if (category && (cur_map->flags & TMAP_TRANSMASK)) {
 			if (cur_map->transparent[category] == NULL) {

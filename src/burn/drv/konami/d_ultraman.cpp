@@ -347,6 +347,8 @@ static INT32 DrvDoReset()
 
 	bank0 = bank1 = bank2 = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -531,11 +533,11 @@ static INT32 DrvDraw()
 
 	KonamiClearBitmaps(0);
 
-	K051316_zoom_draw(2, 0);
-	K051316_zoom_draw(1, 0);
-	K051960SpritesRender(0, 0);
-	K051316_zoom_draw(0, 0);
-	K051960SpritesRender(1, 1);
+	if (nBurnLayer & 1) K051316_zoom_draw(2, 0);
+	if (nBurnLayer & 2) K051316_zoom_draw(1, 0);
+	if (nSpriteEnable & 1) K051960SpritesRender(0, 0);
+	if (nBurnLayer & 4) K051316_zoom_draw(0, 0);
+	if (nSpriteEnable & 2) K051960SpritesRender(1, 1);
 
 	KonamiBlendCopy(DrvPalette);
 
@@ -684,7 +686,7 @@ struct BurnDriver BurnDrvUltraman = {
 	"ultraman", NULL, NULL, NULL, "1991",
 	"Ultraman (Japan)\0", NULL, "Banpresto / Bandai", "GX910",
 	L"\uFEFF\u30A6\u30EB\u30c8\u30E9\u30DE\u30f3  \u7A7A\u60F3\u7279\u64AE\u30B7\u30EA\u30FC\u30BA (Japan)\0Ultraman\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
 	NULL, ultramanRomInfo, ultramanRomName, NULL, NULL, NULL, NULL, UltramanInputInfo, UltramanDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	288, 224, 4, 3

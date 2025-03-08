@@ -553,7 +553,7 @@ static UINT8 trackfld_main_read(UINT16 address)
 		case 0x0000: // yieartf
 			return (vlm5030_bsy(0) ? 1 : 0);
 
-		case 0x1080: // flipscreen_w;
+		case 0x1080: // flipscreen
 			return 0;
 
 		case 0x1200:
@@ -818,6 +818,8 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	last_sound_irq = 0;
 	SN76496_latch = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -842,9 +844,10 @@ static INT32 MemIndex()
 
 	DrvPalette		= (UINT32*)Next; Next += 0x0200 * sizeof(UINT32);
 
+	DrvNVRAM		= Next; Next += 0x000800;
+
 	AllRam			= Next;
 
-	DrvNVRAM		= Next; Next += 0x000800;
 	DrvM6800RAM		= Next; Next += 0x000100;
 	DrvSprRAM0		= Next; Next += 0x000400;
 	DrvSprRAM1		= Next; Next += 0x000400;
@@ -923,12 +926,7 @@ static INT32 DrvInit()
 {
 	game_select = 1;
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x6000,  0, 1)) return 1;
@@ -996,12 +994,7 @@ static INT32 TrackfldnzInit()
 {
 	game_select = 1;
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x6000,  0, 1)) return 1;
@@ -1060,16 +1053,71 @@ static INT32 TrackfldnzInit()
 	return 0;
 }
 
+static INT32 TrackflduInit()
+{
+	game_select = 1;
+
+	BurnAllocMemIndex();
+
+	{
+		if (BurnLoadRom(DrvM6809ROM + 0x6000,  0, 1)) return 1;
+		if (BurnLoadRom(DrvM6809ROM + 0x8000,  1, 1)) return 1;
+		if (BurnLoadRom(DrvM6809ROM + 0xa000,  2, 1)) return 1;
+		if (BurnLoadRom(DrvM6809ROM + 0xc000,  3, 1)) return 1;
+		if (BurnLoadRom(DrvM6809ROM + 0xe000,  4, 1)) return 1;
+
+		if (BurnLoadRom(DrvZ80ROM1  + 0x0000,  5, 1)) return 1;
+
+		if (BurnLoadRom(DrvGfxROM0  + 0x0000,  6, 1)) return 1;
+		if (BurnLoadRom(DrvGfxROM0  + 0x2000,  7, 1)) return 1;
+		if (BurnLoadRom(DrvGfxROM0  + 0x8000,  8, 1)) return 1;
+		if (BurnLoadRom(DrvGfxROM0  + 0xa000,  9, 1)) return 1;
+
+		if (BurnLoadRom(DrvGfxROM1  + 0x0000, 10, 1)) return 1;
+		if (BurnLoadRom(DrvGfxROM1  + 0x2000, 11, 1)) return 1;
+		if (BurnLoadRom(DrvGfxROM1  + 0x4000, 12, 1)) return 1;
+
+		if (BurnLoadRom(DrvColPROM  + 0x0000, 13, 1)) return 1;
+		if (BurnLoadRom(DrvColPROM  + 0x0020, 14, 1)) return 1;
+		if (BurnLoadRom(DrvColPROM  + 0x0120, 15, 1)) return 1;
+
+		if (BurnLoadRom(DrvSndROM   + 0x0000, 16, 1)) return 1;
+
+		DrvGfxDecode();
+	}
+
+	M6809Init(0);
+	M6809Open(0);
+	M6809MapMemory(DrvSprRAM1,		0x1800, 0x1bff, MAP_RAM);
+	// spr2 00-3f, scroll 40-5f
+	M6809MapMemory(DrvSprRAM0,		0x1c00, 0x1fff, MAP_RAM);
+	// spr  00-3f, scroll 40-5f
+	M6809MapMemory(DrvNVRAM,		0x2800, 0x2fff, MAP_RAM);
+	M6809MapMemory(DrvVidRAM,		0x3000, 0x37ff, MAP_RAM);
+	M6809MapMemory(DrvColRAM,		0x3800, 0x3fff, MAP_RAM);
+	M6809MapMemory(DrvM6809ROM + 0x6000,	0x6000, 0xffff, MAP_ROM);
+	M6809SetWriteHandler(trackfld_main_write);
+	M6809SetReadHandler(trackfld_main_read);
+	M6809Close();
+
+	ZetInit(0); // reaktor
+	CommonSoundInit();
+
+	nSpriteMask = 0xff;
+	nCharMask = 0x3ff;
+
+	GenericTilesInit();
+
+	DrvDoReset(1);
+
+	return 0;
+}
+
 static INT32 YieartfInit()
 {
 	game_select = 2;
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x8000,  0, 1)) return 1;
@@ -1129,12 +1177,7 @@ static INT32 ReaktorInit()
 {
 	game_select = 3;
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvZ80ROM0  + 0x0000,  0, 1)) return 1;
@@ -1213,12 +1256,7 @@ static INT32 WizzquizInit()
 {
 	game_select = 4;
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x0000,  0, 1)) return 1;
@@ -1300,12 +1338,7 @@ static INT32 MastkinInit()
 	game_select = 1;
 	nowatchdog = 1;
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x8000,  0, 1)) return 1;
@@ -1378,7 +1411,7 @@ static INT32 DrvExit()
 
 	nowatchdog = 0;
 
-	BurnFree(AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -1433,37 +1466,13 @@ static void draw_layers()
 		sx -= DrvSprRAM1[0x40+(sy/8)+2] + ((DrvSprRAM0[0x40+(sy/8)+2] & 1) * 256);
 		if (sx < -7) sx += 512;
 
-		if (flipx) {
-			if (flipy) {
-				Render8x8Tile_FlipXY_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			} else {
-				Render8x8Tile_FlipX_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			}
-		} else {
-			if (flipy) {
-				Render8x8Tile_FlipY_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			} else {
-				Render8x8Tile_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			}
-		}
+		Draw8x8Tile(pTransDraw, code, sx, sy, flipx, flipy, color, 4, 0x100, DrvGfxROM1);
 	}
 }
 
 static void draw_single_sprite(INT32 code, INT32 color, INT32 sx, INT32 sy, INT32 flipx, INT32 flipy)
 {
-	if (flipy) {
-		if (flipx) {
-			Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM0);
-		} else {
-			Render16x16Tile_Mask_FlipY_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM0);
-		}
-	} else {
-		if (flipx) {
-			Render16x16Tile_Mask_FlipX_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM0);
-		} else {
-			Render16x16Tile_Mask_Clip(pTransDraw, code, sx, sy, color, 4, 0, 0, DrvGfxROM0);
-		}
-	}
+	Draw16x16MaskTile(pTransDraw, code, sx, sy, flipx, flipy, color, 4, 0, 0, DrvGfxROM0);
 }
 
 static void draw_sprites()
@@ -1513,8 +1522,7 @@ static INT32 DrvDraw()
 
 static INT32 DrvFrame()
 {
-	watchdog++;
-	if (watchdog >= 120 && !nowatchdog) {
+	if (++watchdog >= 120 && !nowatchdog) {
 		bprintf(0, _T("Watchdog tripped.\n"));
 		DrvDoReset(0);
 	}
@@ -1544,10 +1552,10 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += M6809Run(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
-		nCyclesDone[1] += ZetRun(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+		CPU_RUN(0, M6809);
+		CPU_RUN(1, Zet);
 
-		if (i == (nInterleave-1) && irq_mask) M6809SetIRQLine(0, CPU_IRQSTATUS_AUTO);
+		if (i == (nInterleave-1) && irq_mask) M6809SetIRQLine(0, CPU_IRQSTATUS_HOLD);
 	}
 
 	if (pBurnSoundOut) {
@@ -1568,8 +1576,7 @@ static INT32 DrvFrame()
 
 static INT32 YieartfFrame()
 {
-	watchdog++;
-	if (watchdog >= 120) {
+	if (++watchdog >= 120) {
 		DrvDoReset(0);
 	}
 
@@ -1596,9 +1603,9 @@ static INT32 YieartfFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += M6809Run(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, M6809);
 
-		if ((i & 0xff) == 0xff && irq_mask) M6809SetIRQLine(0x00, CPU_IRQSTATUS_AUTO);
+		if ((i & 0xff) == 0xff && irq_mask) M6809SetIRQLine(0x00, CPU_IRQSTATUS_HOLD);
 		if ((i & 0x1f) == 0x1f && nmi_mask) M6809SetIRQLine(0x20, CPU_IRQSTATUS_AUTO);
 	}
 
@@ -1618,8 +1625,7 @@ static INT32 YieartfFrame()
 
 static INT32 ReaktorFrame()
 {
-	watchdog++;
-	if (watchdog >= 120) {
+	if (++watchdog >= 120) {
 		DrvDoReset(0);
 	}
 
@@ -1645,12 +1651,12 @@ static INT32 ReaktorFrame()
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
 		ZetOpen(0);
-		nCyclesDone[0] += ZetRun(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
-		if (i == (nInterleave-1) && irq_mask) ZetSetIRQLine(0, CPU_IRQSTATUS_AUTO);
+		CPU_RUN(0, Zet);
+		if (i == (nInterleave-1) && irq_mask) ZetSetIRQLine(0, CPU_IRQSTATUS_HOLD);
 		ZetClose();
 
 		ZetOpen(1);
-		nCyclesDone[1] += ZetRun(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+		CPU_RUN(1, Zet);
 		ZetClose();
 	}
 
@@ -1674,8 +1680,7 @@ static INT32 ReaktorFrame()
 
 static INT32 WizzquizFrame()
 {
-	watchdog++;
-	if (watchdog >= 120) {
+	if (++watchdog >= 120) {
 		DrvDoReset(0);
 	}
 
@@ -1704,11 +1709,11 @@ static INT32 WizzquizFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += M6800Run(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, M6800);
 
 		if (i == 239 && irq_mask) M6800SetIRQLine(M6800_INPUT_LINE_NMI, CPU_IRQSTATUS_AUTO);
 
-		nCyclesDone[1] += ZetRun(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+		CPU_RUN(1, Zet);
 	}
 
 	if (pBurnSoundOut) {
@@ -1759,6 +1764,14 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(last_addr);
 		SCAN_VAR(last_sound_irq);
 		SCAN_VAR(SN76496_latch);
+	}
+
+	if (nAction & ACB_NVRAM) {
+		ba.Data		= DrvNVRAM;
+		ba.nLen		= 0x00800;
+		ba.nAddress	= 0;
+		ba.szName	= "NV RAM";
+		BurnAcb(&ba);
 	}
 
 	return 0;
@@ -1847,6 +1860,47 @@ struct BurnDriver BurnDrvTrackfldc = {
 };
 
 
+// Track & Field (Centuri, unencrypted)
+
+static struct BurnRomInfo trackflduRomDesc[] = {
+	{ "361_105.a7",		0x2000, 0xc813f140, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
+	{ "361_104.a6",		0x2000, 0xb785e7ee, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "361_103.a5",		0x2000, 0x060c16e6, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "361_102.a4",		0x2000, 0x46bde4ea, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "361_101.a2",		0x2000, 0xb2d8be9a, 1 | BRF_PRG | BRF_ESS }, //  4
+
+	{ "c2_d13.bin",		0x2000, 0x95bf79b6, 2 | BRF_PRG | BRF_ESS }, //  5 audiocpu
+
+	{ "361_d06.a20",	0x2000, 0x82e2185a, 3 | BRF_GRA },           //  6 gfx1
+	{ "361_d07.a21",	0x2000, 0x800ff1f1, 3 | BRF_GRA },           //  7
+	{ "361_d08.a17",	0x2000, 0xe5193cf8, 3 | BRF_GRA },           //  8
+	{ "361_d09.a19",	0x2000, 0x91062288, 3 | BRF_GRA },           //  9
+
+	{ "h16_e12.bin",	0x2000, 0x50075768, 4 | BRF_GRA },           // 10 gfx2
+	{ "h15_e11.bin",	0x2000, 0xdda9e29f, 4 | BRF_GRA },           // 11
+	{ "h14_e10.bin",	0x2000, 0xc2166a5c, 4 | BRF_GRA },           // 12
+
+	{ "361b16.f1",		0x0020, 0xd55f30b5, 5 | BRF_GRA },           // 13 proms
+	{ "361b17.b16",		0x0100, 0xd2ba4d32, 5 | BRF_GRA },           // 14
+	{ "361b18.e15",		0x0100, 0x053e5861, 5 | BRF_GRA },           // 15
+
+	{ "c9_d15.bin",		0x2000, 0xf546a56b, 6 | BRF_GRA },           // 16 vlm
+};
+
+STD_ROM_PICK(trackfldu)
+STD_ROM_FN(trackfldu)
+
+struct BurnDriver BurnDrvTrackfldu = {
+	"trackfldu", "trackfld", NULL, NULL, "1983",
+	"Track & Field (Centuri, unencrypted)\0", NULL, "Konami (Centuri license)", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	NULL, trackflduRomInfo, trackflduRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo,
+	TrackflduInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
+	256, 224, 4, 3
+};
+
+
 // Hyper Olympic
 
 static struct BurnRomInfo hyprolymRomDesc[] = {
@@ -1888,6 +1942,47 @@ struct BurnDriver BurnDrvHyprolym = {
 };
 
 
+// Hyper Olympic (bugfixed)
+
+static struct BurnRomInfo hyprolymaRomDesc[] = {
+	{ "361-d01.a01",		0x2000, 0x82257fb7, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
+	{ "361-d02.a02",		0x2000, 0x15b83099, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "epr-hyper-red.a03",	0x2000, 0x546cf295, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "361-d04.a04",		0x2000, 0xd099b1e8, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "361-d05.a05",		0x2000, 0x974ff815, 1 | BRF_PRG | BRF_ESS }, //  4
+
+	{ "c2_d13.bin",			0x2000, 0x95bf79b6, 2 | BRF_PRG | BRF_ESS }, //  5 audiocpu
+
+	{ "c11_d06.bin",		0x2000, 0x82e2185a, 3 | BRF_GRA },           //  6 gfx1
+	{ "c12_d07.bin",		0x2000, 0x800ff1f1, 3 | BRF_GRA },           //  7
+	{ "c13_d08.bin",		0x2000, 0xd9faf183, 3 | BRF_GRA },           //  8
+	{ "c14_d09.bin",		0x2000, 0x5886c802, 3 | BRF_GRA },           //  9
+
+	{ "361-d12.h16",		0x2000, 0x768bb63d, 4 | BRF_GRA },           // 10 gfx2
+	{ "361-d11.h15",		0x2000, 0x3af0e2a8, 4 | BRF_GRA },           // 11
+	{ "h14_e10.bin",		0x2000, 0xc2166a5c, 4 | BRF_GRA },           // 12
+
+	{ "361b16.f1",			0x0020, 0xd55f30b5, 5 | BRF_GRA },           // 13 proms
+	{ "361b17.b16",			0x0100, 0xd2ba4d32, 5 | BRF_GRA },           // 14
+	{ "361b18.e15",			0x0100, 0x053e5861, 5 | BRF_GRA },           // 15
+
+	{ "c9_d15.bin",			0x2000, 0xf546a56b, 6 | BRF_GRA },           // 16 vlm
+};
+
+STD_ROM_PICK(hyprolyma)
+STD_ROM_FN(hyprolyma)
+
+struct BurnDriver BurnDrvHyprolyma = {
+	"hyprolyma", "trackfld", NULL, NULL, "1983",
+	"Hyper Olympic (bugfixed)\0", NULL, "Konami", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	NULL, hyprolymaRomInfo, hyprolymaRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
+	256, 224, 4, 3
+};
+
+
 // Track & Field (NZ bootleg?)
 
 static struct BurnRomInfo trackfldnzRomDesc[] = {
@@ -1922,7 +2017,7 @@ struct BurnDriver BurnDrvTrackfldnz = {
 	"trackfldnz", "trackfld", NULL, NULL, "1982",
 	"Track & Field (NZ bootleg?)\0", NULL, "bootleg? (Goldberg Enterprizes Inc.)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_WORKING | BDF_BOOTLEG | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, trackfldnzRomInfo, trackfldnzRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo,
 	TrackfldnzInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 224, 4, 3
@@ -1974,7 +2069,7 @@ struct BurnDriver BurnDrvHyprolymb = {
 	"hyprolymb", "trackfld", NULL, NULL, "1983",
 	"Hyper Olympic (bootleg, set 1)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	0 | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, hyprolymbRomInfo, hyprolymbRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo,
 	bootInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 224, 4, 3
@@ -2021,7 +2116,7 @@ struct BurnDriver BurnDrvHyprolymba = {
 	"hyprolymba", "trackfld", NULL, NULL, "1983",
 	"Hyper Olympic (bootleg, set 2)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	0 | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, hyprolymbaRomInfo, hyprolymbaRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo,
 	bootInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 224, 4, 3
@@ -2033,18 +2128,18 @@ struct BurnDriver BurnDrvHyprolymba = {
 static struct BurnRomInfo hipolyRomDesc[] = {
 	{ "2.1a",	0x2000, 0x82257fb7, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
 	{ "2.2a",	0x2000, 0x15b83099, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "2.4a",	0x2000, 0x93a32a97, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "2.4a",	0x2000, 0x2d6fc308, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "2.5a",	0x2000, 0xd099b1e8, 1 | BRF_PRG | BRF_ESS }, //  3
 	{ "2.7a",	0x2000, 0x974ff815, 1 | BRF_PRG | BRF_ESS }, //  4
 
 	{ "1.2c",	0x2000, 0x95bf79b6, 2 | BRF_PRG | BRF_ESS }, //  5 audiocpu
 
-	{ "1.11d",	0x2000, 0x102d3a78, 3 | BRF_SND },           //  6 adpcm
+	{ "1.11d",	0x2000, 0xa4cddeb8, 3 | BRF_SND },           //  6 adpcm
 	{ "1.10d",	0x2000, 0xe9919365, 3 | BRF_SND },           //  7
 	{ "1.11c",	0x2000, 0xc3ec42e1, 3 | BRF_SND },           //  8
 	{ "1.10c",	0x2000, 0x76998389, 3 | BRF_SND },           //  9
 
-	{ "2.18a",	0x2000, 0x8d28864f, 4 | BRF_GRA },           // 10 gfx1
+	{ "2.18a",	0x2000, 0x82e2185a, 4 | BRF_GRA },           // 10 gfx1
 	{ "2.19a",	0x2000, 0x800ff1f1, 4 | BRF_GRA },           // 11
 	{ "2.21a",	0x2000, 0xd9faf183, 4 | BRF_GRA },           // 12
 	{ "2.22a",	0x2000, 0x5886c802, 4 | BRF_GRA },           // 13
@@ -2068,14 +2163,14 @@ struct BurnDriver BurnDrvHipoly = {
 	"hipoly", "trackfld", NULL, NULL, "1983",
 	"Hipoly (bootleg of Hyper Olympic)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, hipolyRomInfo, hipolyRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo,
 	bootInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 224, 4, 3
 };
 
 
-// Atlant Olimpic
+// Atlant Olimpic (Italian bootleg)
 
 static struct BurnRomInfo atlantolRomDesc[] = {
 	{ "atl37",	0x20000, 0xaca8da51, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
@@ -2099,16 +2194,16 @@ STD_ROM_FN(atlantol)
 
 struct BurnDriver BurnDrvAtlantol = {
 	"atlantol", "trackfld", NULL, NULL, "1996",
-	"Atlant Olimpic\0", NULL, "bootleg", "Miscellaneous",
+	"Atlant Olimpic (Italian bootleg)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	0 | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_SPORTSMISC, 0,
+	BDF_GAME_NOT_WORKING | BDF_BOOTLEG | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_SPORTSMISC, 0,
 	NULL, atlantolRomInfo, atlantolRomName, NULL, NULL, NULL, NULL, TrackfldInputInfo, TrackfldDIPInfo, //AtlantolInputInfo, AtlantolDIPInfo,
 	bootInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0,
 	256, 224, 4, 3
 };
 
 
-// Yie Ar Kung-Fu (GX361 conversion)
+// Yie Ar Kung-Fu (bootleg GX361 conversion)
 
 static struct BurnRomInfo yieartfRomDesc[] = {
 	{ "2.2a",	0x2000, 0x349430e9, 1 | BRF_PRG | BRF_ESS }, //  0 maincpu
@@ -2136,9 +2231,9 @@ STD_ROM_FN(yieartf)
 
 struct BurnDriver BurnDrvYieartf = {
 	"yieartf", "yiear", NULL, NULL, "1985",
-	"Yie Ar Kung-Fu (GX361 conversion)\0", NULL, "Konami", "Miscellaneous",
+	"Yie Ar Kung-Fu (bootleg GX361 conversion)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
 	NULL, yieartfRomInfo, yieartfRomName, NULL, NULL, NULL, NULL, YieartfInputInfo, YieartfDIPInfo,
 	YieartfInit, DrvExit, YieartfFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 224, 4, 3
@@ -2217,7 +2312,7 @@ struct BurnDriver BurnDrvWizzquiz = {
 	"wizzquiz", NULL, NULL, NULL, "1985",
 	"Wizz Quiz (Konami version)\0", NULL, "Zilec-Zenitone (Konami license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	0, 2, HARDWARE_MISC_PRE90S, GBF_QUIZ, 0,
+	BDF_GAME_NOT_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_QUIZ, 0,
 	NULL, wizzquizRomInfo, wizzquizRomName, NULL, NULL, NULL, NULL, WizzquizInputInfo, WizzquizDIPInfo,
 	WizzquizInit, DrvExit, WizzquizFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 256, 4, 3
@@ -2259,7 +2354,7 @@ struct BurnDriver BurnDrvWizzquiza = {
 	"wizzquiza", "wizzquiz", NULL, NULL, "1985",
 	"Wizz Quiz (version 4)\0", NULL, "Zilec-Zenitone", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	0 | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_QUIZ, 0,
+	BDF_GAME_NOT_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_QUIZ, 0,
 	NULL, wizzquizaRomInfo, wizzquizaRomName, NULL, NULL, NULL, NULL, WizzquizInputInfo, WizzquizDIPInfo,
 	WizzquizInit, DrvExit, WizzquizFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	256, 256, 4, 3

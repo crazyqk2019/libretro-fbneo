@@ -157,7 +157,7 @@ static void __fastcall wrally_main_write_word(UINT32 address, UINT16 data)
 		case 0x108002:
 		case 0x108004:
 		case 0x108006:
-			*((UINT16*)(DrvVRegs + (address & 0x6))) = data;
+			*((UINT16*)(DrvVRegs + (address & 0x6))) = BURN_ENDIAN_SWAP_INT16(data);
 		return;
 
 		case 0x70000a:
@@ -265,18 +265,18 @@ static tilemap_callback( screen0 )
 {
 	UINT16 *ram = (UINT16*)(DrvVidRAM + 0x0000 + offs * 4);
 
-	INT32 flags = TILE_FLIPYX(ram[1] >> 6) | TILE_GROUP((ram[1] >> 5) & 1);
+	INT32 flags = TILE_FLIPYX(BURN_ENDIAN_SWAP_INT16(ram[1]) >> 6) | TILE_GROUP((BURN_ENDIAN_SWAP_INT16(ram[1]) >> 5) & 1);
 
-	flags |= DrvTransTab[transparent_select][ram[0]&0x3fff] ? TILE_SKIP : 0;
+	flags |= DrvTransTab[transparent_select][BURN_ENDIAN_SWAP_INT16(ram[0])&0x3fff] ? TILE_SKIP : 0;
 
-	TILE_SET_INFO(0, ram[0], ram[1] & 0x1f, flags);
+	TILE_SET_INFO(0, BURN_ENDIAN_SWAP_INT16(ram[0]), BURN_ENDIAN_SWAP_INT16(ram[1]) & 0x1f, flags);
 }
 
 static tilemap_callback( screen1 )
 {
 	UINT16 *ram = (UINT16*)(DrvVidRAM + 0x2000 + offs * 4);
 
-	TILE_SET_INFO(0, ram[0], ram[1] & 0x1f, TILE_FLIPYX(ram[1] >> 6) | TILE_GROUP((ram[1] >> 5) & 1));
+	TILE_SET_INFO(0, BURN_ENDIAN_SWAP_INT16(ram[0]), BURN_ENDIAN_SWAP_INT16(ram[1]) & 0x1f, TILE_FLIPYX(BURN_ENDIAN_SWAP_INT16(ram[1]) >> 6) | TILE_GROUP((BURN_ENDIAN_SWAP_INT16(ram[1]) >> 5) & 1));
 }
 
 static INT32 DrvDoReset()
@@ -296,6 +296,8 @@ static INT32 DrvDoReset()
 	flipscreen = 0;
 	coin_lockout[0] = 0;
 	coin_lockout[1] = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -484,11 +486,11 @@ static void draw_sprites(INT32 priority)
 
 	for (INT32 i = 6/2; i < (0x1000 - 6)/2; i += 4)
 	{
-		INT32 sx = (m_spriteram[i+2] & 0x03ff) - 8;
-		INT32 sy = (240 - (m_spriteram[i] & 0x00ff)) & 0x00ff;
-		INT32 number = m_spriteram[i+3] & 0x3fff;
-		INT32 color = (m_spriteram[i+2] & 0x7c00) >> 10;
-		INT32 attr = (m_spriteram[i] & 0xfe00) >> 9;
+		INT32 sx = (BURN_ENDIAN_SWAP_INT16(m_spriteram[i+2]) & 0x03ff) - 8;
+		INT32 sy = (240 - (BURN_ENDIAN_SWAP_INT16(m_spriteram[i]) & 0x00ff)) & 0x00ff;
+		INT32 number = BURN_ENDIAN_SWAP_INT16(m_spriteram[i+3]) & 0x3fff;
+		INT32 color = (BURN_ENDIAN_SWAP_INT16(m_spriteram[i+2]) & 0x7c00) >> 10;
+		INT32 attr = (BURN_ENDIAN_SWAP_INT16(m_spriteram[i]) & 0xfe00) >> 9;
 
 		INT32 xflip = attr & 0x20;
 		INT32 yflip = attr & 0x40;
@@ -550,17 +552,17 @@ static INT32 DrvDraw()
 	{
 		GenericTilemapSetFlip(TMAP_GLOBAL, TMAP_FLIPXY);
 
-		GenericTilemapSetScrollY(0, 248 - vregs[0]);
-		GenericTilemapSetScrollX(0, 1024 - vregs[1] - 4);
-		GenericTilemapSetScrollY(1, 248 - vregs[2]);
-		GenericTilemapSetScrollX(1, 1024 - vregs[3]);
+		GenericTilemapSetScrollY(0, 248 - BURN_ENDIAN_SWAP_INT16(vregs[0]));
+		GenericTilemapSetScrollX(0, 1024 - BURN_ENDIAN_SWAP_INT16(vregs[1]) - 4);
+		GenericTilemapSetScrollY(1, 248 - BURN_ENDIAN_SWAP_INT16(vregs[2]));
+		GenericTilemapSetScrollX(1, 1024 - BURN_ENDIAN_SWAP_INT16(vregs[3]));
 	}
 	else
 	{
-		GenericTilemapSetScrollY(0, vregs[0]);
-		GenericTilemapSetScrollX(0, vregs[1] + 4);
-		GenericTilemapSetScrollY(1, vregs[2]);
-		GenericTilemapSetScrollX(1, vregs[3]);
+		GenericTilemapSetScrollY(0, BURN_ENDIAN_SWAP_INT16(vregs[0]));
+		GenericTilemapSetScrollX(0, BURN_ENDIAN_SWAP_INT16(vregs[1]) + 4);
+		GenericTilemapSetScrollY(1, BURN_ENDIAN_SWAP_INT16(vregs[2]));
+		GenericTilemapSetScrollX(1, BURN_ENDIAN_SWAP_INT16(vregs[3]));
 	}
 
 	GenericTilemapDraw(1, pTransDraw, 0 | TMAP_FORCEOPAQUE);
@@ -676,27 +678,27 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 }
 
 
-// World Rally (Version 1.0, Checksum 0E56)
+// World Rally (version 1.0, checksum 0E56)
 
 static struct BurnRomInfo wrallyRomDesc[] = {
-	{ "worldr17.c23",	0x80000, 0x050f5629, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
-	{ "worldr16.c22",	0x80000, 0x9e0d126c, 1 | BRF_PRG | BRF_ESS },    //  1
+	{ "worldr17.c23",			0x80000, 0x050f5629, 1 | BRF_PRG | BRF_ESS },     //  0 m68K code
+	{ "worldr16.c22",			0x80000, 0x9e0d126c, 1 | BRF_PRG | BRF_ESS },     //  1
 
-	{ "wrdallas.bin",	0x08000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
+	{ "wrdallas.bin",			0x08000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },     //  2 DS5002FP code
 
-	{ "worldr21.i13",	0x80000, 0xb7fddb12, 3 | BRF_GRA },              //  3 Graphics
-	{ "worldr20.i11",	0x80000, 0x58b2809a, 3 | BRF_GRA },              //  4
-	{ "worldr19.i09",	0x80000, 0x018b35bb, 3 | BRF_GRA },              //  5
-	{ "worldr18.i07",	0x80000, 0xb37c807e, 3 | BRF_GRA },              //  6
+	{ "worldr21.i13",			0x80000, 0xb7fddb12, 3 | BRF_GRA },               //  3 Graphics
+	{ "worldr20.i11",			0x80000, 0x58b2809a, 3 | BRF_GRA },               //  4
+	{ "worldr19.i09",			0x80000, 0x018b35bb, 3 | BRF_GRA },               //  5
+	{ "worldr18.i07",			0x80000, 0xb37c807e, 3 | BRF_GRA },               //  6
 
-	{ "worldr14.c01",	0x80000, 0xe931c2ee, 4 | BRF_SND },              //  7 OKI Samples
-	{ "worldr15.c03",	0x80000, 0x11f0fe2c, 4 | BRF_SND },              //  8
+	{ "worldr14.c01",			0x80000, 0xe931c2ee, 4 | BRF_SND },               //  7 OKI Samples
+	{ "worldr15.c03",			0x80000, 0x11f0fe2c, 4 | BRF_SND },               //  8
 
-	{ "tibpal20l8-25cnt.b23", 0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  9 plds
-	{ "gal16v8-25lnc.h21",	  0x004, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, // 10
-	{ "tibpal20l8-25cnt.h15", 0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, // 11
-	{ "pal16r4-e2.bin",	  0x104, 0x15fee75c, 5 | BRF_OPT },              // 12
-	{ "pal16r8-b15.bin",	  0x104, 0xb50337a6, 5 | BRF_OPT },              // 13
+	{ "tibpal20l8-25cnt.b23", 	0x02e5, 0xa1c780ed, 5 | BRF_OPT }, 		 	  	  //  9 plds
+	{ "gal16v8-25lnc.h21",	  	0x0104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT },   // 10
+	{ "tibpal20l8-25cnt.h15", 	0x02e5, 0xa39efdc6, 5 | BRF_OPT }, 			      // 11
+	{ "pal16r4-e2.bin",	  	  	0x0104, 0x15fee75c, 5 | BRF_OPT },                // 12
+	{ "pal16r8-b15.bin",	  	0x0104, 0xb50337a6, 5 | BRF_OPT },                // 13
 };
 
 STD_ROM_PICK(wrally)
@@ -709,36 +711,36 @@ static INT32 WrallyInit()
 
 struct BurnDriver BurnDrvWrally = {
 	"wrally", NULL, NULL, NULL, "1993",
-	"World Rally (Version 1.0, Checksum 0E56)\0", NULL, "Gaelco", "Miscellaneous",
+	"World Rally (version 1.0, checksum 0E56)\0", NULL, "Gaelco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
 	NULL, wrallyRomInfo, wrallyRomName, NULL, NULL, NULL, NULL, WrallyInputInfo, WrallyDIPInfo,
 	WrallyInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	368, 232, 4, 3
 };
 
 
-// World Rally (Version 1.0, Checksum 3873)
+// World Rally (version 1.0, checksum 3873)
 
 static struct BurnRomInfo wrallyaRomDesc[] = {
-	{ "c23.bin",		0x80000, 0x8b7d93c3, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
-	{ "c22.bin",		0x80000, 0x56da43b6, 1 | BRF_PRG | BRF_ESS },    //  1
+	{ "c23.bin",				0x80000, 0x8b7d93c3, 1 | BRF_PRG | BRF_ESS },     //  0 m68K code
+	{ "c22.bin",				0x80000, 0x56da43b6, 1 | BRF_PRG | BRF_ESS },     //  1
 
-	{ "wrdallas.bin",	0x08000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
+	{ "wrdallas.bin",			0x08000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },     //  2 DS5002FP code
    
-	{ "worldr21.i13",	0x80000, 0xb7fddb12, 3 | BRF_GRA },              //  3 Graphics
-	{ "worldr20.i11",	0x80000, 0x58b2809a, 3 | BRF_GRA },              //  4
-	{ "worldr19.i09",	0x80000, 0x018b35bb, 3 | BRF_GRA },              //  5
-	{ "worldr18.i07",	0x80000, 0xb37c807e, 3 | BRF_GRA },              //  6
+	{ "worldr21.i13",			0x80000, 0xb7fddb12, 3 | BRF_GRA },               //  3 Graphics
+	{ "worldr20.i11",			0x80000, 0x58b2809a, 3 | BRF_GRA },               //  4
+	{ "worldr19.i09",			0x80000, 0x018b35bb, 3 | BRF_GRA },               //  5
+	{ "worldr18.i07",			0x80000, 0xb37c807e, 3 | BRF_GRA },               //  6
 
-	{ "worldr14.c01",	0x80000, 0xe931c2ee, 4 | BRF_SND },              //  7 OKI Samples
-	{ "worldr15.c03",	0x80000, 0x11f0fe2c, 4 | BRF_SND },              //  8
-
-	{ "tibpal20l8-25cnt.b23", 0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  9 plds
-	{ "gal16v8-25lnc.h21",	  0x004, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, // 10
-	{ "tibpal20l8-25cnt.h15", 0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, // 11
-	{ "pal16r4-e2.bin",	  0x104, 0x15fee75c, 5 | BRF_OPT },              // 12
-	{ "pal16r8-b15.bin",	  0x104, 0xb50337a6, 5 | BRF_OPT },              // 13
+	{ "worldr14.c01",			0x80000, 0xe931c2ee, 4 | BRF_SND },               //  7 OKI Samples
+	{ "worldr15.c03",			0x80000, 0x11f0fe2c, 4 | BRF_SND },               //  8
+ 
+	{ "tibpal20l8-25cnt.b23", 	0x02e5, 0xa1c780ed, 5 | BRF_OPT }, 		 	      //  9 plds
+	{ "gal16v8-25lnc.h21",	  	0x0104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT },   // 10
+	{ "tibpal20l8-25cnt.h15", 	0x02e5, 0xa39efdc6, 5 | BRF_OPT }, 			      // 11
+	{ "pal16r4-e2.bin",	  	  	0x0104, 0x15fee75c, 5 | BRF_OPT },                // 12
+	{ "pal16r8-b15.bin",	  	0x0104, 0xb50337a6, 5 | BRF_OPT },                // 13
 };
 
 STD_ROM_PICK(wrallya)
@@ -746,33 +748,33 @@ STD_ROM_FN(wrallya)
 
 struct BurnDriver BurnDrvWrallya = {
 	"wrallya", "wrally", NULL, NULL, "1993",
-	"World Rally (Version 1.0, Checksum 3873)\0", NULL, "Gaelco", "Miscellaneous",
+	"World Rally (version 1.0, checksum 3873)\0", NULL, "Gaelco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
 	NULL, wrallyaRomInfo, wrallyaRomName, NULL, NULL, NULL, NULL, WrallyInputInfo, WrallyDIPInfo,
 	WrallyInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	368, 232, 4, 3
 };
 
 
-// World Rally (Version 1.0, Checksum 8AA2)
+// World Rally (version 1.0, checksum 8AA2)
 
 static struct BurnRomInfo wrallybRomDesc[] = {
-	{ "rally_c23.c23",	0x080000, 0xddd6f833, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
-	{ "rally_c22.c22",	0x080000, 0x59a0d35c, 1 | BRF_PRG | BRF_ESS },    //  1
+	{ "rally_c23.c23",			0x080000, 0xddd6f833, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
+	{ "rally_c22.c22",			0x080000, 0x59a0d35c, 1 | BRF_PRG | BRF_ESS },    //  1
 
-	{ "wrdallas.bin",	0x008000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
+	{ "wrdallas.bin",			0x008000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
 
-	{ "rally h-12.h12",	0x100000, 0x3353dc00, 3 | BRF_GRA },              //  3 Graphics
-	{ "rally h-8.h8",	0x100000, 0x58dcd024, 3 | BRF_GRA },              //  4
+	{ "rally h-12.h12",			0x100000, 0x3353dc00, 3 | BRF_GRA },              //  3 Graphics
+	{ "rally h-8.h8",			0x100000, 0x58dcd024, 3 | BRF_GRA },              //  4
 
-	{ "sound c-1.c1",	0x100000, 0x2d69c9b8, 4 | BRF_SND },              //  5 OKI Samples
+	{ "sound c-1.c1",			0x100000, 0x2d69c9b8, 4 | BRF_SND },              //  5 OKI Samples
 
-	{ "tibpal20l8-25cnt.b23",  0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  6 plds
-	{ "gal16v8-25lnc.h21",	   0x004, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  7
-	{ "tibpal20l8-25cnt.h15",  0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  8
-	{ "pal16r4-e2.bin",	   0x104, 0x15fee75c, 5 | BRF_OPT },              //  9
-	{ "pal16r8-b15.bin",	   0x104, 0xb50337a6, 5 | BRF_OPT },              // 10
+	{ "tibpal20l8-25cnt.b23", 	0x02e5, 0xa1c780ed, 5 | BRF_OPT }, 		 	  	  //  6 plds
+	{ "gal16v8-25lnc.h21",	  	0x0104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT },   //  7
+	{ "tibpal20l8-25cnt.h15", 	0x02e5, 0xa39efdc6, 5 | BRF_OPT }, 			      //  8
+	{ "pal16r4-e2.bin",	  	  	0x0104, 0x15fee75c, 5 | BRF_OPT },                //  9
+	{ "pal16r8-b15.bin",	  	0x0104, 0xb50337a6, 5 | BRF_OPT },                // 10
 };
 
 STD_ROM_PICK(wrallyb)
@@ -785,33 +787,70 @@ static INT32 WrallybInit()
 
 struct BurnDriver BurnDrvWrallyb = {
 	"wrallyb", "wrally", NULL, NULL, "1993",
-	"World Rally (Version 1.0, Checksum 8AA2)\0", NULL, "Gaelco", "Miscellaneous",
+	"World Rally (version 1.0, checksum 8AA2)\0", NULL, "Gaelco", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
 	NULL, wrallybRomInfo, wrallybRomName, NULL, NULL, NULL, NULL, WrallyInputInfo, WrallyDIPInfo,
 	WrallybInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	368, 232, 4, 3
 };
 
 
-// World Rally (US, 930217)
+// World Rally (version 1.0, checksum E586)
+
+static struct BurnRomInfo wrallycRomDesc[] = {
+	{ "rally c23.c23",			0x80000, 0xfbd57c94, 1 | BRF_PRG | BRF_ESS },     //  0 m68K code
+	{ "rally c22.c22",			0x80000, 0xdb73e0af, 1 | BRF_PRG | BRF_ESS },     //  1
+
+	{ "wrdallas.bin",			0x08000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },     //  2 DS5002FP code
+   
+	{ "rally i13.i13",			0x80000, 0xb7fddb12, 3 | BRF_GRA },               //  3 Graphics
+	{ "rally i11.i11",			0x80000, 0x58b2809a, 3 | BRF_GRA },               //  4
+	{ "rally i9.i9",			0x80000, 0x018b35bb, 3 | BRF_GRA },               //  5
+	{ "rally i7.i7",			0x80000, 0xb37c807e, 3 | BRF_GRA },               //  6
+
+	{ "rally c1.c1",			0x80000, 0xe931c2ee, 4 | BRF_SND },               //  7 OKI Samples
+	{ "rally c3.c3",			0x80000, 0x11f0fe2c, 4 | BRF_SND },               //  8
+ 
+	{ "tibpal20l8-25cnt.b23", 	0x02e5, 0xa1c780ed, 5 | BRF_OPT }, 		 	  	  //  9 plds
+	{ "gal16v8-25lnc.h21",	  	0x0104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT },   // 10
+	{ "tibpal20l8-25cnt.h15", 	0x02e5, 0xa39efdc6, 5 | BRF_OPT }, 			  	  // 11
+	{ "pal16r4-e2.bin",	  	  	0x0104, 0x15fee75c, 5 | BRF_OPT },                // 12
+	{ "pal16r8-b15.bin",	  	0x0104, 0xb50337a6, 5 | BRF_OPT },                // 13
+};
+
+STD_ROM_PICK(wrallyc)
+STD_ROM_FN(wrallyc)
+
+struct BurnDriver BurnDrvWrallyc = {
+	"wrallyc", "wrally", NULL, NULL, "1993",
+	"World Rally (version 1.0, checksum E586)\0", NULL, "Gaelco", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
+	NULL, wrallycRomInfo, wrallycRomName, NULL, NULL, NULL, NULL, WrallyInputInfo, WrallyDIPInfo,
+	WrallyInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
+	368, 232, 4, 3
+};
+
+
+// World Rally (US, version 1.0, checksum 2CC1)
 
 static struct BurnRomInfo wrallyatRomDesc[] = {
-	{ "rally.c23",		0x080000, 0x366595ad, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
-	{ "rally.c22",		0x080000, 0x0ad4ec6f, 1 | BRF_PRG | BRF_ESS },    //  1
+	{ "rally.c23",			0x080000, 0x366595ad, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
+	{ "rally.c22",			0x080000, 0x0ad4ec6f, 1 | BRF_PRG | BRF_ESS },    //  1
 
-	{ "wrdallas.bin",	0x008000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
+	{ "wrdallas.bin",		0x008000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
 
-	{ "rally h-12.h12",	0x100000, 0x3353dc00, 3 | BRF_GRA },              //  3 Graphics
-	{ "rally h-8.h8",	0x100000, 0x58dcd024, 3 | BRF_GRA },              //  4
+	{ "rally h-12.h12",		0x100000, 0x3353dc00, 3 | BRF_GRA },              //  3 Graphics
+	{ "rally h-8.h8",		0x100000, 0x58dcd024, 3 | BRF_GRA },              //  4
 
-	{ "sound c-1.c1",	0x100000, 0x2d69c9b8, 4 | BRF_SND },              //  5 OKI Samples
+	{ "sound c-1.c1",		0x100000, 0x2d69c9b8, 4 | BRF_SND },              //  5 OKI Samples
 
-	{ "tibpal20l8-25cnt.b23",  0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  6 plds
-	{ "gal16v8-25lnc.h21",	   0x004, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  7
-	{ "tibpal20l8-25cnt.h15",  0x104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  8
-	{ "pal16r4-e2.bin",	   0x104, 0x15fee75c, 5 | BRF_OPT },              //  9
-	{ "pal16r8-b15.bin",	   0x104, 0xb50337a6, 5 | BRF_OPT },              // 10
+	{ "tibpal20l8-25cnt.b23", 0x02e5, 0xa1c780ed, 5 | BRF_OPT }, 		 	  //  6 plds
+	{ "gal16v8-25lnc.h21",	  0x0104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  8
+	{ "tibpal20l8-25cnt.h15", 0x02e5, 0xa39efdc6, 5 | BRF_OPT }, 			  //  9
+	{ "pal16r4-e2.bin",	  	  0x0104, 0x15fee75c, 5 | BRF_OPT },              // 10
+	{ "pal16r8-b15.bin",	  0x0104, 0xb50337a6, 5 | BRF_OPT },              // 11
 };
 
 STD_ROM_PICK(wrallyat)
@@ -819,10 +858,44 @@ STD_ROM_FN(wrallyat)
 
 struct BurnDriver BurnDrvWrallyat = {
 	"wrallyat", "wrally", NULL, NULL, "1993",
-	"World Rally (US, 930217)\0", NULL, "Gaelco (Atari license)", "Miscellaneous",
+	"World Rally (US, version 1.0, checksum 2CC1)\0", NULL, "Gaelco (Atari license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
 	NULL, wrallyatRomInfo, wrallyatRomName, NULL, NULL, NULL, NULL, WrallyInputInfo, WrallyDIPInfo,
+	WrallybInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
+	368, 232, 4, 3
+};
+
+
+// World Rally (US, version 1.0, checksum 75A5)
+
+static struct BurnRomInfo wrallyataRomDesc[] = {
+	{ "rally_c23.c23",        0x080000, 0x291b3995, 1 | BRF_PRG | BRF_ESS },    //  0 m68K code
+	{ "rally_c22.c22",        0x080000, 0x25f0ee88, 1 | BRF_PRG | BRF_ESS },    //  1
+
+	{ "wrdallas.bin",         0x008000, 0x547d1768, 2 | BRF_PRG | BRF_ESS },    //  2 DS5002FP code
+
+	{ "rally h-12.h12",       0x100000, 0x3353dc00, 3 | BRF_GRA },              //  3 Graphics
+	{ "rally h-8.h8",         0x100000, 0x58dcd024, 3 | BRF_GRA },              //  4
+
+	{ "sound c-1.c1",         0x100000, 0x2d69c9b8, 4 | BRF_SND },              //  5 OKI Samples
+
+	{ "tibpal20l8-25cnt.b23", 0x0002e5, 0xa1c780ed, 5 | BRF_OPT },              //  6 plds
+	{ "gal16v8-25lnc.h21",    0x000104, 0x00000000, 5 | BRF_NODUMP | BRF_OPT }, //  8
+	{ "tibpal20l8-25cnt.h15", 0x0002e5, 0xa39efdc6, 5 | BRF_OPT },              //  9
+	{ "pal16r4-e2.bin",       0x000104, 0x15fee75c, 5 | BRF_OPT },              // 10
+	{ "pal16r8-b15.bin",      0x000104, 0xb50337a6, 5 | BRF_OPT },              // 11
+};
+
+STD_ROM_PICK(wrallyata)
+STD_ROM_FN(wrallyata)
+
+struct BurnDriver BurnDrvWrallyata = {
+	"wrallyata", "wrally", NULL, NULL, "1993",
+	"World Rally (US, version 1.0, checksum 75A5)\0", NULL, "Gaelco (Atari license)", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_RACING, 0,
+	NULL, wrallyataRomInfo, wrallyataRomName, NULL, NULL, NULL, NULL, WrallyInputInfo, WrallyDIPInfo,
 	WrallybInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	368, 232, 4, 3
 };

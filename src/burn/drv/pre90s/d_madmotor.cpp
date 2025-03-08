@@ -46,28 +46,30 @@ static UINT8 DrvDips[2];
 static UINT8 DrvReset;
 static UINT16 DrvInputs[2];
 
+static INT32 nCyclesExtra;
+
 static struct BurnInputInfo MadmotorInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy2 + 0,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy2 + 0,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy1 + 7,	"p1 start"	},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
 	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
 	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy1 + 15,	"p2 start"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy1 + 8,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy1 + 9,	"p2 down"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy1 + 10,	"p2 left"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy1 + 8,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy1 + 9,	"p2 down"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy1 + 10,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy1 + 11,	"p2 right"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy1 + 12,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy1 + 13,	"p2 fire 2"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
 };
 
 STDINPUTINFO(Madmotor)
@@ -214,6 +216,8 @@ static INT32 DrvDoReset()
 
 	memset (pf_control, 0, sizeof(pf_control));
 
+	nCyclesExtra = 0;
+
 	return 0;
 }
 
@@ -290,12 +294,7 @@ static void DrvProgDecode()
 
 static INT32 DrvInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(Drv68KROM  + 0x00001,  0, 2)) return 1;
@@ -373,7 +372,7 @@ static INT32 DrvExit()
 
 	deco16SoundExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -384,9 +383,9 @@ static void DrvPaletteUpdate()
 
 	for (INT32 i = 0; i < 0x800/2; i++)
 	{
-		UINT8 r = (p[i] >> 0) & 0xf;
-		UINT8 g = (p[i] >> 4) & 0xf;
-		UINT8 b = (p[i] >> 8) & 0xf;
+		UINT8 r = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 0) & 0xf;
+		UINT8 g = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 4) & 0xf;
+		UINT8 b = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 8) & 0xf;
 
 		DrvPalette[i] = BurnHighCol(r*16+r,g*16+g,b*16+b,0);
 	}
@@ -398,12 +397,12 @@ static void draw_sprites()
 
 	for (INT32 offs = 0; offs < 0x800/2; offs+=4)
 	{
-		if ((spriteram[offs] & 0x8000) == 0) {
+		if ((BURN_ENDIAN_SWAP_INT16(spriteram[offs]) & 0x8000) == 0) {
 			continue;
 		}
 
-		INT32 sy    = spriteram[offs];
-		INT32 sx    = spriteram[offs + 2];
+		INT32 sy    = BURN_ENDIAN_SWAP_INT16(spriteram[offs]);
+		INT32 sx    = BURN_ENDIAN_SWAP_INT16(spriteram[offs + 2]);
 		INT32 color = sx >> 12;
 		INT32 flash = sx & 0x0800;
 		INT32 flipx = sy & 0x2000;
@@ -423,7 +422,7 @@ static void draw_sprites()
 			for (INT32 x = 0; x < wide; x++)
 			{
 				INT32 incy;
-				INT32 code = (spriteram[offs + 1] & 0x1fff) & (~(high - 1));
+				INT32 code = (BURN_ENDIAN_SWAP_INT16(spriteram[offs + 1]) & 0x1fff) & (~(high - 1));
 
 				if (flipy)
 					incy = -1;
@@ -435,19 +434,7 @@ static void draw_sprites()
 
 				for (INT32 y = 0; y < high; y++)
 				{
-					if (flipy) {
-						if (flipx) {
-							Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, code - y * incy, sx + (-16 * x), sy + (-16 * y), color, 4, 0, 0x100, DrvGfxROM3);
-						} else {
-							Render16x16Tile_Mask_FlipY_Clip(pTransDraw, code - y * incy, sx + (-16 * x), sy + (-16 * y), color, 4, 0, 0x100, DrvGfxROM3);
-						}
-					} else {
-						if (flipx) {
-							Render16x16Tile_Mask_FlipX_Clip(pTransDraw, code - y * incy, sx + (-16 * x), sy + (-16 * y), color, 4, 0, 0x100, DrvGfxROM3);
-						} else {
-							Render16x16Tile_Mask_Clip(pTransDraw, code - y * incy, sx + (-16 * x), sy + (-16 * y), color, 4, 0, 0x100, DrvGfxROM3);
-						}
-					}
+					Draw16x16MaskTile(pTransDraw, code - y * incy, sx + (-16 * x), sy + (-16 * y), flipx, flipy, color, 4, 0, 0x100, DrvGfxROM3);
 				}
 			}
 		}
@@ -497,9 +484,8 @@ static INT32 DrvFrame()
 
 	INT32 nInterleave = 256;
 	INT32 nCyclesTotal[2] = { 12000000 / 60, 4026500 / 60 };
-	INT32 nCyclesDone[2] = { 0, 0 };
-	INT32 nSoundBufferPos = 0;
-	
+	INT32 nCyclesDone[2] = { nCyclesExtra, 0 };
+
 	SekOpen(0);
 	h6280Open(0);
 
@@ -507,36 +493,24 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += SekRun(nCyclesTotal[0] / nInterleave);
+		CPU_RUN(0, Sek);
+
 		if (i == 248) {
 			SekSetIRQLine(6, CPU_IRQSTATUS_AUTO);
 			vblank = 1;
 		}
 
-		BurnTimerUpdate((i + 1) * (nCyclesTotal[1] / nInterleave));
-
-		if (pBurnSoundOut && i%4 == 3) { // this fixes small tempo fluxuations in cninja
-			INT32 nSegmentLength = nBurnSoundLen / (nInterleave / 4);
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			deco16SoundUpdate(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
-	}
-
-	BurnTimerEndFrame(nCyclesTotal[1]);
-
-	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-
-		if (nSegmentLength) {
-			deco16SoundUpdate(pSoundBuf, nSegmentLength);
-		}
-		BurnYM2203Update(pBurnSoundOut, nBurnSoundLen);
+		CPU_RUN_TIMER(1);
 	}
 
 	h6280Close();
 	SekClose();
+
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
+
+	if (pBurnSoundOut) {
+		deco16SoundUpdate(pBurnSoundOut, nBurnSoundLen);
+	}
 
 	if (pBurnDraw) {
 		DrvDraw();
@@ -566,13 +540,15 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		deco16SoundScan(nAction, pnMin);
 
 		SCAN_VAR(pf_control);
+
+		SCAN_VAR(nCyclesExtra);
 	}
 
 	return 0;
 }
 
 
-// Mad Motor (prototype)
+// Mad Motor (prototype, set 1)
 
 static struct BurnRomInfo madmotorRomDesc[] = {
 	{ "02-2.b4",	0x20000, 0x50b554e0, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
@@ -605,6 +581,8 @@ static struct BurnRomInfo madmotorRomDesc[] = {
 	{ "12.h1",	0x20000, 0xc202d200, 7 | BRF_SND },           // 21 OKI #0 Samples
 
 	{ "13.h3",	0x20000, 0xcc4d65e9, 8 | BRF_SND },           // 22 OKI #1 Samples
+
+	{ "fm-23.19h",	0x100, 0x6d51adf8, 0 | BRF_OPT },         // 23 PROMS
 };
 
 STD_ROM_PICK(madmotor)
@@ -612,10 +590,61 @@ STD_ROM_FN(madmotor)
 
 struct BurnDriver BurnDrvMadmotor = {
 	"madmotor", NULL, NULL, NULL, "1989",
-	"Mad Motor (prototype)\0", NULL, "Mitchell", "Miscellaneous",
+	"Mad Motor (prototype, set 1)\0", NULL, "Mitchell", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_PROTOTYPE, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
 	NULL, madmotorRomInfo, madmotorRomName, NULL, NULL, NULL, NULL, MadmotorInputInfo, MadmotorDIPInfo,
+	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
+	256, 240, 4, 3
+};
+
+
+// Mad Motor (prototype, set 2)
+
+static struct BurnRomInfo madmotoraRomDesc[] = {
+	{ "02.b4",	0x20000, 0x18d3dba8, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
+	{ "00.b1",	0x20000, 0x686342c6, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "03.b6",	0x20000, 0x442a0a52, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "01.b3",	0x20000, 0xe246876e, 1 | BRF_PRG | BRF_ESS }, //  3
+
+	{ "14.l7",	0x10000, 0x1c28a7e5, 2 | BRF_PRG | BRF_ESS }, //  4 H6280 Code
+
+	{ "04.a9",	0x10000, 0x833ca3ab, 3 | BRF_GRA },           //  5 Layer 0 Tiles (8x8)
+	{ "05.a11",	0x10000, 0xa691fbfe, 3 | BRF_GRA },           //  6
+
+	{ "10.a19",	0x20000, 0x9dbf482b, 4 | BRF_GRA },           //  7 Layer 1 Tiles (16x16)
+	{ "11.a21",	0x20000, 0x593c48a9, 4 | BRF_GRA },           //  8
+
+	{ "06.a13",	0x20000, 0x448850e5, 5 | BRF_GRA },           //  9 Layer 2 Tiles (16x16)
+	{ "07.a14",	0x20000, 0xede4d141, 5 | BRF_GRA },           // 10
+	{ "08.a16",	0x20000, 0xc380e5e5, 5 | BRF_GRA },           // 11
+	{ "09.a18",	0x20000, 0x1ee3326a, 5 | BRF_GRA },           // 12
+
+	{ "15.h11",	0x20000, 0x90ae9f74, 6 | BRF_GRA },           // 13 Sprites
+	{ "16.h13",	0x20000, 0xe96ac815, 6 | BRF_GRA },           // 14
+	{ "17.h14",	0x20000, 0xabad9a1b, 6 | BRF_GRA },           // 15
+	{ "18.h16",	0x20000, 0x96d8d64b, 6 | BRF_GRA },           // 16
+	{ "19.j13",	0x20000, 0xcbd8c9b8, 6 | BRF_GRA },           // 17
+	{ "20.j14",	0x20000, 0x47f706a8, 6 | BRF_GRA },           // 18
+	{ "21.j16",	0x20000, 0x9c72d364, 6 | BRF_GRA },           // 19
+	{ "22.j18",	0x20000, 0x1e78aa60, 6 | BRF_GRA },           // 20
+
+	{ "12.h1",	0x20000, 0xc202d200, 7 | BRF_SND },           // 21 OKI #0 Samples
+
+	{ "13.h3",	0x20000, 0xcc4d65e9, 8 | BRF_SND },           // 22 OKI #1 Samples
+
+	{ "fm-23.19h",	0x100, 0x6d51adf8, 0 | BRF_OPT },         // 23 PROMS
+};
+
+STD_ROM_PICK(madmotora)
+STD_ROM_FN(madmotora)
+
+struct BurnDriver BurnDrvMadmotora = {
+	"madmotora", "madmotor", NULL, NULL, "1989",
+	"Mad Motor (prototype, set 2)\0", NULL, "Mitchell", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_PROTOTYPE, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
+	NULL, madmotoraRomInfo, madmotoraRomName, NULL, NULL, NULL, NULL, MadmotorInputInfo, MadmotorDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	256, 240, 4, 3
 };

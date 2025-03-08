@@ -29,7 +29,7 @@ bool bDisableDebugConsole = true;
 HINSTANCE hAppInst = NULL;			// Application Instance
 HANDLE hMainThread;
 long int nMainThreadID;
-int nAppThreadPriority = THREAD_PRIORITY_NORMAL;
+int nAppProcessPriority = NORMAL_PRIORITY_CLASS;
 int nAppShowCmd;
 
 static TCHAR szCmdLine[1024] = _T("");
@@ -47,6 +47,9 @@ bool bAlwaysCreateSupportFolders = true;
 bool bAutoLoadGameList = false;
 
 bool bQuietLoading = false;
+bool bNoPopups = false;
+
+bool bShonkyProfileMode = false;
 
 bool bNoChangeNumLock = 1;
 static bool bNumlockStatus;
@@ -386,7 +389,7 @@ int OpenDebugLog()
 #if defined (FBNEO_DEBUG)
  #if defined (APP_DEBUG_LOG)
 
-    time_t nTime;
+	time_t nTime;
 	tm* tmTime;
 
 	time(&nTime);
@@ -510,126 +513,95 @@ int OpenDebugLog()
 	return 0;
 }
 
-void GetAspectRatio (int x, int y, int *AspectX, int *AspectY)
+void GetAspectRatio(int x, int y, int *AspectX, int *AspectY)
 {
-	TCHAR szResXY[256] = _T("");
-	_stprintf(szResXY, _T("%dx%d"), x, y);
+	float aspect_ratio = (float)x / (float)y;
 
-	// Normal CRT (4:3) ( Verified at Wikipedia.Org )
-	if( !_tcscmp(szResXY, _T("320x240"))	||
-		!_tcscmp(szResXY, _T("512x384"))	||
-		!_tcscmp(szResXY, _T("640x480"))	||
-		!_tcscmp(szResXY, _T("800x600"))	||
-		!_tcscmp(szResXY, _T("832x624"))	||
-		!_tcscmp(szResXY, _T("1024x768"))	||
-		!_tcscmp(szResXY, _T("1120x832"))	||
-		!_tcscmp(szResXY, _T("1152x864"))	||
-		!_tcscmp(szResXY, _T("1280x960"))	||
-		!_tcscmp(szResXY, _T("1400x1050"))	||
-		!_tcscmp(szResXY, _T("1600x1200"))	||
-		!_tcscmp(szResXY, _T("2048x1536"))	||
-		!_tcscmp(szResXY, _T("2800x2100"))	||
-		!_tcscmp(szResXY, _T("3200x2400"))	||
-		!_tcscmp(szResXY, _T("4096x3072"))	||
-		!_tcscmp(szResXY, _T("6400x4800")) ){
+	// Horizontal
+
+	// 4:3
+	if (fabs(aspect_ratio - 4.0f/3.0f) < 0.01f) {
 		*AspectX = 4;
 		*AspectY = 3;
 		return;
 	}
 
-	// Normal LCD (5:4) ( Verified at Wikipedia.Org )
-	if( !_tcscmp(szResXY, _T("320x256"))	||
-		!_tcscmp(szResXY, _T("640x512"))	||
-		!_tcscmp(szResXY, _T("1280x1024"))	||
-		!_tcscmp(szResXY, _T("2560x2048"))	||
-		!_tcscmp(szResXY, _T("5120x4096")) ){
+	// 5:4
+	if (fabs(aspect_ratio - 5.0f/4.0f) < 0.01f) {
 		*AspectX = 5;
 		*AspectY = 4;
 		return;
 	}
 
-	// CRT Widescreen (16:9) ( Verified at Wikipedia.Org )
-	if( !_tcscmp(szResXY, _T("480x270"))  ||
-		!_tcscmp(szResXY, _T("1280x720")) ||
-		!_tcscmp(szResXY, _T("1360x768")) ||
-		!_tcscmp(szResXY, _T("1366x768")) ||
-		!_tcscmp(szResXY, _T("1920x1080"))) {
+	// 16:9
+	if (fabs(aspect_ratio - 16.0f/9.0f) < 0.1f) {
 		*AspectX = 16;
 		*AspectY = 9;
 		return;
 	}
 
-	// LCD Widescreen (16:10) ( Verified at Wikipedia.Org )
-	if(	!_tcscmp(szResXY, _T("320x200"))	||
-		!_tcscmp(szResXY, _T("1280x800"))	||
-		!_tcscmp(szResXY, _T("1440x900"))	||
-		!_tcscmp(szResXY, _T("1680x1050"))	||
-		!_tcscmp(szResXY, _T("1920x1200"))	||
-		!_tcscmp(szResXY, _T("2560x1600"))	||
-		!_tcscmp(szResXY, _T("3840x2400"))	||
-		!_tcscmp(szResXY, _T("5120x3200"))	||
-		!_tcscmp(szResXY, _T("7680x4800")) ){
+	// 16:10
+	if (fabs(aspect_ratio - 16.0f/10.0f) < 0.1f) {
 		*AspectX = 16;
 		*AspectY = 10;
 		return;
 	}
 
-	// Vertically orientated Normal CRT (4:3) ( Verified at Wikipedia.Org )
-	if( !_tcscmp(szResXY, _T("240x320"))	||
-		!_tcscmp(szResXY, _T("384x512"))	||
-		!_tcscmp(szResXY, _T("480x640"))	||
-		!_tcscmp(szResXY, _T("600x800"))	||
-		!_tcscmp(szResXY, _T("624x832"))	||
-		!_tcscmp(szResXY, _T("768x1024"))	||
-		!_tcscmp(szResXY, _T("832x1120"))	||
-		!_tcscmp(szResXY, _T("864x1152"))	||
-		!_tcscmp(szResXY, _T("960x1280"))	||
-		!_tcscmp(szResXY, _T("1050x1400"))	||
-		!_tcscmp(szResXY, _T("1200x1600"))	||
-		!_tcscmp(szResXY, _T("1536x2048"))	||
-		!_tcscmp(szResXY, _T("2100x2800"))	||
-		!_tcscmp(szResXY, _T("2400x3200"))	||
-		!_tcscmp(szResXY, _T("3072x4096"))	||
-		!_tcscmp(szResXY, _T("4800x6400")) ){
+	// 21:9
+	if (fabs(aspect_ratio - 21.0f/9.0f) < 0.1f) {
+		*AspectX = 21;
+		*AspectY = 9;
+		return;
+	}
+
+	// 32:9
+	if (fabs(aspect_ratio - 32.0f/9.0f) < 0.1f) {
+		*AspectX = 32;
+		*AspectY = 9;
+		return;
+	}
+
+	// Vertical
+
+	// 3:4
+	if (fabs(aspect_ratio - 3.0f/4.0f) < 0.01f) {
 		*AspectX = 3;
 		*AspectY = 4;
 		return;
 	}
 
-	// Vertically orientated Normal LCD (5:4) ( Verified at Wikipedia.Org )
-	if( !_tcscmp(szResXY, _T("256x320"))	||
-		!_tcscmp(szResXY, _T("512x640"))	||
-		!_tcscmp(szResXY, _T("1024x1280"))	||
-		!_tcscmp(szResXY, _T("2048x2560"))	||
-		!_tcscmp(szResXY, _T("4096x5120")) ){
+	// 4:5
+	if (fabs(aspect_ratio - 4.0f/5.0f) < 0.01f) {
 		*AspectX = 4;
 		*AspectY = 5;
 		return;
 	}
 
-	// Vertically orientated CRT Widescreen (16:9) ( Verified at Wikipedia.Org )
-	if( !_tcscmp(szResXY, _T("270x480"))  ||
-		!_tcscmp(szResXY, _T("720x1280")) ||
-		!_tcscmp(szResXY, _T("768x1360")) ||
-		!_tcscmp(szResXY, _T("768x1366")) ||
-		!_tcscmp(szResXY, _T("1080x1920"))) {
+	// 9:16
+	if (fabs(aspect_ratio - 9.0f/16.0f) < 0.1f) {
 		*AspectX = 9;
 		*AspectY = 16;
 		return;
 	}
 
-	// Vertically orientated LCD Widescreen (10:16) ( Verified at Wikipedia.Org )
-	if(	!_tcscmp(szResXY, _T("200x320"))	||
-		!_tcscmp(szResXY, _T("800x1280"))	||
-		!_tcscmp(szResXY, _T("900x1440"))	||
-		!_tcscmp(szResXY, _T("1050x1680"))	||
-		!_tcscmp(szResXY, _T("1200x1920"))	||
-		!_tcscmp(szResXY, _T("1600x2560"))	||
-		!_tcscmp(szResXY, _T("2400x3840"))	||
-		!_tcscmp(szResXY, _T("3200x5120"))	||
-		!_tcscmp(szResXY, _T("4800x7680")) ){
+	// 10:16
+	if (fabs(aspect_ratio - 9.0f/16.0f) < 0.1f) {
 		*AspectX = 10;
 		*AspectY = 16;
+		return;
+	}
+
+	// 9:21
+	if (fabs(aspect_ratio - 9.0f/21.0f) < 0.1f) {
+		*AspectX = 9;
+		*AspectY = 21;
+		return;
+	}
+
+	// 9:32
+	if (fabs(aspect_ratio - 9.0f/32.0f) < 0.1f) {
+		*AspectX = 9;
+		*AspectY = 32;
 		return;
 	}
 }
@@ -642,18 +614,25 @@ static BOOL CALLBACK MonInfoProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcM
 	iMonitor.cbSize = sizeof(MONITORINFOEX);
 	GetMonitorInfo(hMonitor, &iMonitor);
 
-    width = iMonitor.rcMonitor.right - iMonitor.rcMonitor.left;
-    height = iMonitor.rcMonitor.bottom - iMonitor.rcMonitor.top;
+	width  = iMonitor.rcMonitor.right - iMonitor.rcMonitor.left;
+	height = iMonitor.rcMonitor.bottom - iMonitor.rcMonitor.top;
+
+	if (width == 1536 && height == 864) {
+		// Workaround: (1/2)
+		// Win8-10 sets Desktop Zoom to 125% by default, creating this bad/weird resolution.
+		width  = 1920;
+		height = 1080;
+	}
 
 	if ((HorScreen[0] && !_wcsicmp(HorScreen, iMonitor.szDevice)) ||
 		(!HorScreen[0] && iMonitor.dwFlags & MONITORINFOF_PRIMARY)) {
 
 		// Set values for horizontal monitor
-		nVidHorWidth = width;
+		nVidHorWidth  = width;
 		nVidHorHeight = height;
 
 		// also add this to the presets
-		VidPreset[3].nWidth = width;
+		VidPreset[3].nWidth  = width;
 		VidPreset[3].nHeight = height;
 
 		GetAspectRatio(width, height, &nVidScrnAspectX, &nVidScrnAspectY);
@@ -663,11 +642,11 @@ static BOOL CALLBACK MonInfoProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcM
 		(!VerScreen[0] && iMonitor.dwFlags & MONITORINFOF_PRIMARY)) {
 
 		// Set values for vertical monitor
-		nVidVerWidth = width;
+		nVidVerWidth  = width;
 		nVidVerHeight = height;
 
 		// also add this to the presets
-		VidPresetVer[3].nWidth = width;
+		VidPresetVer[3].nWidth  = width;
 		VidPresetVer[3].nHeight = height;
 
 		GetAspectRatio(width, height, &nVidVerScrnAspectX, &nVidVerScrnAspectY);
@@ -685,12 +664,19 @@ void MonitorAutoCheck()
 
 	numScreens = GetSystemMetrics(SM_CMONITORS);
 
-    // If only one monitor or not using a DirectX9 blitter, only use primary monitor
+	// If only one monitor or not using a DirectX9 blitter, only use primary monitor
 	if (numScreens == 1 || nVidSelect < 3) {
 		int x, y;
 
 		x = GetSystemMetrics(SM_CXSCREEN);
 		y = GetSystemMetrics(SM_CYSCREEN);
+
+		if (x == 1536 && y == 864) {
+			// Workaround: (2/2)
+			// Win8-10 sets Desktop Zoom to 125% by default, creating this bad/weird resolution.
+			x = 1920;
+			y = 1080;
+		}
 
 		// default full-screen resolution to this size
 		nVidHorWidth = x;
@@ -767,8 +753,22 @@ static int AppInit()
 	}
 #endif
 
-	// Set the thread priority for the main thread
-	SetThreadPriority(GetCurrentThread(), nAppThreadPriority);
+	switch (nAppProcessPriority) {
+		case HIGH_PRIORITY_CLASS:
+		case ABOVE_NORMAL_PRIORITY_CLASS:
+		case NORMAL_PRIORITY_CLASS:
+		case BELOW_NORMAL_PRIORITY_CLASS:
+		case IDLE_PRIORITY_CLASS:
+			// nothing to change, we're good.
+			break;
+		default:
+			// invalid priority class, set to normal.
+			nAppProcessPriority = NORMAL_PRIORITY_CLASS;
+			break;
+	}
+
+	// Set the process priority
+	SetPriorityClass(GetCurrentProcess(), nAppProcessPriority);
 
 	bCheatsAllowed = true;
 
@@ -860,6 +860,8 @@ int AppMessage(MSG *pMsg)
 	if (IsDialogMessage(hInpsDlg, pMsg))	 return 0;
 	if (IsDialogMessage(hInpcDlg, pMsg))	 return 0;
 
+	if (IsDialogMessage(LuaConsoleHWnd, pMsg)) return 0;
+
 	return 1; // Didn't process this message
 }
 
@@ -870,6 +872,29 @@ bool AppProcessKeyboardInput()
 	}
 
 	return true;
+}
+
+void make_sha1_database(bool snes)
+{
+	UINT32 nGameSelect = 0;
+
+	bNoPopups = true;
+
+	for (nGameSelect = 0; nGameSelect < nBurnDrvCount; nGameSelect++) {
+
+		#define HW_NES ( ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_NES)  )
+		#define HW_SNES ( ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNES)  )
+
+		nBurnDrvActive=nGameSelect;
+
+		if ((!snes && HW_NES) || (snes && HW_SNES)) {
+			bprintf(0, _T("generating for %S\n"), BurnDrvGetTextA(DRV_NAME));
+			DrvInit(nGameSelect, true);
+			DrvExit();
+		}
+	}
+
+	return;
 }
 
 int ProcessCmdLine()
@@ -904,8 +929,24 @@ int ProcessCmdLine()
 	}
 
 	if (_tcslen(szName)) {
-		if (_tcscmp(szName, _T("-listinfo")) == 0) {
+		if (_tcscmp(szName, _T("-nessha1")) == 0) {
+			make_sha1_database(0);
+			return 1;
+		}
+
+		if (_tcscmp(szName, _T("-snessha1")) == 0) {
+			make_sha1_database(1);
+			return 1;
+		}
+
+		if (_tcscmp(szName, _T("-listinfo")) == 0 ||
+			_tcscmp(szName, _T("-listxml")) == 0) {
 			write_datfile(DAT_ARCADE_ONLY, stdout);
+			return 1;
+		}
+
+		if (_tcscmp(szName, _T("-listinfoneogeoonly")) == 0) {
+			write_datfile(DAT_NEOGEO_ONLY, stdout);
 			return 1;
 		}
 
@@ -969,8 +1010,18 @@ int ProcessCmdLine()
 			return 1;
 		}
 
+		if (_tcscmp(szName, _T("-listinfosnesonly")) == 0) {
+			write_datfile(DAT_SNES_ONLY, stdout);
+			return 1;
+		}
+
 		if (_tcscmp(szName, _T("-listinfongponly")) == 0) {
 			write_datfile(DAT_NGP_ONLY, stdout);
+			return 1;
+		}
+
+		if (_tcscmp(szName, _T("-listinfochannelfonly")) == 0) {
+			write_datfile(DAT_CHANNELF_ONLY, stdout);
 			return 1;
 		}
 
@@ -989,6 +1040,12 @@ int ProcessCmdLine()
 		}
 	}
 
+	if (_tcsicmp(&szName[_tcslen(szName) - 4], _T(".cue")) == 0) {
+		// Neogeo CD Handling
+		_tcscpy(CDEmuImage, szName);
+		_tcscpy(szName, _T("neocdz"));
+	}
+
 	_stscanf(&szCmdLine[nOpt1Size], _T("%2s %i x %i x %i"), szOpt2, &nOptX, &nOptY, &nOptD);
 
 	if (_tcslen(szName)) {
@@ -1003,15 +1060,14 @@ int ProcessCmdLine()
 			if (nOptD) {
 				nVidDepth = nOptD;
 			}
-		} else {
-			if (_tcscmp(szOpt2, _T("-a")) == 0) {
-				bVidArcaderes = 1;
-			} else {
-				if (_tcscmp(szOpt2, _T("-w")) == 0) {
-					nCmdOptUsed = 2;
-					bFullscreen = 0;
-				}
-			}
+		} else if (_tcscmp(szOpt2, _T("-a")) == 0) {
+			bVidArcaderes = 1;
+		} else if (_tcscmp(szOpt2, _T("-p")) == 0) {
+			bShonkyProfileMode = true;
+			bFullscreen = 0;
+		} else if (_tcscmp(szOpt2, _T("-w")) == 0) {
+			nCmdOptUsed = 2;
+			bFullscreen = 0;
 		}
 
 		if (bFullscreen) {
@@ -1021,34 +1077,164 @@ int ProcessCmdLine()
 		if (_tcscmp(&szName[_tcslen(szName) - 3], _T(".fs")) == 0) {
 			if (BurnStateLoad(szName, 1, &DrvInitCallback)) {
 				return 1;
-			} else {
-//				bRunPause = 1;
+			}
+		} else if (_tcscmp(&szName[_tcslen(szName) - 3], _T(".fr")) == 0) {
+			if (StartReplay(szName)) {
+				return 1;
+			}
+		} else if (_tcscmp(&szName[_tcslen(szName) - 4], _T(".lua")) == 0) {
+			// Command: lua file
+			FBA_LoadLuaCode(TCHARToANSI(szName, NULL, 0));
+			//bVidAutoSwitchFullDisable = true;
+		} else if (_tcscmp(szName, _T("-romdata")) == 0) {	// cmdline for romdata
+			TCHAR* szPoint = NULL;
+			if (NULL != (szPoint = _tcsstr(szCmdLine, _T("-romdata")))) {
+				szPoint += _tcslen(_T("-romdata"));
+
+				while (szPoint[0] != _T('\0')) {
+					if (szPoint[0] == _T(' ')) {
+						szPoint++;
+					} else { break; }
+				}
+
+				TCHAR* szExt = _tcsstr(szCmdLine, _T(".dat"));
+				if (NULL != szExt) {
+					szExt[0] = _T('\0');
+				}
+				szExt = NULL;
+
+				TCHAR* szDatName = _tcstok(szPoint, _T("\""));
+
+				memset(szRomdataName, '\0', sizeof(szRomdataName));
+				_stprintf(szRomdataName, _T("%s%s%s"), _T(".\\config\\romdata\\"), szDatName, _T(".dat"));
+
+				szDatName = NULL;
+				szPoint = NULL;
+
+				char* szDrvName = RomdataGetDrvName();
+				INT32 nGame = BurnDrvGetIndex(szDrvName);
+
+				if ((NULL == szDrvName) || (-1 == nGame)) {
+					FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_LOAD_NODATA));
+					FBAPopupDisplay(PUF_TYPE_WARNING);
+
+					return 1;
+				}
+
+				if (DrvInit(nGame, true)) {	// failed (bad romset, etc.)
+					nVidFullscreen = 0;		// Don't get stuck in fullscreen mode
+				}
 			}
 		} else {
-			if (_tcscmp(&szName[_tcslen(szName) - 3], _T(".fr")) == 0) {
-				if (StartReplay(szName)) {
-					return 1;
-				}
-			} else {
-				bQuietLoading = true;
+			bQuietLoading = true;
+			bDoIpsPatch   = false;
 
-				for (i = 0; i < nBurnDrvCount; i++) {
-					nBurnDrvActive = i;
-					if ((_tcscmp(BurnDrvGetText(DRV_NAME), szName) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))){
-						if (DrvInit(i, true)) { // failed (bad romset, etc.)
-							nVidFullscreen = 0; // Don't get stuck in fullscreen mode
-						}
-						break;
+			for (i = 0; i < nBurnDrvCount; i++) {
+				nBurnDrvActive = i;
+				if ((_tcscmp(BurnDrvGetText(DRV_NAME), szName) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
+					TCHAR* szSub = _tcsstr(szCmdLine, _T("-sub"));	// Handling -sub additional parameters
+					if (szSub) {									// With -sub parameters
+						szSub += _tcslen(_T("-sub"));				// The parameter does not contain the identifier itself
+
+						INT32 nPara;
+						_stscanf(szSub, _T("%d"), &nPara);			// String to int
+
+						nSubDrvSelected = nPara;
+						szSub = NULL;
 					}
-				}
+					TCHAR* szIps = _tcsstr(szCmdLine, _T("-ips"));	// Handling -ips additional parameters
+					if (szIps) {  // With -ips parameters
+						bDoIpsPatch = true;
 
-				bQuietLoading = false;
+						szIps += _tcslen(_T("-ips"));				// The parameter does not contain the identifier itself
 
-				if (i == nBurnDrvCount) {
-					FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_UI_NOSUPPORT), szName, _T(APP_TITLE));
-					FBAPopupDisplay(PUF_TYPE_ERROR);
-					return 1;
+						FILE* fp    = NULL;
+						INT32 nList = 0;							// Sequence of DAT array
+						TCHAR szTmp[1024];
+						TCHAR szDat[MAX_PATH];
+						TCHAR szDatList[1024 / 2][MAX_PATH];		// Comma separated, at least 2 characters
+						TCHAR* argv = _tcstok(szIps, _T(","));
+
+						if (argv) {	// Argv may be null
+							memset(szTmp, '\0', sizeof(szTmp));
+							_tcscpy(szTmp, argv);
+							argv = szTmp;
+						}
+
+						while (argv != NULL) {
+							INT32 nIndex = 0;
+
+							while (argv[0] != _T('\0')) {
+								if (argv[0] != _T('\"')) {
+									argv++, nIndex++;
+								} else {
+									_tcstok(++argv, _T("\""));	// Remove double quotation marks
+										nIndex = 0;
+										break;
+								}
+							}
+							argv -= nIndex;	// Returns the first digit of a string
+
+							while (argv[0] != _T('\0')) {
+								memset(szDat, '\0', sizeof(szDat));
+								if (_tcsstr(argv, _T(".dat"))) {
+									_stprintf(szDat, _T("%s%s/%s"), szAppIpsPath, BurnDrvGetText(DRV_NAME), argv);
+								} else {
+									_stprintf(szDat, _T("%s%s/%s.dat"), szAppIpsPath, BurnDrvGetText(DRV_NAME), argv);
+								}
+
+								fp = _tfopen(szDat, _T("r"));
+								if (fp) {	// ips dat exists
+									fclose(fp);
+									memset(szDatList[nList], '\0', sizeof(szDatList[nList]));
+									if (_tcsstr(argv, _T(".dat"))) {
+										_stprintf(szDatList[nList++], _T("%s"), argv);
+									} else {
+										_stprintf(szDatList[nList++], _T("%s.dat"), argv);
+									}
+									break;
+								}
+								argv++;	// Filter out invalid spaces in parameters
+							}
+							argv = _tcstok(NULL, _T(","));
+						}
+
+						if (nList > 0) {
+							TCHAR szIni[64] = { '\0' };
+							_stprintf(szIni, _T("config\\ips\\%s.ini"), BurnDrvGetText(DRV_NAME));
+
+							fp = _tfopen(szIni, _T("w"));
+							if (fp) {	// write in
+								_ftprintf(fp, _T("// ") _T(APP_TITLE) _T(" v%s --- IPS Config File for %s (%s)\n\n"), szAppBurnVer, BurnDrvGetText(DRV_NAME), BurnDrvGetText(DRV_FULLNAME));
+								for (int x = 0; x < nList; x++) {
+									_ftprintf(fp, _T("%s\n"), szDatList[x]);
+								}
+								fclose(fp);
+							}
+						}
+						szIps = NULL;
+					}
+
+					if (bDoIpsPatch) {
+						LoadIpsActivePatches();
+						IpsPatchInit();	// Entry point: cmdline launch
+					}
+
+					if (DrvInit(i, true)) { // failed (bad romset, etc.)
+						nVidFullscreen = 0; // Don't get stuck in fullscreen mode
+					}
+
+					IpsPatchExit();	// 
+					break;
 				}
+			}
+
+			bQuietLoading = false;
+
+			if (i == nBurnDrvCount) {
+				FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_UI_NOSUPPORT), szName, _T(APP_TITLE));
+				FBAPopupDisplay(PUF_TYPE_ERROR);
+				return 1;
 			}
 		}
 	}
@@ -1088,8 +1274,10 @@ static void CreateSupportFolders()
 		{_T("support/cabinets/")},
 		{_T("support/pcbs/")},
 		{_T("support/history/")},
+		{_T("support/lua/")},
 		{_T("neocdiso/")},
 		// rom directories
+		{_T("roms/arcade/")},
 		{_T("roms/megadrive/")},
 		{_T("roms/pce/")},
 		{_T("roms/sgx/")},
@@ -1101,9 +1289,11 @@ static void CreateSupportFolders()
 		{_T("roms/msx/")},
 		{_T("roms/spectrum/")},
 		{_T("roms/nes/")},
-		{_T("roms/nes_fds/")},
-		{_T("roms/nes_hb/")},
+		{_T("roms/fds/")},
+		{_T("roms/snes/")},
 		{_T("roms/ngp/")},
+		{_T("roms/channelf/")},
+		{_T("roms/romdata/")},
 		{_T("\0")} // END of list
 	};
 
@@ -1149,6 +1339,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int nShowCmd
 		{_T("config/ips")},
 		{_T("config/localisation")},
 		{_T("config/presets")},
+		{_T("config/romdata")},
 		{_T("recordings")},
 		{_T("roms")},
 		{_T("savestates")},

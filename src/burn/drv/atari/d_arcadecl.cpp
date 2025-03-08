@@ -288,6 +288,8 @@ static INT32 DrvDoReset(INT32 full_reset)
 
 	scanline_int_state = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -542,7 +544,7 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += SekRun(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, Sek);
 
 		if ((i & 0x1f) == 0x00 && (i & 0x20) == 0) {
 			scanline_int_state = 1;
@@ -629,7 +631,7 @@ struct BurnDriver BurnDrvArcadecl = {
 	"arcadecl", NULL, NULL, NULL, "1992",
 	"Arcade Classics (prototype)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MISC, 0,
 	NULL, arcadeclRomInfo, arcadeclRomName, NULL, NULL, NULL, NULL, ArcadeclInputInfo, ArcadeclDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	336, 240, 4, 3
@@ -652,7 +654,7 @@ struct BurnDriver BurnDrvSparkz = {
 	"sparkz", NULL, NULL, NULL, "1992",
 	"Sparkz (prototype)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_PROTOTYPE, 2, HARDWARE_MISC_POST90S, GBF_MISC, 0,
 	NULL, sparkzRomInfo, sparkzRomName, NULL, NULL, NULL, NULL, SparkzInputInfo, SparkzDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	336, 240, 4, 3

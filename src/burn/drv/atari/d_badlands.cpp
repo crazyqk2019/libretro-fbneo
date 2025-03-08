@@ -88,7 +88,7 @@ static void update_interrupts()
 static void __fastcall badlands_main_write_word(UINT32 address, UINT16 data)
 {
 	if ((address & 0xfffc00) == 0xfff000) {
-		*((UINT16*)(Drv68KRAM + (address & 0xffe))) = data;
+		*((UINT16*)(Drv68KRAM + (address & 0xffe))) = BURN_ENDIAN_SWAP_INT16(data);
 		if ((address & 0x200) == 0) {
 			AtariMoExpandedWrite(0, (address / 2) & 0xff, data);
 		}
@@ -134,7 +134,7 @@ static void __fastcall badlands_main_write_byte(UINT32 address, UINT8 data)
 	if ((address & 0xfffc00) == 0xfff000) {
 		Drv68KRAM[(address & 0xfff)^1] = data;
 		if ((address & 0x200) == 0) {
-			AtariMoExpandedWrite(0, (address / 2) & 0xff, *((UINT16*)(Drv68KRAM + (address & 0xffe))));
+			AtariMoExpandedWrite(0, (address / 2) & 0xff, BURN_ENDIAN_SWAP_INT16(*((UINT16*)(Drv68KRAM + (address & 0xffe)))));
 		}
 		return;
 	}
@@ -263,7 +263,7 @@ static UINT8 __fastcall badlands_main_read_byte(UINT32 address)
 		
 static tilemap_callback( bg )
 {
-	UINT16 data = *((UINT16*)(DrvPfRAM + offs * 2));
+	UINT16 data = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPfRAM + offs * 2)));
 	INT32 code = (data & 0x1fff);
 	if (code & 0x1000) code += (playfield_bank * 0x1000);
 
@@ -288,6 +288,8 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	playfield_bank = 0;
 
 	pedal[0] = pedal[1] = 0x80;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -474,7 +476,7 @@ static void DrvPaletteUpdate()
 
 	for (INT32 i = 0; i < 0x200/2; i++)
 	{
-		UINT16 d = (p[i] << 8) | (p[i] >> 8);
+		UINT16 d = BURN_ENDIAN_SWAP_INT16((p[i] << 8) | (p[i] >> 8));
 		INT32 n = d >> 15;
 		UINT8 r = ((d >> 9) & 0x3e) | n;
 		UINT8 g = ((d >> 4) & 0x3e) | n;
@@ -643,6 +645,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 		SCAN_VAR(playfield_bank);
 		SCAN_VAR(video_int_state);
+		SCAN_VAR(pedal);
 	}
 
 	AtariEEPROMScan(nAction, pnMin);
@@ -687,7 +690,7 @@ struct BurnDriver BurnDrvBadlands = {
 	"badlands", NULL, NULL, NULL, "1989",
 	"Bad Lands\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RACING, 0,
 	NULL, badlandsRomInfo, badlandsRomName, NULL, NULL, NULL, NULL, BadlandsInputInfo, BadlandsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	336, 240, 4, 3

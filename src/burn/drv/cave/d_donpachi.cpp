@@ -16,6 +16,8 @@ static UINT8 DrvJoy2[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static UINT16 DrvInput[2] = {0x0000, 0x0000};
 static UINT8 DrvDips[1];
 
+static HoldCoin<2, UINT16> hold_coin;
+
 static UINT8 *Mem = NULL, *MemEnd = NULL;
 static UINT8 *RamStart, *RamEnd;
 static UINT8 *Rom01;
@@ -398,6 +400,9 @@ static INT32 DrvDoReset()
 	DrvSampleReset();
 	memset (previous_sound_write, 0, 3);
 #endif
+
+	hold_coin.reset();
+
 	HiscoreReset();
 	return 0;
 }
@@ -418,7 +423,7 @@ static void CheckDIP()
 		//bprintf(0, _T("DIP Changed! %X\n"), DrvDips[0]);
 		bLastSampleDIPMode = DrvDips[0];
 
-		MSM6295SetRoute(0, (bLastSampleDIPMode == 8) ? 0.00 : 1.60, BURN_SND_ROUTE_BOTH);
+		MSM6295SetRoute(0, (bLastSampleDIPMode == 8) ? 0.00 : 1.40, BURN_SND_ROUTE_BOTH);
 		BurnSampleSetAllRoutesAllSamples((bLastSampleDIPMode == 8) ? 0.40 : 0.00, BURN_SND_ROUTE_BOTH);
 	}
 }
@@ -449,10 +454,13 @@ static INT32 DrvFrame()
 	CaveClearOpposites(&DrvInput[0]);
 	CaveClearOpposites(&DrvInput[1]);
 
+	hold_coin.check(0, DrvInput[0], 1 << 8, 1);
+	hold_coin.check(1, DrvInput[1], 1 << 8, 1);
+
 	SekNewFrame();
 
 	nCyclesTotal[0] = (INT32)((INT64)16000000 * nBurnCPUSpeedAdjust / (0x0100 * CAVE_REFRESHRATE));
-	nCyclesDone[0] = 0;
+	nCyclesDone[0] = nCyclesExtra;
 
 	// this vbl timing gives 2 frames response time
 	nCyclesVBlank = nCyclesTotal[0] - 1300; //(INT32)((nCyclesTotal[0] * CAVE_VBLANK_LINES) / 271.5);
@@ -465,6 +473,19 @@ static INT32 DrvFrame()
 	for (INT32 i = 1; i <= nInterleave; i++) {
     	INT32 nCurrentCPU = 0;
 		INT32 nNext = i * nCyclesTotal[nCurrentCPU] / nInterleave;
+
+		// Render sound segment
+		if ((i & 1) == 0) {
+			if (pBurnSoundOut) {
+				INT32 nSegmentEnd = nBurnSoundLen * i / nInterleave;
+				INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+				MSM6295Render(pSoundBuf, nSegmentEnd - nSoundBufferPos);
+#ifdef USE_SAMPLE_HACK
+				BurnSampleRender(pSoundBuf, nSegmentEnd - nSoundBufferPos);
+#endif
+				nSoundBufferPos = nSegmentEnd;
+			}
+		}
 
 		// Run 68000
 
@@ -483,8 +504,7 @@ static INT32 DrvFrame()
 		}
 
 		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment - nCyclesExtra);
-		nCyclesExtra = 0;
+		nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
 	}
 
 	// Make sure the buffer is entirely filled.
@@ -497,11 +517,12 @@ static INT32 DrvFrame()
 #ifdef USE_SAMPLE_HACK
 				BurnSampleRender(pSoundBuf, nSegmentLength);
 #endif
+				if (~DrvDips[0] & 8) BurnSoundDCFilter(); // area 3 has nasty dc offset when music fades out
 			}
 		}
 	}
 
-	nCyclesExtra = SekTotalCycles() - nCyclesTotal[0];
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
 	SekClose();
 
 	if (pBurnDraw != NULL) {
@@ -603,17 +624,18 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(nSoundIRQ);
 		SCAN_VAR(nUnknownIRQ);
 		SCAN_VAR(bVBlank);
+		SCAN_VAR(nCyclesExtra);
 
 		CaveScanGraphics();
 
-		SCAN_VAR(DrvInput);
 #ifdef USE_SAMPLE_HACK
 		BurnSampleScan(nAction, pnMin); // Must be at the end to maintain compatibility between sample and non-sample mode.
 #endif
+
+		hold_coin.scan();
 	}
 
 	if (nAction & ACB_WRITE) {
-		CaveRecalcPalette = 1;
 		bLastSampleDIPMode = 0xf7;
 	}
 
@@ -678,9 +700,9 @@ static INT32 DrvInit()
 #ifdef USE_SAMPLE_HACK
 	MSM6295SetRoute(0, 0.00, BURN_SND_ROUTE_BOTH);
 #else
-	MSM6295SetRoute(0, 1.60, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(0, 1.40, BURN_SND_ROUTE_BOTH);
 #endif
-	MSM6295SetRoute(1, 1.00, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(1, 0.90, BURN_SND_ROUTE_BOTH);
 
 	NMK112_init(1 << 0, MSM6295ROM + 0x100000, MSM6295ROM, 0x200000, 0x300000);
 
@@ -694,7 +716,7 @@ static INT32 DrvInit()
 	bLastSampleDIPMode = DrvDips[0];
 
 	if (!(bLastSampleDIPMode == 8) || !bHasSamples) { // Samples not found, fallback to internal samples.
-		MSM6295SetRoute(0, 1.60, BURN_SND_ROUTE_BOTH);
+		MSM6295SetRoute(0, 1.40, BURN_SND_ROUTE_BOTH);
 		BurnSampleSetAllRoutesAllSamples(0.00, BURN_SND_ROUTE_BOTH);
 	}
 #endif
@@ -785,7 +807,7 @@ static struct BurnRomInfo donpachikrRomDesc[] = {
 
 	{ "atdp.u54",     0x100000, 0x6bda6b66, BRF_GRA },			 //  3 Layer 0 Tile data
 	{ "atdp.u57",     0x100000, 0x0a0e72b9, BRF_GRA },			 //  4 Layer 1 Tile data
-	{ "u58.bin",      0x040000, 0x285379ff, BRF_GRA },			 //  5 Layer 2 Tile data
+	{ "text.u58",     0x040000, 0x5dba06e7, BRF_GRA },			 //  5 Layer 2 Tile data
 
 	{ "atdp.u32",     0x100000, 0x0d89fcca, BRF_SND },			 //  6 MSM6295 #1 ADPCM data
 	{ "atdp.u33",     0x200000, 0xd749de00, BRF_SND },			 //  7 MSM6295 #0/1 ADPCM data
@@ -847,7 +869,7 @@ STD_SAMPLE_FN(Donpachi)
 
 struct BurnDriver BurnDrvDonpachi = {
 	"donpachi", NULL, NULL, "donpachi", "1995",
-	"DonPachi (USA, ver. 1.12, 95/05/2x)\0", NULL, "Atlus / Cave", "Cave",
+	"DonPachi (USA, ver. 1.12, 95/05/2x)\0", NULL, "Cave (Atlus license)", "Cave",
 	L"\u9996\u9818\u8702 DonPachi (USA, ver. 1.12, 95/05/2x)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_16BIT_ONLY | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAVE_68K_ONLY | HARDWARE_CAVE_M6295, GBF_VERSHOOT, FBF_DONPACHI,
 	NULL, donpachiRomInfo, donpachiRomName, NULL, NULL, DonpachiSampleInfo, DonpachiSampleName, donpachiInputInfo, donpachiDIPInfo,
@@ -857,7 +879,7 @@ struct BurnDriver BurnDrvDonpachi = {
 
 struct BurnDriver BurnDrvDonpachij = {
 	"donpachij", "donpachi", NULL, "donpachi", "1995",
-	"DonPachi (Japan, ver. 1.01, 95/05/11)\0", NULL, "Atlus / Cave", "Cave",
+	"DonPachi (Japan, ver. 1.01, 95/05/11)\0", NULL, "Cave (Atlus license)", "Cave",
 	L"\u9996\u9818\u8702 DonPachi (Japan, ver. 1.01, 95/05/11)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_16BIT_ONLY | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAVE_68K_ONLY | HARDWARE_CAVE_M6295, GBF_VERSHOOT, FBF_DONPACHI,
 	NULL, donpachijRomInfo, donpachijRomName, NULL, NULL, DonpachiSampleInfo, DonpachiSampleName, donpachiInputInfo, donpachiDIPInfo,
@@ -867,8 +889,8 @@ struct BurnDriver BurnDrvDonpachij = {
 
 struct BurnDriver BurnDrvDonpachijs = {
 	"donpachijs", "donpachi", NULL, "donpachi", "1995",
-	"DonPachi (Japan, ver. 1.01, 95/05/11 satsuei)\0", NULL, "Atlus / Cave", "Cave",
-	L"\u9996\u9818\u8702 DonPachi (Japan, ver. 1.01, 95/05/11 satsuei)\0", NULL, NULL, NULL,
+	"DonPachi (Japan, ver. 1.01, 95/05/11 Satsuei)\0", NULL, "Cave (Atlus license)", "Cave",
+	L"\u9996\u9818\u8702 DonPachi (Japan, ver. 1.01, 95/05/11 Satsuei)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_16BIT_ONLY | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAVE_68K_ONLY | HARDWARE_CAVE_M6295, GBF_VERSHOOT, FBF_DONPACHI,
 	NULL, donpachijsRomInfo, donpachijsRomName, NULL, NULL, DonpachiSampleInfo, DonpachiSampleName, donpachiInputInfo, donpachiDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
@@ -877,7 +899,7 @@ struct BurnDriver BurnDrvDonpachijs = {
 
 struct BurnDriver BurnDrvDonpachikr = {
 	"donpachikr", "donpachi", NULL, "donpachi", "1995",
-	"DonPachi (Korea, ver. 1.12, 95/05/2x)\0", NULL, "Atlus / Cave", "Cave",
+	"DonPachi (Korea, ver. 1.12, 95/05/2x)\0", NULL, "Cave (Atlus license)", "Cave",
 	L"\u9996\u9818\u8702 DonPachi (Korea, ver. 1.12, 95/05/2x)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_16BIT_ONLY | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAVE_68K_ONLY | HARDWARE_CAVE_M6295, GBF_VERSHOOT, FBF_DONPACHI,
 	NULL, donpachikrRomInfo, donpachikrRomName, NULL, NULL, DonpachiSampleInfo, DonpachiSampleName, donpachiInputInfo, donpachiDIPInfo,
@@ -887,7 +909,7 @@ struct BurnDriver BurnDrvDonpachikr = {
 
 struct BurnDriver BurnDrvDonpachihk = {
 	"donpachihk", "donpachi", NULL, "donpachi", "1995",
-	"DonPachi (Hong Kong, ver. 1.10, 95/05/17)\0", NULL, "Atlus / Cave", "Cave",
+	"DonPachi (Hong Kong, ver. 1.10, 95/05/17)\0", NULL, "Cave (Atlus license)", "Cave",
 	L"\u9996\u9818\u8702 DonPachi (Hong Kong, ver. 1.10, 95/05/17)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_16BIT_ONLY | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAVE_68K_ONLY | HARDWARE_CAVE_M6295, GBF_VERSHOOT, FBF_DONPACHI,
 	NULL, donpachihkRomInfo, donpachihkRomName, NULL, NULL, DonpachiSampleInfo, DonpachiSampleName, donpachiInputInfo, donpachiDIPInfo,

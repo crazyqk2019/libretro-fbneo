@@ -50,7 +50,7 @@ srcdir	= src/
 include makefile.burn_rules
 
 # Platform stuff
-alldir	+= 	burner burner/sdl burner/sdl dep/libs/libpng dep/libs/lib7z dep/libs/zlib intf intf/video \
+alldir	+= 	burner burner/sdl burner/sdl dep/libs/libspng dep/libs/lib7z dep/libs/zlib intf intf/video \
 			intf/video/scalers 	intf/video/sdl intf/audio intf/audio/sdl intf/input intf/input/sdl intf/cd intf/cd/sdl \
 			intf/perfcount intf/perfcount/sdl dep/generated
 
@@ -61,17 +61,14 @@ depobj	+= 	neocdlist.o \
 			adler32.o compress.o crc32.o deflate.o gzclose.o gzlib.o gzread.o gzwrite.o infback.o inffast.o inflate.o inftrees.o \
 			trees.o uncompr.o zutil.o \
 			\
-			png.o pngerror.o pngget.o pngmem.o pngpread.o pngread.o pngrio.o pngrtran.o pngrutil.o pngset.o pngtrans.o pngwio.o \
-			pngwrite.o pngwtran.o pngwutil.o \
+			spng.o \
 			\
 			aud_dsp.o aud_interface.o cd_interface.o inp_interface.o interface.o lowpass2.o  vid_interface.o \
-			vid_softfx.o vid_support.o \
+			vid_support.o \
 			\
-			2xpm.o 2xsai.o ddt3x.o epx.o hq2xs.o hq2xs_16.o xbr.o \
-			\
-			inp_sdl2.o aud_sdl.o support_paths.o ips_manager.o scrn.o \
+			inp_sdl2.o aud_sdl.o support_paths.o ips_manager.o scrn.o localise_gamelist.o romdata.o \
 			cd_sdl2.o config.o main.o run.o stringset.o bzip.o drv.o media.o sdl2_gui_ingame.o sdl2_gui_common.o \
-			inpdipsw.o vid_sdl2opengl.o vid_sdl2.o dynhuff.o replay.o sdl2_gui.o sdl2_inprint.o input_sdl2.o stated.o
+			inpdipsw.o vid_sdl2opengl.o vid_sdl2.o inputbuf.o replay.o sdl2_gui.o sdl2_inprint.o input_sdl2.o stated.o
 
 ifdef FORCE_PULSE_AUDIO
 alldir	+= 	intf/audio/linux
@@ -82,8 +79,8 @@ endif
 ifdef INCLUDE_7Z_SUPPORT
 depobj	+=	un7z.o \
 			\
-			7zArcIn.o 7zBuf.o 7zBuf2.o 7zCrc.o 7zCrcOpt.o 7zDec.o 7zFile.o 7zStream.o Bcj2.o Bra.o Bra86.o BraIA64.o CpuArch.o \
-			Delta.o LzmaDec.o Lzma2Dec.o Ppmd7.o Ppmd7Dec.o Sha256.o Xz.o XzCrc64.o XzCrc64Opt.o XzDec.o
+			7zArcIn.o 7zBuf.o 7zBuf2.o 7zCrc.o 7zCrcOpt.o 7zDec.o 7zFile.o 7zStream.o Alloc.o Bcj2.o Bra.o Bra86.o BraIA64.o CpuArch.o \
+			Delta.o LzFindOpt.o LzmaDec.o Lzma2Dec.o MtDec.o Ppmd7.o Ppmd7Dec.o Ppmd7aDec.o Sha256.o Sha1Opt.o Sha256Opt.o Threads.o Xxh64.o Xz.o XzCrc64.o XzCrc64Opt.o XzDec.o ZstdDec.o
 endif
 
 autobj += $(depobj)
@@ -100,16 +97,23 @@ incdir	= $(foreach dir,$(alldir),-I$(srcdir)$(dir)) -I$(objdir)dep/generated \
 
 ifdef WINDOWS
 lib	= -lstdc++ `sdl2-config --libs` -lopengl32 -lSDL2_image -lm
+else ifdef DARWIN
+lib	= -lstdc++ `sdl2-config --libs` -lSDL2_image -lm -lpthread
 else
-lib	= -lstdc++ `sdl2-config --libs` -lGL -lSDL2_image -lm
+lib	= -lstdc++ `sdl2-config --libs` -lGL -lSDL2_image -lm -lpthread
 endif
 
 ifdef FORCE_PULSE_AUDIO
-lib += -lpthread -lpulse-simple
+lib += -lpulse-simple
 endif
 
 ifdef DARWIN
-lib += -L/System/Library/Frameworks/OpenGL.framework/Libraries/
+lib += -framework OpenGL
+endif
+
+ifdef INCLUDE_SWITCHRES
+incdir += `pkg-config --cflags switchres`
+lib += `pkg-config --libs switchres`
 endif
 
 autdep	= $(depobj:.o=.d)
@@ -166,8 +170,7 @@ autdrv := $(drvsrc:.cpp=.o)
 #
 
 ifdef DARWIN
-	# GCC 4.2.1 Segfaults during build
-	CC	= gcc-9
+	CC	= gcc
 else
 	CC	= gcc
 endif
@@ -175,6 +178,16 @@ endif
 CXX	= $(CC)
 LD	= $(CC)
 AS	= nasm
+
+# While cross-compiling, tools need to be compiled for host so that they can be executed by host.
+# if HOST_CC is not set, then we aren't cross-compiling, so we'll use target compiler as host compiler
+ifeq ($(HOST_CC),)
+HOST_CC       := $(CC)
+HOST_CXX      := $(CXX)
+HOST_CFLAGS   := $(CFLAGS)
+HOST_CXXFLAGS := $(CXXFLAGS)
+HOST_LDFLAGS  := $(LDFLAGS)
+endif
 
 #LDFLAGS	= -static
 
@@ -185,7 +198,7 @@ CFLAGS = -O2 -fomit-frame-pointer -Wno-write-strings \
 	   $(PLATFLAGS) $(DEF) $(incdir)
 
 CXXFLAGS = -O2 -fomit-frame-pointer -Wno-write-strings \
-	   -Wall -W -Wno-long-long \
+	   -Wall -W -Wno-long-long -Wno-sign-compare \
 	   -Wunknown-pragmas -Wundef -Wconversion -Wno-missing-braces \
 	   -Wuninitialized -Wpointer-arith -Winline -Wno-multichar \
 	   -Wno-conversion -Wno-attributes \
@@ -198,7 +211,7 @@ ASFLAGS	=  -O1 -f coff -w-orphan-labels
 #       DEF     = -Dsinf=\(float\)sin -Dcosf=\(float\)cos -Dasinf=\(float\)asin -Dacosf=\(float\)acos -Dsqrtf=\(float\)sqrt
 
 # FIXME
-	DEF	:= -DBUILD_SDL2 -DUSE_SPEEDHACKS -DFILENAME=$(NAME) -DUSE_FILE32API
+	DEF	:= -DBUILD_SDL2 -DUSE_SPEEDHACKS -DFILENAME=$(NAME) -DUSE_FILE32API -DHAVE_UNISTD_H
 
 ifdef FORCE_PULSE_AUDIO
 	DEF	:= $(DEF) -DFORCE_PULSE_AUDIO
@@ -256,16 +269,25 @@ ifdef BUILD_X64_EXE
 	DEF := $(DEF) -DBUILD_X64_EXE -DXBYAK_NO_OP_NAMES -DMIPS3_X64_DRC
 endif
 
-ifdef	SYMBOL
+ifdef INCLUDE_SWITCHRES
+	DEF := $(DEF) -DINCLUDE_SWITCHRES
+endif
 
+ifdef SANITIZE
+ifndef SYMBOL
+SYMBOL =1
+endif
+CFLAGS   += -fsanitize=address -fsanitize=undefined -fsanitize=bounds-strict
+CXXFLAGS += -fsanitize=address -fsanitize=undefined -fsanitize=bounds-strict
+endif
+
+ifdef SYMBOL
 	CFLAGS   += -ggdb3 -fno-omit-frame-pointer
 	CXXFLAGS += -ggdb3 -fno-omit-frame-pointer
 	ASFLAGS  += -g
 	DEF	 := $(DEF) -D_DEBUG
-
-ifdef SANITIZE
-  CFLAGS   += -fsanitize=address -fsanitize=undefined -fsanitize=bounds-strict
-  CXXFLAGS += -fsanitize=address -fsanitize=undefined -fsanitize=bounds-strict
+else
+	LDFLAGS	 += -s
 endif
 
 ifdef PROFILE
@@ -273,9 +295,6 @@ ifdef PROFILE
 	CXXFLAGS += -pg
 endif
 
-else
-	LDFLAGS	 += -s
-endif
 
 ifdef BUILD_NATIVE
 	CFLAGS	 += -march=native -mtune=native
@@ -287,7 +306,7 @@ DEF := $(DEF) -DNO_VIZ -D_LARGEFILE64_SOURCE=0 -D_FILE_OFFSET_BITS=32
 
 # For lib7z
 ifdef INCLUDE_7Z_SUPPORT
-DEF := $(DEF) -D_7ZIP_PPMD_SUPPPORT
+DEF := $(DEF) -D_7ZIP_PPMD_SUPPPORT -D_7ZIP_ST
 endif
 
 #
@@ -439,7 +458,7 @@ $(objdir)dep/generated/m68kops.h $(objdir)dep/generated/m68kops.c: $(objdir)cpu/
 
 $(objdir)cpu/m68k/m68kmake: $(srcdir)cpu/m68k/m68kmake.c
 	@echo Compiling Musashi MC680x0 core \(m68kmake.c\)...
-	@$(CC) $(CFLAGS) $(srcdir)cpu/m68k/m68kmake.c -o $(objdir)cpu/m68k/m68kmake -Dmain=main
+	@$(HOST_CC) $(HOST_CFLAGS) $(srcdir)cpu/m68k/m68kmake.c -o $(objdir)cpu/m68k/m68kmake -Dmain=main
 
 
 #
@@ -450,7 +469,7 @@ ctv.d ctv.o:	$(ctv.h)
 
 $(ctv.h):	ctv_make.cpp
 	@echo Generating $(srcdir)dep/generated/$(@F)...
-	@$(CC) $(CXXFLAGS) $(LDFLAGS) $< \
+	@$(HOST_CC) $(HOST_CXXFLAGS) $(HOST_LDFLAGS) $< \
 		-o $(subst $(srcdir),$(objdir),$(<D))/$(<F:.cpp=.exe)  -Dmain=main
 	@$(subst $(srcdir),$(objdir),$(<D))/$(<F:.cpp=.exe) >$@
 
@@ -507,7 +526,7 @@ pgm_draw.d pgm_draw.o:	$(pgm_sprite.h)
 
 $(pgm_sprite.h):	pgm_sprite_create.cpp
 	@echo Generating $(srcdir)dep/generated/$(@F)...
-	@$(CC) $(CXXFLAGS) $(LDFLAGS) $< \
+	@$(HOST_CC) $(HOST_CXXFLAGS) $(HOST_LDFLAGS) $< \
 		-o $(subst $(srcdir),$(objdir),$(<D))/$(<F:.cpp=.exe)  -Dmain=main
 	@$(subst $(srcdir),$(objdir),$(<D))/$(<F:.cpp=.exe) >$@
 

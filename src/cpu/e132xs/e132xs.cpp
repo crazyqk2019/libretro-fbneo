@@ -303,7 +303,7 @@ static UINT16 program_read_word_16be(UINT32 address)
 	UINT8 *ptr = mem[0][address >> 12];
 
 	if (ptr) {
-		return *((UINT16*)(ptr + (address & 0xffe)));
+		return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(ptr + (address & 0xffe))));
 	}
 
 	if (read_word_handler) {
@@ -321,7 +321,7 @@ static UINT32 program_read_dword_32be(UINT32 address)
 
 	if (ptr) {
 		UINT32 ret = *((UINT32*)(ptr + (address & 0xffe))); // word aligned
-		return (ret << 16) | (ret >> 16);
+		return BURN_ENDIAN_SWAP_INT32((ret << 16) | (ret >> 16));
 	}
 
 	if (read_dword_handler) {
@@ -338,7 +338,7 @@ static UINT16 cpu_readop16(UINT32 address)
 	UINT8 *ptr = mem[0][address >> 12];
 
 	if (ptr) {
-		return *((UINT16*)(ptr + (address & 0xffe)));
+		return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(ptr + (address & 0xffe))));
 	}
 
 	if (read_word_handler) {
@@ -371,7 +371,7 @@ static void program_write_word_16be(UINT32 address, UINT16 data)
 	UINT8 *ptr = mem[1][address >> 12];
 
 	if (ptr) {
-		*((UINT16*)(ptr + (address & 0xffe))) = data;
+		*((UINT16*)(ptr + (address & 0xffe))) = BURN_ENDIAN_SWAP_INT16(data);
 		return;
 	}
 
@@ -388,7 +388,7 @@ static void program_write_dword_32be(UINT32 address, UINT32 data)
 
 	if (ptr) {
 		data = (data << 16) | (data >> 16);
-		*((UINT32*)(ptr + (address & 0xffe))) = data; // word aligned!
+		*((UINT32*)(ptr + (address & 0xffe))) = BURN_ENDIAN_SWAP_INT32(data); // word aligned!
 		return;
 	}
 
@@ -4625,6 +4625,31 @@ static void hyperstone_trap(struct regs_decode *)
 
 #include "e132xsop.inc"
 
+static void core_set_irq_line(INT32, INT32 line, INT32 state)
+{
+	E132XSSetIRQLine(line, state);
+}
+
+cpu_core_config E132XSConfig =
+{
+	"e132xs",
+	E132XSOpen,
+	E132XSClose,
+	program_read_byte_16be,
+	program_write_byte_16be,
+	E132XSGetActive,
+	E132XSTotalCycles32,
+	E132XSNewFrame,
+	E132XSIdle,
+	core_set_irq_line,
+	E132XSRun,
+	E132XSRunEnd,
+	E132XSReset,
+	E132XSScan,
+	E132XSExit,
+	0xffffffff,
+	1
+};
 
 static void map_internal_ram(UINT32 size)
 {
@@ -4675,6 +4700,8 @@ void E132XSInit(INT32 , INT32 type, INT32 )
 	read_dword_handler = NULL;
 	io_write_dword_handler = NULL;
 	io_read_dword_handler = NULL;
+
+	CpuCheatRegister(0, &E132XSConfig);
 
 	switch (type)
 	{
@@ -4786,6 +4813,11 @@ void E132XSReset()
 	sleep_until_int = 0;
 }
 
+INT32 E132XSGetActive()
+{
+	return 0;
+}
+
 void E132XSOpen(INT32 nCpu)
 {
 	if (nCpu){}
@@ -4805,12 +4837,17 @@ INT64 E132XSTotalCycles()
 	return utotal_cycles + (n_cycles - m_icount);
 }
 
+INT32 E132XSTotalCycles32()
+{
+	return E132XSTotalCycles();
+}
+
 void E132XSNewFrame()
 {
 	utotal_cycles = 0;
 }
 
-void E132XSScan(INT32 nAction)
+INT32 E132XSScan(INT32 nAction)
 {
 	SCAN_VAR(m_global_regs);
 	SCAN_VAR(m_local_regs);
@@ -4846,6 +4883,8 @@ void E132XSScan(INT32 nAction)
 	SCAN_VAR(itotal_cycles); // internal total cycles (timers etc)
 	SCAN_VAR(utotal_cycles); // user-total cycles (E132XSTotalCycles() / E132XSNewFrame() etc..)
 	SCAN_VAR(n_cycles);
+
+	return 0;
 }
 
 void E132XSSetIRQLine(INT32 line, INT32 state)

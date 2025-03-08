@@ -12,11 +12,12 @@ static UINT8 DrvInputPort1[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInputPort2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInputPort3[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInputPort4[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+static UINT8 DrvInputPort4f[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvDip[2]        = {0, 0};
 static UINT8 DrvInput[5]      = {0, 0, 0, 0, 0};
 static UINT8 DrvReset         = 0;
 
-static UINT8 *Mem                 = NULL;
+static UINT8 *AllMem              = NULL;
 static UINT8 *MemEnd              = NULL;
 static UINT8 *RamStart            = NULL;
 static UINT8 *RamEnd              = NULL;
@@ -50,17 +51,10 @@ static INT32 DrvSpriteXOffset;
 static INT32 DrvBg0XOffset;
 static INT32 DrvBg1XOffset[2];
 
-static INT32 nCyclesDone[2], nCyclesTotal[2];
-static INT32 nCyclesSegment;
-
 static struct BurnInputInfo DrvInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort4 + 0, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort0 + 7, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort1 + 7, "p2 start"  },
-	{"Start 3"           , BIT_DIGITAL  , DrvInputPort2 + 7, "p3 start"  },
-	{"Start 4"           , BIT_DIGITAL  , DrvInputPort3 + 7, "p4 start"  },
-	
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort4 + 0, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort0 + 7, "p1 start"  },
 	{"P1 Up"             , BIT_DIGITAL  , DrvInputPort0 + 2, "p1 up"     },
 	{"P1 Down"           , BIT_DIGITAL  , DrvInputPort0 + 3, "p1 down"   },
 	{"P1 Left"           , BIT_DIGITAL  , DrvInputPort0 + 1, "p1 left"   },
@@ -68,6 +62,8 @@ static struct BurnInputInfo DrvInputList[] =
 	{"P1 Fire 1"         , BIT_DIGITAL  , DrvInputPort0 + 4, "p1 fire 1" },
 	{"P1 Fire 2"         , BIT_DIGITAL  , DrvInputPort0 + 5, "p1 fire 2" },
 	
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort4f + 1, "p2 coin"  },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort1 + 7, "p2 start"  },
 	{"P2 Up"             , BIT_DIGITAL  , DrvInputPort1 + 2, "p2 up"     },
 	{"P2 Down"           , BIT_DIGITAL  , DrvInputPort1 + 3, "p2 down"   },
 	{"P2 Left"           , BIT_DIGITAL  , DrvInputPort1 + 1, "p2 left"   },
@@ -75,6 +71,8 @@ static struct BurnInputInfo DrvInputList[] =
 	{"P2 Fire 1"         , BIT_DIGITAL  , DrvInputPort1 + 4, "p2 fire 1" },
 	{"P2 Fire 2"         , BIT_DIGITAL  , DrvInputPort1 + 5, "p2 fire 2" },
 	
+	{"P3 Coin"           , BIT_DIGITAL  , DrvInputPort4f + 2, "p3 coin"  },
+	{"P3 Start"          , BIT_DIGITAL  , DrvInputPort2 + 7, "p3 start"  },
 	{"P3 Up"             , BIT_DIGITAL  , DrvInputPort2 + 2, "p3 up"     },
 	{"P3 Down"           , BIT_DIGITAL  , DrvInputPort2 + 3, "p3 down"   },
 	{"P3 Left"           , BIT_DIGITAL  , DrvInputPort2 + 1, "p3 left"   },
@@ -82,6 +80,8 @@ static struct BurnInputInfo DrvInputList[] =
 	{"P3 Fire 1"         , BIT_DIGITAL  , DrvInputPort2 + 4, "p3 fire 1" },
 	{"P3 Fire 2"         , BIT_DIGITAL  , DrvInputPort2 + 5, "p3 fire 2" },
 	
+	{"P4 Coin"           , BIT_DIGITAL  , DrvInputPort4f + 3, "p4 coin"  },
+	{"P4 Start"          , BIT_DIGITAL  , DrvInputPort3 + 7, "p4 start"  },
 	{"P4 Up"             , BIT_DIGITAL  , DrvInputPort3 + 2, "p4 up"     },
 	{"P4 Down"           , BIT_DIGITAL  , DrvInputPort3 + 3, "p4 down"   },
 	{"P4 Left"           , BIT_DIGITAL  , DrvInputPort3 + 1, "p4 left"   },
@@ -91,8 +91,8 @@ static struct BurnInputInfo DrvInputList[] =
 
 	{"Reset"             , BIT_DIGITAL  , &DrvReset        , "reset"     },
 	{"Service"           , BIT_DIGITAL  , DrvInputPort4 + 1, "service"   },
-	{"Dip 1"             , BIT_DIPSWITCH, DrvDip + 0       , "dip"       },
-	{"Dip 2"             , BIT_DIPSWITCH, DrvDip + 1       , "dip"       },
+	{"Dip A"             , BIT_DIPSWITCH, DrvDip + 0       , "dip"       },
+	{"Dip B"             , BIT_DIPSWITCH, DrvDip + 1       , "dip"       },
 };
 
 STDINPUTINFO(Drv)
@@ -112,6 +112,10 @@ static inline void DrvMakeInputs()
 	// Reset Inputs
 	DrvInput[0] = DrvInput[1] = DrvInput[2] = DrvInput[3] = DrvInput[4] = 0x00;
 
+	DrvInputPort4[0] |= DrvInputPort4f[1]; // p2, p3, p4 coin (mirrors) for kaillera
+	DrvInputPort4[0] |= DrvInputPort4f[2];
+	DrvInputPort4[0] |= DrvInputPort4f[3];
+
 	// Compile Digital Inputs
 	for (INT32 i = 0; i < 8; i++) {
 		DrvInput[0] |= (DrvInputPort0[i] & 1) << i;
@@ -130,62 +134,63 @@ static inline void DrvMakeInputs()
 
 static struct BurnDIPInfo DrvDIPList[]=
 {
+	DIP_OFFSET(0x22)
 	// Default Values
-	{0x1f, 0xff, 0xff, 0xef, NULL                     },
-	{0x20, 0xff, 0xff, 0xff, NULL                     },
+	{0x00, 0xff, 0xff, 0xef, NULL                     },
+	{0x01, 0xff, 0xff, 0xff, NULL                     },
 
 	// Dip 1
 	{0   , 0xfe, 0   , 4   , "Coinage"                },
-	{0x1f, 0x01, 0x03, 0x00, "3 Coins 1 Credit"       },
-	{0x1f, 0x01, 0x03, 0x01, "2 Coins 1 Credit"       },
-	{0x1f, 0x01, 0x03, 0x03, "1 Coin  1 Credit"       },
-	{0x1f, 0x01, 0x03, 0x02, "1 Coin  2 Credits"      },
+	{0x00, 0x01, 0x03, 0x00, "3 Coins 1 Credit"       },
+	{0x00, 0x01, 0x03, 0x01, "2 Coins 1 Credit"       },
+	{0x00, 0x01, 0x03, 0x03, "1 Coin  1 Credit"       },
+	{0x00, 0x01, 0x03, 0x02, "1 Coin  2 Credits"      },
 	
 	{0   , 0xfe, 0   , 2   , "Buy In Price"           },
-	{0x1f, 0x01, 0x04, 0x04, "1 Coin"                 },
-	{0x1f, 0x01, 0x04, 0x00, "As Start Price"         },
+	{0x00, 0x01, 0x04, 0x04, "1 Coin"                 },
+	{0x00, 0x01, 0x04, 0x00, "As Start Price"         },
 	
 	{0   , 0xfe, 0   , 2   , "Regain Power Price"     },
-	{0x1f, 0x01, 0x08, 0x08, "1 Coin"                 },
-	{0x1f, 0x01, 0x08, 0x00, "As Start Price"         },
+	{0x00, 0x01, 0x08, 0x08, "1 Coin"                 },
+	{0x00, 0x01, 0x08, 0x00, "As Start Price"         },
 	
 	{0   , 0xfe, 0   , 2   , "Continue Price"         },
-	{0x1f, 0x01, 0x10, 0x10, "1 Coin"                 },
-	{0x1f, 0x01, 0x10, 0x00, "As Start Price"         },
+	{0x00, 0x01, 0x10, 0x10, "1 Coin"                 },
+	{0x00, 0x01, 0x10, 0x00, "As Start Price"         },
 	
 	{0   , 0xfe, 0   , 2   , "Demo Sounds"            },
-	{0x1f, 0x01, 0x20, 0x00, "Off"                    },
-	{0x1f, 0x01, 0x20, 0x20, "On"                     },
+	{0x00, 0x01, 0x20, 0x00, "Off"                    },
+	{0x00, 0x01, 0x20, 0x20, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Flip Screen"            },
-	{0x1f, 0x01, 0x40, 0x40, "Off"                    },
-	{0x1f, 0x01, 0x40, 0x00, "On"                     },
+	{0x00, 0x01, 0x40, 0x40, "Off"                    },
+	{0x00, 0x01, 0x40, 0x00, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "FBI Logo"               },
-	{0x1f, 0x01, 0x80, 0x00, "Off"                    },
-	{0x1f, 0x01, 0x80, 0x80, "On"                     },
+	{0x00, 0x01, 0x80, 0x00, "Off"                    },
+	{0x00, 0x01, 0x80, 0x80, "On"                     },
 	
 	// Dip 2
 	{0   , 0xfe, 0   , 4   , "Difficulty"             },
-	{0x20, 0x01, 0x03, 0x02, "Easy"                   },
-	{0x20, 0x01, 0x03, 0x03, "Normal"                 },
-	{0x20, 0x01, 0x03, 0x01, "Hard"                   },
-	{0x20, 0x01, 0x03, 0x00, "Hardest"                },
+	{0x01, 0x01, 0x03, 0x02, "Easy"                   },
+	{0x01, 0x01, 0x03, 0x03, "Normal"                 },
+	{0x01, 0x01, 0x03, 0x01, "Hard"                   },
+	{0x01, 0x01, 0x03, 0x00, "Hardest"                },
 	
 	{0   , 0xfe, 0   , 3   , "Number of Players"      },
-	{0x20, 0x01, 0x0c, 0x04, "2"                      },
-	{0x20, 0x01, 0x0c, 0x08, "3"                      },
-	{0x20, 0x01, 0x0c, 0x0c, "4"                      },
+	{0x01, 0x01, 0x0c, 0x04, "2"                      },
+	{0x01, 0x01, 0x0c, 0x08, "3"                      },
+	{0x01, 0x01, 0x0c, 0x0c, "4"                      },
 	
 	{0   , 0xfe, 0   , 4   , "Clear Stage Power Up"   },
-	{0x20, 0x01, 0x60, 0x00, "0"                      },
-	{0x20, 0x01, 0x60, 0x20, "12"                     },
-	{0x20, 0x01, 0x60, 0x60, "24"                     },
-	{0x20, 0x01, 0x60, 0x40, "32"                     },
+	{0x01, 0x01, 0x60, 0x00, "0"                      },
+	{0x01, 0x01, 0x60, 0x20, "12"                     },
+	{0x01, 0x01, 0x60, 0x60, "24"                     },
+	{0x01, 0x01, 0x60, 0x40, "32"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Championship Game"      },
-	{0x20, 0x01, 0x80, 0x00, "4th"                    },
-	{0x20, 0x01, 0x80, 0x80, "5th"                    },
+	{0x01, 0x01, 0x80, 0x00, "4th"                    },
+	{0x01, 0x01, 0x80, 0x80, "5th"                    },
 };
 
 STDDIPINFO(Drv)
@@ -352,11 +357,10 @@ STD_ROM_FN(Drvk)
 
 static INT32 MemIndex()
 {
-	UINT8 *Next; Next = Mem;
+	UINT8 *Next; Next = AllMem;
 
 	Drv68KRom              = Next; Next += 0x80000;
 	DrvZ80Rom              = Next; Next += 0x10000;
-	MSM6295ROM             = Next; Next += 0x40000;
 	DrvMSM6295ROMSrc       = Next; Next += 0x80000;
 
 	RamStart               = Next;
@@ -382,6 +386,12 @@ static INT32 MemIndex()
 	return 0;
 }
 
+static void msm6295_bankswitch(UINT8 data)
+{
+	DrvOkiBank = data & 1;
+	MSM6295SetBank(0, DrvMSM6295ROMSrc + (0x40000 * DrvOkiBank), 0x00000, 0x3ffff);
+}
+
 static INT32 DrvDoReset()
 {
 	SekOpen(0);
@@ -394,7 +404,8 @@ static INT32 DrvDoReset()
 	
 	BurnYM2151Reset();
 	MSM6295Reset(0);
-	
+	msm6295_bankswitch(DrvOkiBank);
+
 	DrvVBlank = 0;
 	DrvBg0ScrollX = 0;
 	DrvBg0ScrollY = 0;
@@ -404,10 +415,18 @@ static INT32 DrvDoReset()
 	DrvOkiBank = 0;
 	DrvSoundLatch = 0;
 	
+	HiscoreReset();
+
 	return 0;
 }
 
-UINT8 __fastcall Wwfwfest68KReadByte(UINT32 a)
+static void sync_cpu()
+{
+	INT32 cyc = SekTotalCycles() * 3579545 / 12000000;
+	BurnTimerUpdate(cyc);
+}
+
+static UINT8 __fastcall Wwfwfest68KReadByte(UINT32 a)
 {
 	switch (a) {
 		case 0x140020: {
@@ -445,11 +464,11 @@ UINT8 __fastcall Wwfwfest68KReadByte(UINT32 a)
 	return 0;
 }
 
-void __fastcall Wwfwfest68KWriteByte(UINT32 a, UINT8 d)
+static void __fastcall Wwfwfest68KWriteByte(UINT32 a, UINT8 d)
 {
 	if (a >= 0x0c0000 && a <= 0x0c1fff) {
 		UINT16 *CharRam = (UINT16*)DrvCharVideoRam;
-		CharRam[(a - 0x0c0000) >> 1] = d;
+		CharRam[(a & 0x1fff) >> 1] = d;
 		return;
 	}
 	
@@ -465,11 +484,11 @@ void __fastcall Wwfwfest68KWriteByte(UINT32 a, UINT8 d)
 	}
 }
 
-UINT16 __fastcall Wwfwfest68KReadWord(UINT32 a)
+static UINT16 __fastcall Wwfwfest68KReadWord(UINT32 a)
 {
 	if (a >= 0x180000 && a <= 0x18ffff) {
 		UINT16 *PaletteRam = (UINT16*)DrvPaletteRam;
-		INT32 Offset = (a - 0x180000) >> 1;
+		INT32 Offset = (a & 0xffff) >> 1;
 		Offset = (Offset & 0x0f) | (Offset & 0x7fc0) >> 2;
 		return PaletteRam[Offset];
 	}
@@ -514,17 +533,17 @@ UINT16 __fastcall Wwfwfest68KReadWord(UINT32 a)
 	return 0;
 }
 
-void __fastcall Wwfwfest68KWriteWord(UINT32 a, UINT16 d)
+static void __fastcall Wwfwfest68KWriteWord(UINT32 a, UINT16 d)
 {
 	if (a >= 0x0c0000 && a <= 0x0c1fff) {
 		UINT16 *CharRam = (UINT16*)DrvCharVideoRam;
-		CharRam[(a - 0x0c0000) >> 1] = d;
+		CharRam[(a & 0x1fff) >> 1] = d;
 		return;
 	}
 	
 	if (a >= 0x180000 && a <= 0x18ffff) {
 		UINT16 *PaletteRam = (UINT16*)DrvPaletteRam;
-		INT32 Offset = (a - 0x180000) >> 1;
+		INT32 Offset = (a & 0xffff) >> 1;
 		Offset = (Offset & 0x0f) | (Offset & 0x7fc0) >> 2;
 		PaletteRam[Offset] = d;
 		return;
@@ -561,10 +580,10 @@ void __fastcall Wwfwfest68KWriteWord(UINT32 a, UINT16 d)
 		}
 		
 		case 0x14000c: {
-			DrvSoundLatch = d & 0xff;
 			ZetOpen(0);
+			sync_cpu();
+			DrvSoundLatch = d & 0xff;
 			ZetNmi();
-			nCyclesDone[1] += ZetRun(100);
 			ZetClose();
 			return;
 		}
@@ -600,7 +619,7 @@ void __fastcall Wwfwfest68KWriteWord(UINT32 a, UINT16 d)
 	}
 }
 
-UINT8 __fastcall WwfwfestZ80Read(UINT16 a)
+static UINT8 __fastcall WwfwfestZ80Read(UINT16 a)
 {
 	switch (a) {
 		case 0xc801: {
@@ -623,7 +642,7 @@ UINT8 __fastcall WwfwfestZ80Read(UINT16 a)
 	return 0;
 }
 
-void __fastcall WwfwfestZ80Write(UINT16 a, UINT8 d)
+static void __fastcall WwfwfestZ80Write(UINT16 a, UINT8 d)
 {
 	switch (a) {
 		case 0xc800: {
@@ -642,8 +661,7 @@ void __fastcall WwfwfestZ80Write(UINT16 a, UINT8 d)
 		}
 		
 		case 0xe800: {
-			DrvOkiBank = d & 1;
-			memcpy(MSM6295ROM + 0x00000, DrvMSM6295ROMSrc + (0x40000 * DrvOkiBank), 0x40000);
+			msm6295_bankswitch(d);
 			return;
 		}
 		
@@ -665,27 +683,18 @@ static INT32 SpriteYOffsets[16]     = { 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80
 
 static void DrvYM2151IrqHandler(INT32 Irq)
 {
-	if (Irq) {
-		ZetSetIRQLine(0, CPU_IRQSTATUS_ACK);
-	} else {
-		ZetSetIRQLine(0, CPU_IRQSTATUS_NONE);
-	}
+	ZetSetIRQLine(0, (Irq) ? CPU_IRQSTATUS_ACK : CPU_IRQSTATUS_NONE);
 }
 
 static INT32 DrvInit()
 {
-	INT32 nRet = 0, nLen, RomOffset;
-	
-	RomOffset = 0;
+	INT32 nRet = 0;
+	INT32 RomOffset = 0;
+
 	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "wwfwfestub")) RomOffset = 2;
 
 	// Allocate and Blank all required memory
-	Mem = NULL;
-	MemIndex();
-	nLen = MemEnd - (UINT8 *)0;
-	if ((Mem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(Mem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	DrvTempRom = (UINT8 *)BurnMalloc(0x800000);
 
@@ -727,8 +736,7 @@ static INT32 DrvInit()
 	
 	// Load Sample Roms
 	nRet = BurnLoadRom(DrvMSM6295ROMSrc + 0x00000, 14 + RomOffset, 1); if (nRet != 0) return 1;
-	memcpy(MSM6295ROM, DrvMSM6295ROMSrc, 0x40000);
-	
+
 	BurnFree(DrvTempRom);
 	
 	// Setup the 68000 emulation
@@ -759,14 +767,15 @@ static INT32 DrvInit()
 	ZetClose();
 	
 	// Setup the YM2151 emulation
-	BurnYM2151Init(3579545);
+	BurnYM2151InitBuffered(3579545, 1, NULL, 0);
 	BurnYM2151SetIrqHandler(&DrvYM2151IrqHandler);
 	BurnYM2151SetAllRoutes(0.45, BURN_SND_ROUTE_BOTH);
-	
+	BurnTimerAttachZet(3579545);
+
 	// Setup the OKIM6295 emulation
 	MSM6295Init(0, 1024188 / 132, 1);
-	MSM6295SetRoute(0, 0.90, BURN_SND_ROUTE_BOTH);
-	
+	MSM6295SetRoute(0, 1.00, BURN_SND_ROUTE_BOTH);
+
 	DrvSpriteXOffset = 0;
 	DrvBg0XOffset = 0;
 	DrvBg1XOffset[0] = 0;
@@ -791,12 +800,12 @@ static INT32 DrvExit()
 {
 	SekExit();
 	ZetExit();
-	
+
 	BurnYM2151Exit();
-	MSM6295Exit(0);
-	
+	MSM6295Exit();
+
 	GenericTilesExit();
-	
+
 	DrvVBlank = 0;
 	DrvBg0ScrollX = 0;
 	DrvBg0ScrollY = 0;
@@ -805,13 +814,13 @@ static INT32 DrvExit()
 	DrvVReg = 0;
 	DrvOkiBank = 0;
 	DrvSoundLatch = 0;
-	
+
 	DrvSpriteXOffset = 0;
 	DrvBg0XOffset = 0;
 	DrvBg1XOffset[0] = 0;
 	DrvBg1XOffset[1] = 0;
-	
-	BurnFree(Mem);
+
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -879,67 +888,11 @@ static void DrvRenderBg0Layer(INT32 Opaque)
 			y -= 8;
 
 			if (Opaque) {
-				if (x > 16 && x < 304 && y > 16 && y < 224) {
-					if (xFlip) {
-						if (yFlip) {
-							Render16x16Tile_FlipXY(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_FlipX(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						}
-					} else {
-						if (yFlip) {
-							Render16x16Tile_FlipY(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						}
-					}
-				} else {
-					if (xFlip) {
-						if (yFlip) {
-							Render16x16Tile_FlipXY_Clip(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_FlipX_Clip(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						}
-					} else {
-						if (yFlip) {
-							Render16x16Tile_FlipY_Clip(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_Clip(pTransDraw, Code, x, y, Colour, 4, 0x1000, DrvTiles);
-						}
-					}
-				}
+				Draw16x16Tile(pTransDraw, Code, x, y, xFlip, yFlip, Colour, 4, 0x1000, DrvTiles);
 			} else {
-				if (x > 16 && x < 304 && y > 16 && y < 224) {
-					if (xFlip) {
-						if (yFlip) {
-							Render16x16Tile_Mask_FlipXY(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_Mask_FlipX(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						}
-					} else {
-						if (yFlip) {
-							Render16x16Tile_Mask_FlipY(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_Mask(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						}
-					}
-				} else {
-					if (xFlip) {
-						if (yFlip) {
-							Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_Mask_FlipX_Clip(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						}
-					} else {
-						if (yFlip) {
-							Render16x16Tile_Mask_FlipY_Clip(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						} else {
-							Render16x16Tile_Mask_Clip(pTransDraw, Code, x, y, Colour, 4, 0, 0x1000, DrvTiles);
-						}
-					}
-				}
+				Draw16x16MaskTile(pTransDraw, Code, x, y, xFlip, yFlip, Colour, 4, 0, 0x1000, DrvTiles);
 			}
-			
+
 			TileIndex++;
 		}
 	}
@@ -977,17 +930,9 @@ static void DrvRenderBg1Layer(INT32 Opaque)
 			y -= 8;
 
 			if (Opaque) {
-				if (x > 0 && x < 304 && y > 0 && y < 224) {
-					Render16x16Tile(pTransDraw, Code, x, y, Colour, 4, 0x0c00, DrvTiles);
-				} else {
-					Render16x16Tile_Clip(pTransDraw, Code, x, y, Colour, 4, 0x0c00, DrvTiles);
-				}
+				Draw16x16Tile(pTransDraw, Code, x, y, 0, 0, Colour, 4, 0x0c00, DrvTiles);
 			} else {
-				if (x > 0 && x < 304 && y > 0 && y < 224) {
-					Render16x16Tile_Mask(pTransDraw, Code, x, y, Colour, 4, 0, 0x0c00, DrvTiles);
-				} else {
-					Render16x16Tile_Mask_Clip(pTransDraw, Code, x, y, Colour, 4, 0, 0x0c00, DrvTiles);
-				}
+				Draw16x16MaskTile(pTransDraw, Code, x, y, 0, 0, Colour, 4, 0, 0x0c00, DrvTiles);
 			}
 			
 			TileIndex++;
@@ -1024,24 +969,12 @@ static void DrvRenderSprites()
 				INT32 yPos;
 				yPos = y - 16 * Count;
 				if (yFlip) yPos = y - (16 * (Chain - 1)) + (16 * Count);
-				
-				if (xFlip) {
-					if (yFlip) {
-						Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, Code + Count, x, yPos, Colour, 4, 0, 0x400, DrvSprites);
-					} else {
-						Render16x16Tile_Mask_FlipX_Clip(pTransDraw, Code + Count, x, yPos, Colour, 4, 0, 0x400, DrvSprites);
-					}
-				} else {
-					if (yFlip) {
-						Render16x16Tile_Mask_FlipY_Clip(pTransDraw, Code + Count, x, yPos, Colour, 4, 0, 0x400, DrvSprites);
-					} else {
-						Render16x16Tile_Mask_Clip(pTransDraw, Code + Count, x, yPos, Colour, 4, 0, 0x400, DrvSprites);
-					}
-				}
+
+				Draw16x16MaskTile(pTransDraw, Code + Count, x, yPos, xFlip, yFlip, Colour, 4, 0, 0x400, DrvSprites);
 			}
 		}
-		
-		Source += 8;	
+
+		Source += 8;
 	}
 }
 
@@ -1063,12 +996,8 @@ static void DrvRenderCharLayer()
 			
 			y -= 8;
 
-			if (x > 0 && x < 312 && y > 0 && y < 232) {
-				Render8x8Tile_Mask(pTransDraw, Code, x, y, Colour, 4, 0, 0, DrvChars);
-			} else {
-				Render8x8Tile_Mask_Clip(pTransDraw, Code, x, y, Colour, 4, 0, 0, DrvChars);
-			}
-			
+			Draw8x8MaskTile(pTransDraw, Code, x, y, 0, 0, Colour, 4, 0, 0, DrvChars);
+
 			TileIndex++;
 		}
 	}
@@ -1107,74 +1036,39 @@ static INT32 DrvDraw()
 
 static INT32 DrvFrame()
 {
-	INT32 nInterleave = 10;
-	INT32 nSoundBufferPos = 0;
-
 	if (DrvReset) DrvDoReset();
 
 	DrvMakeInputs();
 
-	nCyclesTotal[0] = (24000000 / 2) / 60;
-	nCyclesTotal[1] = 3579545 / 60;
-	nCyclesDone[0] = nCyclesDone[1] = 0;
+	INT32 nInterleave = 10;
+	INT32 nCyclesTotal[2] = { 12000000 / 60, 3579545 / 60 };
+	INT32 nCyclesDone[2] = { 0, 0 };
 
 	SekNewFrame();
 	ZetNewFrame();
-	
-	DrvVBlank = 0;
-	
-	for (INT32 i = 0; i < nInterleave; i++) {
-		INT32 nCurrentCPU, nNext;
 
-		// Run 68000
-		nCurrentCPU = 0;
+	DrvVBlank = 0;
+
+	for (INT32 i = 0; i < nInterleave; i++) {
 		SekOpen(0);
-		nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
+		CPU_RUN(0, Sek);
 		if (i == 5) SekSetIRQLine(2, CPU_IRQSTATUS_AUTO);
 		if (i == 5) DrvVBlank = 1;
+		if (i == nInterleave - 1) SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
 		SekClose();
-		
-		// Run Z80
-		nCurrentCPU = 1;
-		ZetOpen(0);
-		nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesSegment = ZetRun(nCyclesSegment);
-		nCyclesDone[nCurrentCPU] += nCyclesSegment;
-		ZetClose();
-		
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			ZetOpen(0);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			ZetClose();
-			MSM6295Render(0, pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
-	}
-	
-	SekOpen(0);
-	SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
-	SekClose();
-	
-	// Make sure the buffer is entirely filled.
-	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
 
-		if (nSegmentLength) {
-			ZetOpen(0);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			ZetClose();
-			MSM6295Render(0, pSoundBuf, nSegmentLength);
-		}
+		ZetOpen(0);
+		CPU_RUN_TIMER(1);
+		ZetClose();
 	}
-	
+
+	if (pBurnSoundOut) {
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
+		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
+	}
+
 	if (pBurnDraw) DrvDraw();
-	
+
 	memcpy(DrvSpriteRamBuff, DrvSpriteRam, 0x2000);
 
 	return 0;
@@ -1203,22 +1097,17 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		MSM6295Scan(nAction, pnMin);
 
 		// Scan critical driver variables
-		SCAN_VAR(nCyclesDone);
-		SCAN_VAR(nCyclesSegment);
-		SCAN_VAR(DrvDip);
-		SCAN_VAR(DrvInput);
-		SCAN_VAR(DrvVBlank);
 		SCAN_VAR(DrvOkiBank);
 		SCAN_VAR(DrvSoundLatch);
 		SCAN_VAR(DrvBg0ScrollX);
 		SCAN_VAR(DrvBg0ScrollY);
 		SCAN_VAR(DrvBg1ScrollX);
 		SCAN_VAR(DrvBg1ScrollY);
-		SCAN_VAR(DrvVReg);	
+		SCAN_VAR(DrvVReg);
 	}
 	
 	if (nAction & ACB_WRITE) {
-		memcpy(MSM6295ROM + 0x00000, DrvMSM6295ROMSrc + (0x40000 * DrvOkiBank), 0x40000);
+		msm6295_bankswitch(DrvOkiBank);
 	}
 	
 	return 0;
@@ -1228,7 +1117,7 @@ struct BurnDriver BurnDrvWwfwfest = {
 	"wwfwfest", NULL, NULL, NULL, "1991",
 	"WWF WrestleFest (World)\0", NULL, "Technos Japan (Tecmo license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
 	NULL, DrvRomInfo, DrvRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x2000, 320, 240, 4, 3
@@ -1238,7 +1127,7 @@ struct BurnDriver BurnDrvWwfwfestu = {
 	"wwfwfestu", "wwfwfest", NULL, NULL, "1991",
 	"WWF WrestleFest (US, rev 2)\0", NULL, "Technos Japan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
 	NULL, DrvuRomInfo, DrvuRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x2000, 320, 240, 4, 3
@@ -1248,7 +1137,7 @@ struct BurnDriver BurnDrvWwfwfestu1 = {
 	"wwfwfestu1", "wwfwfest", NULL, NULL, "1991",
 	"WWF WrestleFest (US)\0", NULL, "Technos Japan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
 	NULL, Drvu1RomInfo, Drvu1RomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x2000, 320, 240, 4, 3
@@ -1258,7 +1147,7 @@ struct BurnDriver BurnDrvWwfwfestub = {
 	"wwfwfestub", "wwfwfest", NULL, NULL, "1991",
 	"WWF WrestleFest (US bootleg)\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
 	NULL, DrvbRomInfo, DrvbRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x2000, 320, 240, 4, 3
@@ -1266,9 +1155,9 @@ struct BurnDriver BurnDrvWwfwfestub = {
 
 struct BurnDriver BurnDrvWwfwfestj = {
 	"wwfwfestj", "wwfwfest", NULL, NULL, "1991",
-	"WWF WrestleFest (Japan)\0", NULL, "Technos Japan (Tecmo License)", "Miscellaneous",
+	"WWF WrestleFest (Japan)\0", NULL, "Technos Japan (Tecmo license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
 	NULL, DrvjRomInfo, DrvjRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x2000, 320, 240, 4, 3
@@ -1276,7 +1165,7 @@ struct BurnDriver BurnDrvWwfwfestj = {
 
 struct BurnDriver BurnDrvWwfwfestk = {
 	"wwfwfestk", "wwfwfest", NULL, NULL, "1991",
-	"WWF WrestleFest (Korea)\0", NULL, "Technos Japan (Tecmo License)", "Miscellaneous",
+	"WWF WrestleFest (Korea)\0", NULL, "Technos Japan (Tecmo license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_TECHNOS, GBF_VSFIGHT, 0,
 	NULL, DrvkRomInfo, DrvkRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,

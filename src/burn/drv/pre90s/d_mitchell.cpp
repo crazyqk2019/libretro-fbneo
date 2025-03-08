@@ -1,4 +1,4 @@
-// FB Alpha Mitchell driver module
+// FB Neo Mitchell driver module
 // Based on MAME driver by Nicola Salmoria
 
 #include "tiles_generic.h"
@@ -8,6 +8,7 @@
 #include "msm6295.h"
 
 static UINT8 DrvInputPort0[8]  = {0, 0, 0, 0, 0, 0, 0, 0};
+static UINT8 DrvInputPort0f[8] = {0, 0, 0, 0, 0, 0, 0, 0}; // fake inputs for p2 coin
 static UINT8 DrvInputPort1[8]  = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInputPort2[8]  = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInputPort3[8]  = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -24,6 +25,7 @@ static UINT8 DrvDip[2]         = {0, 0};
 static UINT8 DrvReset          = 0;
 static INT16 DrvDial1          = 0;
 static INT16 DrvDial2          = 0;
+static INT32 nExtraCycles[2];
 
 static UINT8 *Mem                 = NULL;
 static UINT8 *MemEnd              = NULL;
@@ -43,8 +45,6 @@ static UINT8 *DrvChars            = NULL;
 static UINT8 *DrvSprites          = NULL;
 static UINT8 *DrvTempRom          = NULL;
 static UINT32 *DrvPalette          = NULL;
-static INT32 nCyclesDone[2], nCyclesTotal[2];
-static INT32 nCyclesSegment;
 
 static UINT8 DrvRomBank;
 static UINT8 DrvPaletteRamBank;
@@ -70,10 +70,8 @@ static INT32 DrvMahjongKeyMatrix;
 
 static struct BurnInputInfo MgakuenInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort7  + 2, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
 	{"P1 A"              , BIT_DIGITAL  , DrvInputPort1  + 7, "mah a"     },
 	{"P1 B"              , BIT_DIGITAL  , DrvInputPort2  + 7, "mah b"     },
 	{"P1 C"              , BIT_DIGITAL  , DrvInputPort4  + 7, "mah c"     },
@@ -94,7 +92,9 @@ static struct BurnInputInfo MgakuenInputList[] =
 	{"P1 Ron"            , BIT_DIGITAL  , DrvInputPort4  + 3, "mah ron"   },
 	{"P1 Reach"          , BIT_DIGITAL  , DrvInputPort2  + 3, "mah reach" },
 	{"P1 Flip Flop"      , BIT_DIGITAL  , DrvInputPort6  + 4, "mah ff"    },
-	
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort7  + 2, "p2 start"  },
 	{"P2 A"              , BIT_DIGITAL  , DrvInputPort7  + 7, "mah a"     },
 	{"P2 B"              , BIT_DIGITAL  , DrvInputPort8  + 7, "mah b"     },
 	{"P2 C"              , BIT_DIGITAL  , DrvInputPort9  + 7, "mah c"     },
@@ -125,10 +125,8 @@ STDINPUTINFO(Mgakuen)
 
 static struct BurnInputInfo MarukinInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort7  + 2, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
 	{"P1 A"              , BIT_DIGITAL  , DrvInputPort1  + 7, "mah a"     },
 	{"P1 B"              , BIT_DIGITAL  , DrvInputPort2  + 7, "mah b"     },
 	{"P1 C"              , BIT_DIGITAL  , DrvInputPort4  + 7, "mah c"     },
@@ -149,7 +147,9 @@ static struct BurnInputInfo MarukinInputList[] =
 	{"P1 Ron"            , BIT_DIGITAL  , DrvInputPort4  + 3, "mah ron"   },
 	{"P1 Reach"          , BIT_DIGITAL  , DrvInputPort2  + 3, "mah reach" },
 	{"P1 Flip Flop"      , BIT_DIGITAL  , DrvInputPort6  + 4, "mah ff"    },
-	
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort7  + 2, "p2 start"  },
 	{"P2 A"              , BIT_DIGITAL  , DrvInputPort7  + 7, "mah a"     },
 	{"P2 B"              , BIT_DIGITAL  , DrvInputPort8  + 7, "mah b"     },
 	{"P2 C"              , BIT_DIGITAL  , DrvInputPort9  + 7, "mah c"     },
@@ -179,24 +179,24 @@ STDINPUTINFO(Marukin)
 
 static struct BurnInputInfo PkladiesInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort7  + 2, "p2 start"  },
-
-	{"P1 A"              , BIT_DIGITAL  , DrvInputPort1  + 7, "mah a"     },
-	{"P1 B"              , BIT_DIGITAL  , DrvInputPort2  + 7, "mah b"     },
-	{"P1 C"              , BIT_DIGITAL  , DrvInputPort4  + 7, "mah c"     },
-	{"P1 D"              , BIT_DIGITAL  , DrvInputPort5  + 7, "mah d"     },
-	{"P1 E"              , BIT_DIGITAL  , DrvInputPort1  + 6, "mah e"     },
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
+	{"P1 A"              , BIT_DIGITAL  , DrvInputPort1  + 7, "p1 fire 4" },
+	{"P1 B"              , BIT_DIGITAL  , DrvInputPort2  + 7, "p1 fire 5" },
+	{"P1 C"              , BIT_DIGITAL  , DrvInputPort4  + 7, "p1 fire 6" },
+	{"P1 D"              , BIT_DIGITAL  , DrvInputPort5  + 7, "p1 fire 7" },
+	{"P1 E"              , BIT_DIGITAL  , DrvInputPort1  + 6, "p1 fire 8" },
 	{"P1 Deal"           , BIT_DIGITAL  , DrvInputPort1  + 5, "p1 fire 1" },
 	{"P1 Cancel"         , BIT_DIGITAL  , DrvInputPort2  + 5, "p1 fire 2" },
 	{"P1 Flip"           , BIT_DIGITAL  , DrvInputPort4  + 5, "p1 fire 3" },
-	
-	{"P2 A"              , BIT_DIGITAL  , DrvInputPort7  + 7, "mah a"     },
-	{"P2 B"              , BIT_DIGITAL  , DrvInputPort8  + 7, "mah b"     },
-	{"P2 C"              , BIT_DIGITAL  , DrvInputPort9  + 7, "mah c"     },
-	{"P2 D"              , BIT_DIGITAL  , DrvInputPort10 + 7, "mah d"     },
-	{"P2 E"              , BIT_DIGITAL  , DrvInputPort7  + 6, "mah e"     },
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort7  + 2, "p2 start"  },
+	{"P2 A"              , BIT_DIGITAL  , DrvInputPort7  + 7, "p2 fire 4" },
+	{"P2 B"              , BIT_DIGITAL  , DrvInputPort8  + 7, "p2 fire 5" },
+	{"P2 C"              , BIT_DIGITAL  , DrvInputPort9  + 7, "p2 fire 6" },
+	{"P2 D"              , BIT_DIGITAL  , DrvInputPort10 + 7, "p2 fire 7" },
+	{"P2 E"              , BIT_DIGITAL  , DrvInputPort7  + 6, "p2 fire 8" },
 	{"P2 Deal"           , BIT_DIGITAL  , DrvInputPort7  + 5, "p2 fire 1" },
 	{"P2 Cancel"         , BIT_DIGITAL  , DrvInputPort8  + 5, "p2 fire 2" },
 	{"P2 Flip"           , BIT_DIGITAL  , DrvInputPort9  + 5, "p2 fire 3" },
@@ -210,17 +210,17 @@ STDINPUTINFO(Pkladies)
 
 static struct BurnInputInfo PangInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
 	{"P1 Up"             , BIT_DIGITAL  , DrvInputPort1  + 7, "p1 up"     },
 	{"P1 Down"           , BIT_DIGITAL  , DrvInputPort1  + 6, "p1 down"   },
 	{"P1 Left"           , BIT_DIGITAL  , DrvInputPort1  + 5, "p1 left"   },
 	{"P1 Right"          , BIT_DIGITAL  , DrvInputPort1  + 4, "p1 right"  },
 	{"P1 Fire 1"         , BIT_DIGITAL  , DrvInputPort1  + 3, "p1 fire 1" },
 	{"P1 Fire 2"         , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 fire 2" },
-	
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
 	{"P2 Up"             , BIT_DIGITAL  , DrvInputPort2  + 7, "p2 up"     },
 	{"P2 Down"           , BIT_DIGITAL  , DrvInputPort2  + 6, "p2 down"   },
 	{"P2 Left"           , BIT_DIGITAL  , DrvInputPort2  + 5, "p2 left"   },
@@ -237,15 +237,15 @@ STDINPUTINFO(Pang)
 
 static struct BurnInputInfo Qtono1InputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort2  + 2, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 start"  },
 	{"P1 Fire 1"         , BIT_DIGITAL  , DrvInputPort1  + 7, "p1 fire 1" },
 	{"P1 Fire 2"         , BIT_DIGITAL  , DrvInputPort1  + 6, "p1 fire 2" },
 	{"P1 Fire 3"         , BIT_DIGITAL  , DrvInputPort1  + 5, "p1 fire 3" },
 	{"P1 Fire 4"         , BIT_DIGITAL  , DrvInputPort1  + 4, "p1 fire 4" },
-	
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort2  + 2, "p2 start"  },
 	{"P2 Fire 1"         , BIT_DIGITAL  , DrvInputPort2  + 7, "p2 fire 1" },
 	{"P2 Fire 2"         , BIT_DIGITAL  , DrvInputPort2  + 6, "p2 fire 2" },
 	{"P2 Fire 3"         , BIT_DIGITAL  , DrvInputPort2  + 5, "p2 fire 3" },
@@ -260,11 +260,8 @@ STDINPUTINFO(Qtono1)
 
 static struct BurnInputInfo MstworldInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
-	{"Coin 2"            , BIT_DIGITAL  , DrvInputPort0  + 5, "p2 coin"   },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
 	{"P1 Up"             , BIT_DIGITAL  , DrvInputPort1  + 7, "p1 up"     },
 	{"P1 Down"           , BIT_DIGITAL  , DrvInputPort1  + 6, "p1 down"   },
 	{"P1 Left"           , BIT_DIGITAL  , DrvInputPort1  + 5, "p1 left"   },
@@ -272,7 +269,9 @@ static struct BurnInputInfo MstworldInputList[] =
 	{"P1 Fire 1"         , BIT_DIGITAL  , DrvInputPort1  + 3, "p1 fire 1" },
 	{"P1 Fire 2"         , BIT_DIGITAL  , DrvInputPort1  + 2, "p1 fire 2" },
 	{"P1 Fire 3"         , BIT_DIGITAL  , DrvInputPort1  + 1, "p1 fire 3" },
-	
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 5, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
 	{"P2 Up"             , BIT_DIGITAL  , DrvInputPort2  + 7, "p2 up"     },
 	{"P2 Down"           , BIT_DIGITAL  , DrvInputPort2  + 6, "p2 down"   },
 	{"P2 Left"           , BIT_DIGITAL  , DrvInputPort2  + 5, "p2 left"   },
@@ -291,18 +290,18 @@ STDINPUTINFO(Mstworld)
 
 static struct BurnInputInfo BlockInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
 	{"P1 Left"           , BIT_DIGITAL  , DrvInputPort11 + 0, "p1 left"   },
 	{"P1 Right"          , BIT_DIGITAL  , DrvInputPort11 + 1, "p1 right"  },
 	{"P1 Fire 1"         , BIT_DIGITAL  , DrvInputPort1  + 7, "p1 fire 1" },
-		
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
 	{"P2 Left"           , BIT_DIGITAL  , DrvInputPort11 + 2, "p2 left"   },
 	{"P2 Right"          , BIT_DIGITAL  , DrvInputPort11 + 3, "p2 right"  },
 	{"P2 Fire 1"         , BIT_DIGITAL  , DrvInputPort2  + 7, "p2 fire 1" },
-	
+
 	{"Reset"             , BIT_DIGITAL  , &DrvReset         , "reset"     },
 	{"Service"           , BIT_DIGITAL  , DrvInputPort0  + 6, "service"   },
 	{"Diagnostics"       , BIT_DIGITAL  , DrvInputPort3  + 1, "diag"      },
@@ -312,14 +311,14 @@ STDINPUTINFO(Block)
 
 static struct BurnInputInfo BlockjoyInputList[] =
 {
-	{"Coin 1"            , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
-	{"Start 1"           , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
-	{"Start 2"           , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
-
+	{"P1 Coin"           , BIT_DIGITAL  , DrvInputPort0  + 7, "p1 coin"   },
+	{"P1 Start"          , BIT_DIGITAL  , DrvInputPort0  + 3, "p1 start"  },
 	{"P1 Left"           , BIT_DIGITAL  , DrvInputPort1  + 5, "p1 left"   },
 	{"P1 Right"          , BIT_DIGITAL  , DrvInputPort1  + 4, "p1 right"  },
 	{"P1 Fire 1"         , BIT_DIGITAL  , DrvInputPort1  + 7, "p1 fire 1" },
-	
+
+	{"P2 Coin"           , BIT_DIGITAL  , DrvInputPort0f + 7, "p2 coin"   },
+	{"P2 Start"          , BIT_DIGITAL  , DrvInputPort0  + 1, "p2 start"  },
 	{"P2 Left"           , BIT_DIGITAL  , DrvInputPort2  + 5, "p2 left"   },
 	{"P2 Right"          , BIT_DIGITAL  , DrvInputPort2  + 4, "p2 right"  },
 	{"P2 Fire 1"         , BIT_DIGITAL  , DrvInputPort2  + 7, "p2 fire 1" },
@@ -344,6 +343,11 @@ static inline void DrvClearOpposites(UINT8* nJoystickInputs)
 static inline void DrvMakeInputs()
 {
 	for (INT32 i = 0; i < 12; i++) DrvInput[i] = 0x00;
+
+	if (DrvInputPort0f[7]) {
+		// fake p2 coin input for kaillera/netplay
+		DrvInputPort0[7] = 1;
+	}
 
 	for (INT32 i = 0; i < 8; i++) {
 		DrvInput[ 0] |= (DrvInputPort0[ i] & 1) << i;
@@ -381,64 +385,65 @@ static inline void DrvMakeInputs()
 static struct BurnDIPInfo MgakuenDIPList[]=
 {
 	// Default Values
-	{0x2c, 0xff, 0xff, 0xef, NULL                     },
-	{0x2d, 0xff, 0xff, 0x8f, NULL                     },
+	DIP_OFFSET(0x2d)
+	{0x00, 0xff, 0xff, 0xef, NULL                     },
+	{0x01, 0xff, 0xff, 0x8f, NULL                     },
 
 	// Dip 1
 	{0   , 0xfe, 0   , 8   , "Coin A"                 },
-	{0x2c, 0x01, 0x07, 0x00, "4 Coins 1 Play"         },
-	{0x2c, 0x01, 0x07, 0x01, "3 Coins 1 Play"         },
-	{0x2c, 0x01, 0x07, 0x02, "2 Coins 1 Play"         },
-	{0x2c, 0x01, 0x07, 0x07, "1 Coin  1 Play"         },
-	{0x2c, 0x01, 0x07, 0x06, "1 Coin  2 Plays"        },
-	{0x2c, 0x01, 0x07, 0x05, "1 Coin  3 Plays"        },
-	{0x2c, 0x01, 0x07, 0x04, "1 Coin  4 Plays"        },
-	{0x2c, 0x01, 0x07, 0x03, "1 Coin  6 Plays"        },
+	{0x00, 0x01, 0x07, 0x00, "4 Coins 1 Play"         },
+	{0x00, 0x01, 0x07, 0x01, "3 Coins 1 Play"         },
+	{0x00, 0x01, 0x07, 0x02, "2 Coins 1 Play"         },
+	{0x00, 0x01, 0x07, 0x07, "1 Coin  1 Play"         },
+	{0x00, 0x01, 0x07, 0x06, "1 Coin  2 Plays"        },
+	{0x00, 0x01, 0x07, 0x05, "1 Coin  3 Plays"        },
+	{0x00, 0x01, 0x07, 0x04, "1 Coin  4 Plays"        },
+	{0x00, 0x01, 0x07, 0x03, "1 Coin  6 Plays"        },
 	
 	{0   , 0xfe, 0   , 2   , "Rules"                  },
-	{0x2c, 0x01, 0x08, 0x08, "Kantou"                 },
-	{0x2c, 0x01, 0x08, 0x00, "Kansai"                 },
+	{0x00, 0x01, 0x08, 0x08, "Kantou"                 },
+	{0x00, 0x01, 0x08, 0x00, "Kansai"                 },
 	
 	{0   , 0xfe, 0   , 2   , "Harness Type"           },
-	{0x2c, 0x01, 0x10, 0x10, "Generic"                },
-	{0x2c, 0x01, 0x10, 0x00, "Royal Mahjong"          },
+	{0x00, 0x01, 0x10, 0x10, "Generic"                },
+	{0x00, 0x01, 0x10, 0x00, "Royal Mahjong"          },
 	
 	{0   , 0xfe, 0   , 2   , "Flip Screen"            },
-	{0x2c, 0x01, 0x20, 0x20, "Off"                    },
-	{0x2c, 0x01, 0x20, 0x00, "On"                     },
+	{0x00, 0x01, 0x20, 0x20, "Off"                    },
+	{0x00, 0x01, 0x20, 0x00, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Freeze"                 },
-	{0x2c, 0x01, 0x40, 0x40, "Off"                    },
-	{0x2c, 0x01, 0x40, 0x00, "On"                     },
+	{0x00, 0x01, 0x40, 0x40, "Off"                    },
+	{0x00, 0x01, 0x40, 0x00, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Service Mode"           },
-	{0x2c, 0x01, 0x80, 0x80, "Off"                    },
-	{0x2c, 0x01, 0x80, 0x00, "On"                     },
+	{0x00, 0x01, 0x80, 0x80, "Off"                    },
+	{0x00, 0x01, 0x80, 0x00, "On"                     },
 	
 	// Dip 2
 	{0   , 0xfe, 0   , 4   , "Player 1 Skill"         },
-	{0x2d, 0x01, 0x03, 0x03, "Weak"                   },
-	{0x2d, 0x01, 0x03, 0x02, "Normal"                 },
-	{0x2d, 0x01, 0x03, 0x01, "Strong"                 },
-	{0x2d, 0x01, 0x03, 0x00, "Very Strong"            },
+	{0x01, 0x01, 0x03, 0x03, "Weak"                   },
+	{0x01, 0x01, 0x03, 0x02, "Normal"                 },
+	{0x01, 0x01, 0x03, 0x01, "Strong"                 },
+	{0x01, 0x01, 0x03, 0x00, "Very Strong"            },
 	
 	{0   , 0xfe, 0   , 4   , "Player 2 Skill"         },
-	{0x2d, 0x01, 0x0c, 0x0c, "Weak"                   },
-	{0x2d, 0x01, 0x0c, 0x08, "Normal"                 },
-	{0x2d, 0x01, 0x0c, 0x04, "Strong"                 },
-	{0x2d, 0x01, 0x0c, 0x00, "Very Strong"            },
+	{0x01, 0x01, 0x0c, 0x0c, "Weak"                   },
+	{0x01, 0x01, 0x0c, 0x08, "Normal"                 },
+	{0x01, 0x01, 0x0c, 0x04, "Strong"                 },
+	{0x01, 0x01, 0x0c, 0x00, "Very Strong"            },
 	
 	{0   , 0xfe, 0   , 2   , "Music"                  },
-	{0x2d, 0x01, 0x10, 0x10, "Off"                    },
-	{0x2d, 0x01, 0x10, 0x00, "On"                     },
+	{0x01, 0x01, 0x10, 0x10, "Off"                    },
+	{0x01, 0x01, 0x10, 0x00, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Demo Sounds"            },
-	{0x2d, 0x01, 0x20, 0x20, "Off"                    },
-	{0x2d, 0x01, 0x20, 0x00, "On"                     },
+	{0x01, 0x01, 0x20, 0x20, "Off"                    },
+	{0x01, 0x01, 0x20, 0x00, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Help Mode"              },
-	{0x2d, 0x01, 0x40, 0x40, "Off"                    },
-	{0x2d, 0x01, 0x40, 0x00, "On"                     },
+	{0x01, 0x01, 0x40, 0x40, "Off"                    },
+	{0x01, 0x01, 0x40, 0x00, "On"                     },
 };
 
 STDDIPINFO(Mgakuen)
@@ -446,34 +451,35 @@ STDDIPINFO(Mgakuen)
 static struct BurnDIPInfo MstworldDIPList[]=
 {
 	// Default Values
-	{0x15, 0xff, 0xff, 0xb0, NULL                     },
+	DIP_OFFSET(0x15)
+	{0x00, 0xff, 0xff, 0xb0, NULL                     },
 	
 	// Dip 1
 	{0   , 0xfe, 0   , 8   , "Coinage"                },
-	{0x15, 0x01, 0x07, 0x03, "A 1C/4P B 1C/4P"        },
-	{0x15, 0x01, 0x07, 0x02, "A 1C/3P B 1C/3P"        },
-	{0x15, 0x01, 0x07, 0x01, "A 1C/2P B 1C/2P"        },
-	{0x15, 0x01, 0x07, 0x00, "A 1C/1P B 1C/4P"        },
-	{0x15, 0x01, 0x07, 0x04, "A 2C/1P B 1C/2P"        },
-	{0x15, 0x01, 0x07, 0x05, "A 2C/1P B 1C/3P"        },
-	{0x15, 0x01, 0x07, 0x06, "A 3C/1P B 1C/2P"        },
-	{0x15, 0x01, 0x07, 0x07, "A 4C/1P B 1C/1P"        },
+	{0x00, 0x01, 0x07, 0x03, "A 1C/4P B 1C/4P"        },
+	{0x00, 0x01, 0x07, 0x02, "A 1C/3P B 1C/3P"        },
+	{0x00, 0x01, 0x07, 0x01, "A 1C/2P B 1C/2P"        },
+	{0x00, 0x01, 0x07, 0x00, "A 1C/1P B 1C/4P"        },
+	{0x00, 0x01, 0x07, 0x04, "A 2C/1P B 1C/2P"        },
+	{0x00, 0x01, 0x07, 0x05, "A 2C/1P B 1C/3P"        },
+	{0x00, 0x01, 0x07, 0x06, "A 3C/1P B 1C/2P"        },
+	{0x00, 0x01, 0x07, 0x07, "A 4C/1P B 1C/1P"        },
 	
 	{0   , 0xfe, 0   , 4   , "Lives"                  },
-	{0x15, 0x01, 0x18, 0x00, "1"                      },
-	{0x15, 0x01, 0x18, 0x08, "2"                      },
-	{0x15, 0x01, 0x18, 0x10, "3"                      },
-	{0x15, 0x01, 0x18, 0x18, "4"                      },
+	{0x00, 0x01, 0x18, 0x00, "1"                      },
+	{0x00, 0x01, 0x18, 0x08, "2"                      },
+	{0x00, 0x01, 0x18, 0x10, "3"                      },
+	{0x00, 0x01, 0x18, 0x18, "4"                      },
 	
 	{0   , 0xfe, 0   , 4   , "Difficulty"             },
-	{0x15, 0x01, 0x60, 0x00, "Easy"                   },
-	{0x15, 0x01, 0x60, 0x20, "Normal"                 },
-	{0x15, 0x01, 0x60, 0x40, "Hard"                   },
-	{0x15, 0x01, 0x60, 0x60, "Hardest"                },
+	{0x00, 0x01, 0x60, 0x00, "Easy"                   },
+	{0x00, 0x01, 0x60, 0x20, "Normal"                 },
+	{0x00, 0x01, 0x60, 0x40, "Hard"                   },
+	{0x00, 0x01, 0x60, 0x60, "Hardest"                },
 	
 	{0   , 0xfe, 0   , 2   , "Demo Sounds"            },
-	{0x15, 0x01, 0x80, 0x00, "Off"                    },
-	{0x15, 0x01, 0x80, 0x80, "On"                     },
+	{0x00, 0x01, 0x80, 0x00, "Off"                    },
+	{0x00, 0x01, 0x80, 0x80, "On"                     },
 };
 
 STDDIPINFO(Mstworld)
@@ -595,23 +601,42 @@ STD_ROM_PICK(Pkladiesla)
 STD_ROM_FN(Pkladiesla)
 
 static struct BurnRomInfo DokabenRomDesc[] = {
-	{ "db06.11h",      0x08000, 0x413e0886, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
-	{ "db07.13h",      0x20000, 0x8bdcf49e, BRF_ESS | BRF_PRG }, //	 1
-	{ "db08.14h",      0x20000, 0x1643bdd9, BRF_ESS | BRF_PRG }, //	 2
+	{ "db_06.11h",     0x08000, 0x413e0886, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
+	{ "db_07.13h",     0x20000, 0x8bdcf49e, BRF_ESS | BRF_PRG }, //	 1
+	{ "db_08.14h",     0x20000, 0x1643bdd9, BRF_ESS | BRF_PRG }, //	 2
 	
-	{ "db02.1e",       0x20000, 0x9aa8470c, BRF_GRA },	     //  3	Characters
-	{ "db03.2e",       0x20000, 0x3324e43d, BRF_GRA },	     //  4
-	{ "db04.1g",       0x20000, 0xc0c5b6c2, BRF_GRA },	     //  5
-	{ "db05.2g",       0x20000, 0xd2ab25f2, BRF_GRA },	     //  6
+	{ "db_02.1e",      0x20000, 0x9aa8470c, BRF_GRA },	     //  3	Characters
+	{ "db_03.2e",      0x20000, 0x3324e43d, BRF_GRA },	     //  4
+	{ "db_04.1g",      0x20000, 0xc0c5b6c2, BRF_GRA },	     //  5
+	{ "db_05.2g",      0x20000, 0xd2ab25f2, BRF_GRA },	     //  6
 	
-	{ "db10.2k",       0x20000, 0x9e70f7ae, BRF_GRA },	     //  7	Sprites
-	{ "db09.1k",       0x20000, 0x2d9263f7, BRF_GRA },	     //  8
+	{ "db_10.2k",      0x20000, 0x9e70f7ae, BRF_GRA },	     //  7	Sprites
+	{ "db_09.1k",      0x20000, 0x2d9263f7, BRF_GRA },	     //  8
 	
-	{ "db01.1d",       0x20000, 0x62fa6b81, BRF_SND },	     //  9	Samples
+	{ "db_01.1d",      0x20000, 0x62fa6b81, BRF_SND },	     //  9	Samples
 };
 
 STD_ROM_PICK(Dokaben)
 STD_ROM_FN(Dokaben)
+
+static struct BurnRomInfo Dokaben2RomDesc[] = {
+	{ "d2_06.11h",     0x08000, 0x9adcc38c, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
+	{ "d2_07.13h",     0x20000, 0x43076e32, BRF_ESS | BRF_PRG }, //	 1
+	{ "d2_08.14h",     0x20000, 0xcb9deb7a, BRF_ESS | BRF_PRG }, //	 2
+	
+	{ "d2_02.1e",      0x20000, 0x5dd7b941, BRF_GRA },	     //  3	Characters
+	{ "d2_03.2e",      0x20000, 0xb615e696, BRF_GRA },	     //  4
+	{ "d2_04.1g",      0x20000, 0x56b35605, BRF_GRA },	     //  5
+	{ "d2_05.2g",      0x20000, 0xce98ff74, BRF_GRA },	     //  6
+	
+	{ "d2_10.2k",      0x20000, 0x9b9bfb5f, BRF_GRA },	     //  7	Sprites
+	{ "d2_09.1k",      0x20000, 0x84de2e1d, BRF_GRA },	     //  8
+	
+	{ "db_01.1d",      0x20000, 0x62fa6b81, BRF_SND },	     //  9	Samples
+};
+
+STD_ROM_PICK(Dokaben2)
+STD_ROM_FN(Dokaben2)
 
 static struct BurnRomInfo PangRomDesc[] = {
 	{ "pwe_06.11h",    0x08000, 0x68be52cd, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
@@ -653,15 +678,15 @@ static struct BurnRomInfo PompingwRomDesc[] = {
 	{ "pwj_06.11h",    0x08000, 0x4a0a6426, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
 	{ "pwj_07.13h",    0x20000, 0xa9402420, BRF_ESS | BRF_PRG }, //	 1
 	
-	{ "pw_02.1e",      0x20000, 0x4b5992e4, BRF_GRA },	     //  2	Characters
-	{ "pw_03.2e",      0x20000, 0x79a8ed08, BRF_GRA },	     //  3
+	{ "pwj_02.1e",     0x20000, 0x4b5992e4, BRF_GRA },	     //  2	Characters
+	{ "pwj_03.2e",     0x20000, 0x79a8ed08, BRF_GRA },	     //  3
 	{ "pwj_04.1g",     0x20000, 0x01e49081, BRF_GRA },	     //  4
-	{ "pw_05.2g",      0x20000, 0x2fb3db6c, BRF_GRA },	     //  5
+	{ "pwj_05.2g",     0x20000, 0x2fb3db6c, BRF_GRA },	     //  5
 	
-	{ "pw_10.2k",      0x20000, 0xfdba4f6e, BRF_GRA },	     //  6	Sprites
-	{ "pw_9.1k",       0x20000, 0x39f47a63, BRF_GRA },	     //  7
+	{ "pwj_10.2k",     0x20000, 0x83a81c02, BRF_GRA },	     //  6	Sprites
+	{ "pwj_9.1k",      0x20000, 0x6b628232, BRF_GRA },	     //  7
 	
-	{ "pw_01.1d",       0x20000, 0xc52e5b8e, BRF_SND },	     //  8	Samples
+	{ "pwj_01.1d",     0x20000, 0xc52e5b8e, BRF_SND },	     //  8	Samples
 };
 
 STD_ROM_PICK(Pompingw)
@@ -897,41 +922,62 @@ STD_ROM_PICK(Mstworld)
 STD_ROM_FN(Mstworld)
 
 static struct BurnRomInfo MarukinRomDesc[] = {
-	{ "mg3-01.9d",     0x08000, 0x04357973, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
-	{ "mg3-02.10d",    0x20000, 0x50d08da0, BRF_ESS | BRF_PRG }, //	 1
-	
-	{ "mg3-a.3k",      0x80000, 0x420f1de7, BRF_GRA },	     //  2	Characters
-	{ "mg3-b.4k",      0x80000, 0xd8de13fa, BRF_GRA },	     //  3
-	{ "mg3-c.6k",      0x80000, 0xfbeb66e8, BRF_GRA },	     //  4
-	{ "mg3-d.7k",      0x80000, 0x8f6bd831, BRF_GRA },	     //  5
-	
-	{ "mg3-05.2g",     0x20000, 0x7a738d2d, BRF_GRA },	     //  6	Sprites
-	{ "mg3-04.1g",     0x20000, 0x56f30515, BRF_GRA },	     //  7
-	
-	{ "mg3-e.1d",      0x80000, 0x106c2fa9, BRF_SND },	     //  8	Samples
+	{ "mg3-01b.9d",		0x08000, 0x529d4389, BRF_ESS | BRF_PRG }, //  0 Z80 #1 Program Code
+	{ "mg3-02b.10d",	0x20000, 0xe8a8f14e, BRF_ESS | BRF_PRG }, //  1
+
+	{ "mg3-a.3k",		0x80000, 0x420f1de7, BRF_GRA },           //  2 Characters
+	{ "mg3-b.4k",		0x80000, 0xd8de13fa, BRF_GRA },           //  3
+	{ "mg3-c.6k",		0x80000, 0xfbeb66e8, BRF_GRA },           //  4
+	{ "mg3-d.7k",		0x80000, 0x8f6bd831, BRF_GRA },           //  5
+
+	{ "mg3-05.2g",		0x20000, 0x7a738d2d, BRF_GRA },           //  6 Sprites
+	{ "mg3-04.1g",		0x20000, 0x56f30515, BRF_GRA },           //  7
+
+	{ "mg3-e.1d",		0x80000, 0x106c2fa9, BRF_SND },           //  8 Samples / banked
+
+	{ "mj3c.10f",		0x00117, 0xf59ba8d2, BRF_OPT },           //  9 PLDs / pal16l8bcn
+	{ "mj3p.14k",		0x00117, 0x2c87be87, BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(Marukin)
 STD_ROM_FN(Marukin)
 
+static struct BurnRomInfo MarukinaRomDesc[] = {
+	{ "mg3-01.9d",		0x08000, 0x04357973, BRF_ESS | BRF_PRG }, //  0 Z80 #1 Program Code
+	{ "mg3-02.10d",		0x20000, 0x50d08da0, BRF_ESS | BRF_PRG }, //  1
+	
+	{ "mg3-a.3k",		0x80000, 0x420f1de7, BRF_GRA },           //  2 Characters
+	{ "mg3-b.4k",		0x80000, 0xd8de13fa, BRF_GRA },           //  3
+	{ "mg3-c.6k",		0x80000, 0xfbeb66e8, BRF_GRA },           //  4
+	{ "mg3-d.7k",		0x80000, 0x8f6bd831, BRF_GRA },           //  5
+	
+	{ "mg3-05.2g",		0x20000, 0x7a738d2d, BRF_GRA },           //  6 Sprites
+	{ "mg3-04.1g",		0x20000, 0x56f30515, BRF_GRA },           //  7
+	
+	{ "mg3-e.1d",		0x80000, 0x106c2fa9, BRF_SND },           //  8 Samples
+};
+
+STD_ROM_PICK(Marukina)
+STD_ROM_FN(Marukina)
+
 static struct BurnRomInfo Qtono1RomDesc[] = {
-	{ "q3-05.rom",     0x08000, 0x1dd0a344, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
-	{ "q3-06.rom",     0x20000, 0xbd6a2110, BRF_ESS | BRF_PRG }, //	 1
-	{ "q3-07.rom",     0x20000, 0x61e53c4f, BRF_ESS | BRF_PRG }, //	 2
+	{ "q3-05.rom",		0x08000, 0x1dd0a344, BRF_ESS | BRF_PRG }, //  0	Z80 #1 Program Code
+	{ "q3-06.rom",		0x20000, 0xbd6a2110, BRF_ESS | BRF_PRG }, //  1
+	{ "q3-07.rom",		0x20000, 0x61e53c4f, BRF_ESS | BRF_PRG }, //  2
 	
-	{ "q3-08.rom",     0x20000, 0x1533b978, BRF_GRA },	     //  3	Characters
-	{ "q3-09.rom",     0x20000, 0xa32db2f2, BRF_GRA },	     //  4
-	{ "q3-10.rom",     0x20000, 0xed681aa8, BRF_GRA },	     //  5
-	{ "q3-11.rom",     0x20000, 0x38b2fd10, BRF_GRA },	     //  6
-	{ "q3-18.rom",     0x20000, 0x9e4292ac, BRF_GRA },	     //  7
-	{ "q3-19.rom",     0x20000, 0xb7f6d40f, BRF_GRA },	     //  8
-	{ "q3-20.rom",     0x20000, 0x6cd7f38d, BRF_GRA },	     //  9
-	{ "q3-21.rom",     0x20000, 0xb4aa6b4b, BRF_GRA },	     //  10
+	{ "q3-08.rom",		0x20000, 0x1533b978, BRF_GRA },           //  3	Characters
+	{ "q3-09.rom",		0x20000, 0xa32db2f2, BRF_GRA },           //  4
+	{ "q3-10.rom",		0x20000, 0xed681aa8, BRF_GRA },           //  5
+	{ "q3-11.rom",		0x20000, 0x38b2fd10, BRF_GRA },           //  6
+	{ "q3-18.rom",		0x20000, 0x9e4292ac, BRF_GRA },           //  7
+	{ "q3-19.rom",		0x20000, 0xb7f6d40f, BRF_GRA },           //  8
+	{ "q3-20.rom",		0x20000, 0x6cd7f38d, BRF_GRA },           //  9
+	{ "q3-21.rom",		0x20000, 0xb4aa6b4b, BRF_GRA },           // 10
 	
-	{ "q3-16.rom",     0x20000, 0x863d6836, BRF_GRA },	     //  11	Sprites
-	{ "q3-17.rom",     0x20000, 0x459bf59c, BRF_GRA },	     //  12
+	{ "q3-16.rom",		0x20000, 0x863d6836, BRF_GRA },           // 11	Sprites
+	{ "q3-17.rom",		0x20000, 0x459bf59c, BRF_GRA },           // 12
 	
-	{ "q3-01.rom",     0x20000, 0x6c1be591, BRF_SND },	     //  13	Samples
+	{ "q3-01.rom",		0x20000, 0x6c1be591, BRF_SND },           // 13	Samples
 };
 
 STD_ROM_PICK(Qtono1)
@@ -1209,6 +1255,8 @@ static INT32 DrvDoReset()
 	DrvVideoBank = 0;
 	DrvDialSelected = 0;
 
+	nExtraCycles[0] = nExtraCycles[1] = 0;
+
 	HiscoreReset();
 
 	return 0;
@@ -1232,6 +1280,8 @@ static INT32 MstworldDoReset()
 	DrvPaletteRamBank = 0;
 	DrvVideoBank = 0;
 	DrvSoundLatch = 0;
+
+	nExtraCycles[0] = nExtraCycles[1] = 0;
 
 	HiscoreReset();
 
@@ -2552,7 +2602,18 @@ static INT32 Qtono1Init()
 	qtono1_decode();
 	
 	MitchellMachineInit();
-	
+
+	if (!EEPROMAvailable()) {
+		// the game doesn't work properly until p2 start is pressed ?
+		// setting the default eeprom get around this issue
+		const UINT8 qtono1_default_eeprom[32]=
+		{
+			0x50,0x41,0x53,0x53,0x00,0x00,0x02,0x00,0x1f,0x0d,0xff,0x00,0x00,0x00,0x00,0x00,
+			0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		};
+		EEPROMFill(qtono1_default_eeprom, 0, 32);
+	}
+
 	DrvDoReset();
 
 	return 0;
@@ -2917,34 +2978,28 @@ static INT32 DrvDraw()
 
 static INT32 DrvFrame()
 {
-	INT32 nInterleave = 256;
-	INT32 nSoundBufferPos = 0;
-
 	if (DrvReset) DrvDoReset();
 
 	DrvMakeInputs();
 
-	nCyclesTotal[0] = 8000000 / 57;
-	nCyclesDone[0] = 0;
-	
-	//DrvInput5Toggle = 0;
-	
-	ZetNewFrame();
-	
-	for (INT32 i = 0; i < nInterleave; i++) {
-		INT32 nCurrentCPU;
+	INT32 nInterleave = 256;
+	INT32 nCyclesTotal[1] = { 8000000 / 57 };
+	INT32 nCyclesDone[1] = { nExtraCycles[0] };
+	INT32 nSoundBufferPos = 0;
 
-		// Run Z80 #1
-		nCurrentCPU = 0;
-		ZetOpen(nCurrentCPU);
-		nCyclesSegment = nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesDone[nCurrentCPU] += ZetRun(nCyclesSegment);
+	//DrvInput5Toggle = 0;
+
+	ZetNewFrame();
+
+	for (INT32 i = 0; i < nInterleave; i++) {
+		ZetOpen(0);
+		CPU_RUN(0, Zet);
 		if (i == 0 || i == 240) {
 			ZetSetIRQLine(0, CPU_IRQSTATUS_HOLD);
 			DrvInput5Toggle = (i == 240);
 		}
 		ZetClose();
-		
+
 		if (pBurnSoundOut) {
 			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
 			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
@@ -2953,7 +3008,9 @@ static INT32 DrvFrame()
 			nSoundBufferPos += nSegmentLength;
 		}
 	}
-	
+
+	nExtraCycles[0] = nCyclesDone[0] - nCyclesTotal[0];
+
 	if (pBurnSoundOut) {
 		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
 		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
@@ -2971,39 +3028,29 @@ static INT32 DrvFrame()
 
 static INT32 MstworldFrame()
 {
-	INT32 nInterleave = 10;
-	INT32 nSoundBufferPos = 0;
-
 	if (DrvReset) MstworldDoReset();
 
 	DrvMakeInputs();
 
-	nCyclesTotal[0] = 24000000 / 60;
-	nCyclesTotal[1] = 6000000 / 60;
-	nCyclesDone[0] = nCyclesDone[1] = 0;
-	
-	ZetNewFrame();
-	
-	for (INT32 i = 0; i < nInterleave; i++) {
-		INT32 nCurrentCPU, nNext;
+	INT32 nInterleave = 10;
+	INT32 nCyclesDone[2] = { nExtraCycles[0], nExtraCycles[1] };
+	INT32 nCyclesTotal[2] = { 24000000 / 60, 6000000 / 60 };
+	INT32 nSoundBufferPos = 0;
 
-		nCurrentCPU = 0;
-		ZetOpen(nCurrentCPU);
-		nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += ZetRun(nCyclesSegment);
+	ZetNewFrame();
+
+	for (INT32 i = 0; i < nInterleave; i++) {
+		ZetOpen(0);
+		CPU_RUN(0, Zet);
 		if (i == 9) {
 			ZetSetIRQLine(0, CPU_IRQSTATUS_HOLD);
 		}
 		ZetClose();
-		
-		nCurrentCPU = 1;
-		ZetOpen(nCurrentCPU);
-		nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		nCyclesDone[nCurrentCPU] += ZetRun(nCyclesSegment);
+
+		ZetOpen(1);
+		CPU_RUN(1, Zet);
 		ZetClose();
-		
+
 		if (pBurnSoundOut) {
 			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
 			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
@@ -3011,7 +3058,10 @@ static INT32 MstworldFrame()
 			nSoundBufferPos += nSegmentLength;
 		}
 	}
-	
+
+	nExtraCycles[0] = nCyclesDone[0] - nCyclesTotal[0];
+	nExtraCycles[1] = nCyclesDone[1] - nCyclesTotal[1];
+
 	if (pBurnSoundOut) {
 		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
 		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
@@ -3057,8 +3107,6 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		
 		if (DrvHasEEPROM) EEPROMScan(nAction, pnMin);
 		
-		SCAN_VAR(nCyclesDone[0]);
-		SCAN_VAR(nCyclesDone[1]);
 		SCAN_VAR(DrvRomBank);
 		SCAN_VAR(DrvPaletteRamBank);
 		SCAN_VAR(DrvOkiBank);
@@ -3066,11 +3114,11 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(DrvVideoBank);
 		SCAN_VAR(DrvInput5Toggle);
 		SCAN_VAR(DrvDialSelected);
-		SCAN_VAR(DrvDial[0]);
-		SCAN_VAR(DrvDial[1]);
+		SCAN_VAR(DrvDial);
 		SCAN_VAR(DrvDial1);
 		SCAN_VAR(DrvDial2);
 		SCAN_VAR(DrvMahjongKeyMatrix);
+		SCAN_VAR(nExtraCycles);
 	}
 	
 	if (nAction & ACB_WRITE) {
@@ -3109,14 +3157,13 @@ static INT32 MstworldScan(INT32 nAction, INT32 *pnMin)
 		ZetScan(nAction);
 		MSM6295Scan(nAction, pnMin);
 		
-		SCAN_VAR(nCyclesDone[0]);
-		SCAN_VAR(nCyclesDone[1]);
 		SCAN_VAR(DrvRomBank);
 		SCAN_VAR(DrvPaletteRamBank);
 		SCAN_VAR(DrvOkiBank);
 		SCAN_VAR(DrvFlipScreen);
 		SCAN_VAR(DrvVideoBank);
 		SCAN_VAR(DrvSoundLatch);
+		SCAN_VAR(nExtraCycles);
 	}
 	
 	if (nAction & ACB_WRITE) {
@@ -3124,7 +3171,7 @@ static INT32 MstworldScan(INT32 nAction, INT32 *pnMin)
 		ZetMapArea(0x8000, 0xbfff, 0, DrvZ80Rom + 0x10000 + (DrvRomBank * 0x4000));
 		ZetMapArea(0x8000, 0xbfff, 2, DrvZ80Code + 0x10000 + (DrvRomBank * 0x4000), DrvZ80Rom + 0x10000 + (DrvRomBank * 0x4000));
 		ZetClose();
-		
+
 		oki_bankswitch(DrvOkiBank);
 	}
 
@@ -3188,6 +3235,16 @@ struct BurnDriver BurnDrvPkladiesla = {
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAHJONG, 0,
 	NULL, PkladieslaRomInfo, PkladieslaRomName, NULL, NULL, NULL, NULL, PkladiesInputInfo, NULL,
 	PkladiesInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
+	NULL, 0x800, 384, 240, 4, 3
+};
+
+struct BurnDriver BurnDrvDokaben2 = {
+	"dokaben2", NULL, NULL, NULL, "1989",
+	"Dokaben 2 (Japan)\0", NULL, "Capcom", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SPORTSMISC, 0,
+	NULL, Dokaben2RomInfo, Dokaben2RomName, NULL, NULL, NULL, NULL, PangInputInfo, NULL,
+	DokabenInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x800, 384, 240, 4, 3
 };
 
@@ -3282,7 +3339,7 @@ struct BurnDriver BurnDrvPangb2 = {
 };
 
 struct BurnDriver BurnDrvCworld = {
-	"cworld", NULL, NULL, NULL, "1990",
+	"cworld", NULL, NULL, NULL, "1989",
 	"Capcom World (Japan)\0", NULL, "Capcom", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_QUIZ, 0,
@@ -3335,7 +3392,7 @@ struct BurnDriver BurnDrvMstworld = {
 	"mstworld", NULL, NULL, NULL, "1994",
 	"Monsters World (bootleg of Super Pang)\0", NULL, "bootleg (TCH)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, MstworldRomInfo, MstworldRomName, NULL, NULL, NULL, NULL, MstworldInputInfo, MstworldDIPInfo,
 	MstworldInit, CommonExit, MstworldFrame, DrvDraw, MstworldScan,
 	NULL, 0x800, 384, 240, 4, 3
@@ -3343,10 +3400,20 @@ struct BurnDriver BurnDrvMstworld = {
 
 struct BurnDriver BurnDrvMarukin = {
 	"marukin", NULL, NULL, NULL, "1990",
-	"Super Marukin-Ban (Japan 901017)\0", NULL, "Yuga", "Miscellaneous",
+	"Super Marukin-Ban (Japan 911128)\0", NULL, "Yuga", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
 	NULL, MarukinRomInfo, MarukinRomName, NULL, NULL, NULL, NULL, MarukinInputInfo, NULL,
+	MarukinInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
+	NULL, 0x800, 384, 240, 4, 3
+};
+
+struct BurnDriver BurnDrvMarukina = {
+	"marukina", "marukin", NULL, NULL, "1990",
+	"Super Marukin-Ban (Japan 901017)\0", NULL, "Yuga", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAHJONG, 0,
+	NULL, MarukinaRomInfo, MarukinaRomName, NULL, NULL, NULL, NULL, MarukinInputInfo, NULL,
 	MarukinInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	NULL, 0x800, 384, 240, 4, 3
 };

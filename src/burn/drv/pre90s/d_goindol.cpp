@@ -1,4 +1,4 @@
-// FB Alpha Goindol driver module
+// FB Neo Goindol driver module
 // Based on MAME driver by Jarek Parchanski
 
 #include "tiles_generic.h"
@@ -261,11 +261,16 @@ static INT32 DrvDoReset()
 	BurnYM2203Reset();
 	ZetClose();
 
+	HiscoreReset();
+
+
 	scrollx = 0;
 	scrolly = 0;
 	soundlatch = 0;
 	prot_toggle = 0;
 	PaddleX = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -326,12 +331,7 @@ static INT32 DrvGfxDecode()
 
 static INT32 DrvInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvZ80ROM0 + 0x00000,  0, 1)) return 1;
@@ -403,7 +403,7 @@ static INT32 DrvExit()
 
 	ZetExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -590,7 +590,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 }
 
 
-// Goindol (World)
+// Goindol (SunA, World)
 
 static struct BurnRomInfo goindolRomDesc[] = {
 	{ "r1w",			0x8000, 0xdf77c502, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 #0 Code
@@ -646,16 +646,16 @@ static INT32 GoindolInit()
 
 struct BurnDriver BurnDrvGoindol = {
 	"goindol", NULL, NULL, NULL, "1987",
-	"Goindol (World)\0", NULL, "SunA", "Miscellaneous",
+	"Goindol (SunA, World)\0", NULL, "SunA", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
 	NULL, goindolRomInfo, goindolRomName, NULL, NULL, NULL, NULL, GoindolInputInfo, GoindolDIPInfo,
 	GoindolInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	224, 256, 3, 4
 };
 
 
-// Goindol (US)
+// Goindol (SunA, US)
 
 static struct BurnRomInfo goindoluRomDesc[] = {
 	{ "r1",				0x8000, 0x3111c61b, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 #0 Code
@@ -682,16 +682,16 @@ STD_ROM_FN(goindolu)
 
 struct BurnDriver BurnDrvGoindolu = {
 	"goindolu", "goindol", NULL, NULL, "1987",
-	"Goindol (US)\0", NULL, "SunA", "Miscellaneous",
+	"Goindol (SunA, US)\0", NULL, "SunA", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
 	NULL, goindoluRomInfo, goindoluRomName, NULL, NULL, NULL, NULL, GoindolInputInfo, GoindolDIPInfo,
 	GoindolInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	224, 256, 3, 4
 };
 
 
-// Goindol (Japan)
+// Goindol (SunA, Japan)
 
 static struct BurnRomInfo goindoljRomDesc[] = {
 	{ "r1j",			0x8000, 0xdde33ad3, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 #0 Code
@@ -718,9 +718,9 @@ STD_ROM_FN(goindolj)
 
 struct BurnDriver BurnDrvGoindolj = {
 	"goindolj", "goindol", NULL, NULL, "1987",
-	"Goindol (Japan)\0", NULL, "SunA", "Miscellaneous",
+	"Goindol (SunA, Japan)\0", NULL, "SunA", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
 	NULL, goindoljRomInfo, goindoljRomName, NULL, NULL, NULL, NULL, GoindolInputInfo, GoindolDIPInfo,
 	GoindolInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	224, 256, 3, 4
@@ -756,7 +756,7 @@ struct BurnDriver BurnDrvHomo = {
 	"homo", "goindol", NULL, NULL, "1987",
 	"Homo\0", NULL, "bootleg", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
 	NULL, homoRomInfo, homoRomName, NULL, NULL, NULL, NULL, GoindolInputInfo, GoindolDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	224, 256, 3, 4

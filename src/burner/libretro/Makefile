@@ -17,6 +17,7 @@ USE_EXPERIMENTAL_FLAGS = 0
 USE_CYCLONE = 0
 HAVE_UWP = 0
 SPLIT_UP_LINK ?= 0
+REGEN_HEADERS ?= 0
 
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
@@ -34,6 +35,9 @@ ifeq ($(platform),)
 	else ifneq ($(findstring Darwin,$(shell uname -a)),)
 		platform = osx
 		arch = intel
+		ifeq ($(shell uname -p),arm)
+			arch = arm
+		endif
 		ifeq ($(shell uname -p),powerpc)
 			arch = ppc
 		endif
@@ -52,21 +56,14 @@ endif
 MAIN_FBNEO_DIR	:= ../..
 VERSION_SCRIPT	:= $(MAIN_FBNEO_DIR)/burner/libretro/link.T
 
-INLINE_LIMIT=-finline-limit=1200 -fcheck-new
-
-# GCC < 4.9 and clang does not support -fno-tree-loop-vectorize
-ifeq ($(shell expr `gcc -dumpversion | cut -f1` \< 4.9), 1)
-	INLINE_LIMIT=
-endif
-ifneq (, $(findstring clang,$(CC)))
-	INLINE_LIMIT=
-endif
-ifneq (, $(findstring clang,$(CXX)))
-	INLINE_LIMIT=
-endif
-
 # TARGET
-TARGET_NAME := fbneo
+ifeq ($(SUBSET),)
+	TARGET_NAME := fbneo
+	INCLUDED_MAKEFILE = Makefile.all
+else
+	TARGET_NAME := fbneo_$(SUBSET)
+	INCLUDED_MAKEFILE = Makefile.$(SUBSET)
+endif
 
 # Unix
 ifneq (,$(findstring unix,$(platform)))
@@ -74,16 +71,27 @@ ifneq (,$(findstring unix,$(platform)))
 	fpic := -fPIC
 	SHARED := -shared -Wl,-no-undefined -Wl,--version-script=$(VERSION_SCRIPT)
 	ENDIANNESS_DEFINES := -DLSB_FIRST
+	LDFLAGS += -lpthread
 
 	# Raspberry Pi
-	ifneq (,$(findstring rpi2,$(platform)))
+	ifneq (,$(findstring rpi1,$(platform)))
+		PLATFORM_DEFINES := -marm -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=hard
+		HAVE_NEON = 0
+		USE_CYCLONE = 1
+	else ifneq (,$(findstring rpi2,$(platform)))
 		PLATFORM_DEFINES := -marm -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
 		HAVE_NEON = 1
 		USE_CYCLONE = 1
 	else ifneq (,$(findstring rpi3,$(platform)))
-		PLATFORM_DEFINES := -marm -mcpu=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard
-		HAVE_NEON = 1
-		USE_CYCLONE = 1
+		ifneq (,$(findstring rpi3_64,$(platform)))
+			PLATFORM_DEFINES := -march=armv8-a+crc+simd -mtune=cortex-a53
+		else
+			PLATFORM_DEFINES := -marm -mcpu=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard
+			HAVE_NEON = 1
+			USE_CYCLONE = 1
+		endif
+	else ifneq (,$(findstring rpi4_64,$(platform)))
+		PLATFORM_DEFINES := -march=armv8-a+crc+simd -mtune=cortex-a72
 	endif
 
 	# Solaris
@@ -111,7 +119,7 @@ else ifeq ($(platform), osx)
 	TARGET := $(TARGET_NAME)_libretro.dylib
 	fpic := -fPIC
 	SHARED := -dynamiclib
-	ifeq ($(arch),ppc)
+	ifeq ($(shell uname -p),powerpc)
 		ENDIANNESS_DEFINES =  -DWORDS_BIGENDIAN
 	else
 		ENDIANNESS_DEFINES := -DLSB_FIRST
@@ -121,7 +129,14 @@ else ifeq ($(platform), osx)
 	ifeq ($(OSX_LT_MAVERICKS),"YES")
 		fpic += -mmacosx-version-min=10.5
 	endif
-	ifndef ($(NOUNIVERSAL))
+   ifeq ($(CROSS_COMPILE),1)
+		TARGET_RULE   = -target $(LIBRETRO_APPLE_PLATFORM) -isysroot $(LIBRETRO_APPLE_ISYSROOT)
+		CFLAGS   += $(TARGET_RULE)
+		CPPFLAGS += $(TARGET_RULE)
+		CXXFLAGS += $(TARGET_RULE)
+		LDFLAGS  += $(TARGET_RULE)
+   endif
+	ifeq ($(UNIVERSAL),1)
 		CFLAGS += $(ARCHFLAGS)
 		CXXFLAGS += $(ARCHFLAGS)
 		LDFLAGS += $(ARCHFLAGS)
@@ -145,19 +160,18 @@ else ifneq (,$(findstring ios,$(platform)))
 		CXX = c++ -arch armv7 -isysroot $(IOSSDK)
 	endif
 	ENDIANNESS_DEFINES := -DLSB_FIRST
+        MINVERSION :=
 	ifeq ($(platform),$(filter $(platform),ios9 ios-arm64))
 		CFLAGS += -DIOS9
 		CXXFLAGS += -DIOS9
-		CC += -miphoneos-version-min=8.0
-		CXX +=  -miphoneos-version-min=8.0
-		CFLAGS += -miphoneos-version-min=8.0
+                MINVERSION = -miphoneos-version-min=8.0
 	else
 		CFLAGS += -DIOS
 		CXXFLAGS += -DIOS
-		CC += -miphoneos-version-min=5.0
-		CXX +=  -miphoneos-version-min=5.0
-		CFLAGS += -miphoneos-version-min=5.0
+                MINVERSION = -miphoneos-version-min=5.0
 	endif
+        CFLAGS += $(MINVERSION)
+        CXXFLAGS += $(MINVERSION)
 
 else ifeq ($(platform), tvos-arm64)
 	TARGET := $(TARGET_NAME)_libretro_tvos.dylib
@@ -169,6 +183,8 @@ else ifeq ($(platform), tvos-arm64)
 	ENDIANNESS_DEFINES := -DLSB_FIRST
 	CFLAGS += -DIOS9
 	CXXFLAGS += -DIOS9
+	CC = cc -arch arm64 -isysroot $(IOSSDK)
+	CXX = c++ -arch arm64 -isysroot $(IOSSDK)
 
 # Theos iOS
 else ifeq ($(platform), theos_ios)
@@ -196,34 +212,21 @@ else ifeq ($(platform), qnx)
 	HAVE_NEON = 1
 	USE_CYCLONE = 1
 
-# PS3
-else ifneq (,$(filter $(platform), ps3 sncps3 psl1ght))
-	TARGET := $(TARGET_NAME)_libretro_ps3.a
+# Lightweight PS3 Homebrew SDK
+else ifneq (,$(filter $(platform), ps3 psl1ght))
+	TARGET := $(TARGET_NAME)_libretro_$(platform).a
+	PLATFORM_DEFINES += -D__PS3__
+	ifeq ($(platform), psl1ght)
+       PLATFORM_DEFINES += -D__PSL1GHT__
+	endif
 	ENDIANNESS_DEFINES =  -DWORDS_BIGENDIAN
-	PLATFORM_DEFINES += -D__CELLOS_LV2__
 	EXTERNAL_ZLIB = 1
 	STATIC_LINKING = 1
+	INCLUDE_7Z_SUPPORT = 0
 
-	# sncps3
-	ifneq (,$(findstring sncps3,$(platform)))
-		PLATFORM_DEFINES += -DSN_TARGET_PS3
-		CXX = $(CELL_SDK)/host-win32/sn/bin/ps3ppusnc.exe
-		CC = $(CELL_SDK)/host-win32/sn/bin/ps3ppusnc.exe
-		AR = $(CELL_SDK)/host-win32/sn/bin/ps3snarl.exe
-
-	# PS3
-	else ifneq (,$(findstring ps3,$(platform)))
-		CC = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-gcc.exe
-		CXX = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-g++.exe
-		AR = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-ar.exe
-
-	# Lightweight PS3 Homebrew SDK
-	else ifneq (,$(findstring psl1ght,$(platform)))
-		TARGET := $(TARGET_NAME)_libretro_$(platform).a
-		CC = $(PS3DEV)/ppu/bin/ppu-gcc$(EXE_EXT)
-		CXX = $(PS3DEV)/ppu/bin/ppu-g++$(EXE_EXT)
-		AR = $(PS3DEV)/ppu/bin/ppu-ar$(EXE_EXT)
-	endif
+	CC = $(PS3DEV)/ppu/bin/ppu-$(COMMONLV)gcc$(EXE_EXT)
+	CXX = $(PS3DEV)/ppu/bin/ppu-$(COMMONLV)g++$(EXE_EXT)
+	AR = $(PS3DEV)/ppu/bin/ppu-$(COMMONLV)ar$(EXE_EXT)
 
 # Vita
 else ifeq ($(platform), vita)
@@ -235,7 +238,7 @@ else ifeq ($(platform), vita)
 	PLATFORM_DEFINES += -DVITA
 	ENDIANNESS_DEFINES := -DLSB_FIRST
 	CFLAGS += -mfloat-abi=hard -fsingle-precision-constant
-	CXXFLAGS += -mfloat-abi=hard -fsingle-precision-constant -fpermissive -fno-rtti -fno-exceptions
+	CXXFLAGS += -mfloat-abi=hard -fsingle-precision-constant -fpermissive -fno-rtti
 	EXTERNAL_ZLIB = 1
 	STATIC_LINKING = 1
 	USE_CYCLONE = 1
@@ -249,11 +252,10 @@ else ifeq ($(platform), ctr)
 	PLATFORM_DEFINES += -D_3DS
 	ENDIANNESS_DEFINES := -DLSB_FIRST
 	CFLAGS += -march=armv6k -mtune=mpcore -mfloat-abi=hard
-	CXXFLAGS += -march=armv6k -mtune=mpcore -mfloat-abi=hard -fpermissive -fno-rtti -fno-exceptions
+	CXXFLAGS += -march=armv6k -mtune=mpcore -mfloat-abi=hard -fpermissive -fno-rtti
 	EXTERNAL_ZLIB = 1
 	STATIC_LINKING = 1
 	USE_CYCLONE = 1
-	INCLUDE_7Z_SUPPORT = 0
 
 # Xbox 360
 else ifeq ($(platform), xenon)
@@ -278,6 +280,7 @@ else ifeq ($(platform), switch)
 # Nintendo Switch (libnx)
 else ifeq ($(platform), libnx)
 	include $(DEVKITPRO)/libnx/switch_rules
+	AR="$(DEVKITPRO)/devkitA64/bin/aarch64-none-elf-ar$(BINARY_EXT)"
 	EXT=a
 	TARGET := $(TARGET_NAME)_libretro_$(platform).$(EXT)
 	DEFINES := -DSWITCH=1 -U__linux__ -U__linux -DRARCH_INTERNAL
@@ -285,10 +288,35 @@ else ifeq ($(platform), libnx)
 		-fPIE -I$(LIBNX)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec -Wl,--allow-multiple-definition -specs=$(LIBNX)/switch.specs
 	CFLAGS += $(INCDIRS)
 	CFLAGS	+=	$(INCLUDE)  -D__SWITCH__ -DHAVE_LIBNX
-	CXXFLAGS := $(ASFLAGS) $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
+	CXXFLAGS := $(ASFLAGS) $(CFLAGS) -fno-rtti -std=gnu++11
 	CFLAGS += -std=gnu11
 	STATIC_LINKING = 1
+	# 2021-05-18 : disabling 7z again for libnx, it seems the lib version linked to RA is old
+	INCLUDE_7Z_SUPPORT = 0
 	ENDIANNESS_DEFINES := -DLSB_FIRST
+
+# Funkey S
+else ifeq ($(platform), funkey)
+	TARGET := $(TARGET_NAME)_libretro.so
+	fpic := -fPIC
+	SHARED := -shared -Wl,-no-undefined -Wl,--version-script=$(VERSION_SCRIPT)
+	PLATFORM_FLAGS = -marm -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
+	USE_EXPERIMENTAL_FLAGS = 1
+	HAVE_NEON = 1
+	USE_CYCLONE = 1
+	ARCH = arm
+	ENDIANNESS_DEFINES := -DLSB_FIRST
+	ifeq ($(shell echo `$(CC) -dumpversion` "< 4.9" | bc -l), 1)
+		PLATFORM_FLAGS += -march=armv7-a
+	else
+		PLATFORM_FLAGS += -march=armv7ve
+		# If gcc is 5.0 or later
+		ifeq ($(shell echo `$(CC) -dumpversion` ">= 5" | bc -l), 1)
+			LDFLAGS += -static-libgcc -static-libstdc++
+		endif
+	endif
+	CFLAGS += $(PLATFORM_FLAGS)
+	CXXFLAGS += $(PLATFORM_FLAGS)
 
 # Classic Platforms ####################
 # Platform affix = classic_<ISA>_<µARCH>
@@ -343,7 +371,7 @@ else ifneq (,$(filter $(platform), ngc wii wiiu))
 	CXX = powerpc-eabi-g++$(EXE_EXT)
 	AR = powerpc-eabi-ar$(EXE_EXT)
 	ENDIANNESS_DEFINES =  -DWORDS_BIGENDIAN
-	PLATFORM_DEFINES := -U__INT32_TYPE__ -U __UINT32_TYPE__ -D__INT32_TYPE__=int -UPPC
+	PLATFORM_DEFINES := -ffunction-sections -fdata-sections -D__wiiu__ -D__wut__ -UPPC
 	EXTERNAL_ZLIB = 1
 	STATIC_LINKING = 1
 
@@ -354,24 +382,19 @@ else ifneq (,$(filter $(platform), ngc wii wiiu))
 	# Nintendo Wii
 	else ifneq (,$(findstring wii,$(platform)))
 		PLATFORM_DEFINES += -DGEKKO -DHW_RVL -mrvl -mcpu=750 -meabi -mhard-float
-		NO_MD = 1
-		NO_CAPCOM = 1
-		NO_NEOGEO = 1
-		NO_PCE = 1
 
 	# Nintendo Game Cube
 	else ifneq (,$(findstring ngc,$(platform)))
 		PLATFORM_DEFINES += -DGEKKO -DHW_DOL -mrvl -mcpu=750 -meabi -mhard-float
-		NO_MD = 1
-		NO_CAPCOM = 1
-		NO_NEOGEO = 1
-		NO_PCE = 1
 	endif
 
 # Emscripten
 else ifeq ($(platform), emscripten)
 	TARGET := $(TARGET_NAME)_libretro_$(platform).bc
-	ENDIANNESS_DEFINES := -DLSB_FIRST -DNO_UNALIGNED_MEM
+	ENDIANNESS_DEFINES := -DLSB_FIRST
+	INCLUDE_7Z_SUPPORT = 0
+	EXTERNAL_ZLIB = 1
+	STATIC_LINKING = 1
 
 # Windows MSVC 2017 all architectures
 else ifneq (,$(findstring windows_msvc2017,$(platform)))
@@ -477,10 +500,13 @@ else
 	SPLIT_UP_LINK = 1
 endif
 
+# some platforms (3ds, maybe others) are unable to find "main" entry symbol if you build with their sdk
+# so let's use standard compiler for header generation since this is cross-built anyway
 CC_SYSTEM = gcc
 CXX_SYSTEM = g++
 
 include Makefile.common
+include $(INCLUDED_MAKEFILE)
 
 FBNEO_CXXOBJ := $(SOURCES_CXX:.cpp=.o)
 FBNEO_COBJ := $(SOURCES_C:.c=.o)
@@ -510,18 +536,22 @@ ifeq ($(FASTMATH), 1)
 		# 2019-06-26 : 
 		# we got some evidence that -ffast-math is actually not safe for fbneo
 		# adding -frounding-math to fix arithmetic in neogeo_run.cpp, it might fix other stuff
+		# clang might need a minimum version for -frounding-math support
 		CFLAGS += -ffast-math -frounding-math
 		CXXFLAGS += -ffast-math -frounding-math
 	endif
 endif
 
 ifeq ($(USE_EXPERIMENTAL_FLAGS), 1)
-	EXPERIMENTAL_FLAGS = -flto=4 -fwhole-program -fuse-linker-plugin \
+	EXPERIMENTAL_FLAGS = -fwhole-program -fuse-linker-plugin \
 		-fdata-sections -ffunction-sections -Wl,--gc-sections \
 		-fno-stack-protector -fno-ident \
 		-falign-functions=1 -falign-jumps=1 -falign-loops=1 \
 		-fno-unwind-tables -fno-asynchronous-unwind-tables -fno-unroll-loops \
 		-fmerge-all-constants -fno-math-errno
+	ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"), 1)
+		EXPERIMENTAL_FLAGS += -flto=4
+	endif
 	CFLAGS += $(EXPERIMENTAL_FLAGS)
 	CXXFLAGS += $(EXPERIMENTAL_FLAGS)
 endif
@@ -546,6 +576,7 @@ ifeq ($(DEBUG), 1)
 	CXXFLAGS += -O0 -g -DFBNEO_DEBUG
 else
 	ifeq (,$(findstring msvc,$(platform)))
+		# sadly, we can't use -Os for memory constrained systems here, the performance impact is too big
 		CFLAGS += -O3 -DNDEBUG -fomit-frame-pointer
 		CXXFLAGS += -O3 -DNDEBUG -fomit-frame-pointer
 	else
@@ -559,10 +590,10 @@ CXXFLAGS += $(fpic) $(FBNEO_DEFINES)
 LDFLAGS += $(fpic)
 
 ifeq (,$(findstring msvc,$(platform)))
-	CFLAGS += -ffloat-store -fforce-addr $(INLINE_LIMIT)  \
+	CFLAGS += -fforce-addr  \
 		-Wall -Wno-long-long -Wno-sign-compare -Wno-uninitialized -Wno-unused \
 		-Wno-sequence-point -Wno-strict-aliasing
-	CXXFLAGS += -ffloat-store -fforce-addr $(INLINE_LIMIT) \
+	CXXFLAGS += -fforce-addr \
 		-Wall -W -Wshadow -Wno-long-long -Wno-write-strings \
 		-Wunknown-pragmas -Wundef -Wno-conversion -Wno-missing-braces -Wno-multichar \
 		-Wuninitialized -Wpointer-arith -Wno-inline -Wno-unused-value \
@@ -570,7 +601,17 @@ ifeq (,$(findstring msvc,$(platform)))
 
 	ifeq (,$(filter $(platform), ps3 sncps3))
 		CFLAGS += -Wno-write-strings -Wno-pedantic
-		CXXFLAGS += -Wno-write-strings -pedantic -Wno-address -Wno-unused-but-set-variable -Wno-narrowing -Wno-pedantic
+		CXXFLAGS += -Wno-write-strings -pedantic -Wno-address -Wno-narrowing -Wno-pedantic
+	endif
+endif
+
+# gcc specific flags
+ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"), 1)
+	CFLAGS += -ffloat-store
+	CXXFLAGS += -ffloat-store
+	ifeq ($(shell expr `$(CC) -dumpversion | cut -f1 -d.` \>= 5), 1)
+		CFLAGS += -finline-limit=1200 -fcheck-new
+		CXXFLAGS += -finline-limit=1200 -fcheck-new
 	endif
 endif
 
@@ -580,17 +621,16 @@ CTVMAKE_EXE = ctvmake$(EXE_EXT)
 PGM_SPRITE_CREATE_EXE = pgmspritecreate$(EXE_EXT)
 EXE_PREFIX = ./
 
-.PHONY: clean generate-files generate-files-clean clean-objs
+# backward compatibility (make less than 4.4 doesn't support .WAIT)
+.WAIT:
 
-ifeq ($(platform), theos_ios)
-	COMMON_FLAGS := -DIOS -DARM $(COMMON_DEFINES) $(INCFLAGS) -I$(THEOS_INCLUDE_PATH) -Wno-error
-	$(LIBRARY_NAME)_CFLAGS += $(CFLAGS) $(COMMON_FLAGS)
-	$(LIBRARY_NAME)_CXXFLAGS += $(CXXFLAGS) $(COMMON_FLAGS)
-	${LIBRARY_NAME}_FILES = $(SOURCES_CXX) $(SOURCES_C)
-	include $(THEOS_MAKE_PATH)/library.mk
+.PHONY: all clean generate-files generate-files-clean clean-objs
+
+ifeq ($(REGEN_HEADERS), 1)
+all: generate-files clean-objs .WAIT $(TARGET)
 else
 all: $(TARGET)
-
+endif
 
 generate-files-clean:
 	rm -rf $(FBNEO_GENERATED_DIR)/
@@ -602,7 +642,7 @@ generate-files:
 	@mkdir -p $(FBNEO_GENERATED_DIR) 2>/dev/null || /bin/true
 	@echo "Generating $(FBNEO_GENERATED_DIR)/driverlist.h..."
 	@echo ""
-	$(PERL) $(FBNEO_SCRIPTS_DIR)/gamelist.pl -o $(FBNEO_GENERATED_DIR)/driverlist.h -l $(MAIN_FBNEO_DIR)/../gamelist.txt $(FBNEO_BURN_DRIVERS_DIRS)
+	$(PERL) $(FBNEO_SCRIPTS_DIR)/gamelist.pl -o $(FBNEO_GENERATED_DIR)/driverlist.h -l $(MAIN_FBNEO_DIR)/../gamelist.txt $(SOURCES_CXX)
 	@echo ""
 	@echo "Generating $(FBNEO_GENERATED_DIR)/neo_sprite_func.h..."
 	@echo ""
@@ -720,4 +760,3 @@ endif
 	rm -f $(M68KMAKE_EXE)
 	rm -f $(PGM_SPRITE_CREATE_EXE)
 	rm -f $(CTVMAKE_EXE)
-endif

@@ -1,4 +1,4 @@
-// FB Alpha Twin16 driver module
+// FB Neo Twin16 driver module
 // Based on MAME driver by Phil Stroffolino
 
 #include "tiles_generic.h"
@@ -836,7 +836,7 @@ static INT32 DrvDoReset()
 {
 	DrvReset = 0;
 
-	memset (AllRam, 0, RamEnd - AllRam);
+	memset(AllRam, 0, RamEnd - AllRam);
 
 	SekOpen(0);
 	SekReset();
@@ -863,6 +863,8 @@ static INT32 DrvDoReset()
 	twin16_CPUB_register = 0;
 
 	nExtraCycles[0] = nExtraCycles[1] = nExtraCycles[2] = 0;
+	
+	HiscoreReset();
 
 	return 0;
 }
@@ -904,10 +906,10 @@ static INT32 MemIndex()
 
 	DrvZ80RAM	= Next; Next += 0x001000;
 
-	DrvNvRAMBank= Next; Next += 0x000001;
-
 	scrollx		= (UINT16*)Next; Next += 0x00004 * sizeof(UINT16);
 	scrolly		= (UINT16*)Next; Next += 0x00004 * sizeof(UINT16);
+
+	DrvNvRAMBank= Next; Next += 0x000001;
 
 	soundlatch	= Next; Next += 0x000001;
 	soundlatch2	= Next; Next += 0x000001;
@@ -936,7 +938,7 @@ static void gfxdecode()
 		dst[i * 2 + 0] = src[i + 0x80000];
 		dst[i * 2 + 1] = src[i + 0x00000];
 	}
-	memcpy (src, dst, 0x200000);
+	memcpy(src, dst, 0x200000);
 	BurnFree(dst);
 }
 
@@ -952,12 +954,7 @@ static INT32 load68k(UINT8 *rom, INT32 offs)
 
 static INT32 DrvInit(INT32 (pLoadCallback)())
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (pLoadCallback != NULL) {
@@ -1024,12 +1021,14 @@ static INT32 DrvInit(INT32 (pLoadCallback)())
 	K007232SetPortWriteHandler(0, DrvK007232VolCallback);
 	K007232PCMSetAllRoutes(0, 0.12, BURN_SND_ROUTE_BOTH);
 
-	BurnYM2151Init(3579545);
+	BurnYM2151InitBuffered(3579545, 1, NULL, 0);
+	BurnTimerAttachZet(3579545);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 1.00, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 1.00, BURN_SND_ROUTE_RIGHT);
 
 	UPD7759Init(0, UPD7759_STANDARD_CLOCK, DrvSndROM1);
 	UPD7759SetRoute(0, 0.20, BURN_SND_ROUTE_BOTH);
+	UPD7759SetSyncCallback(0, ZetTotalCycles, 3579545);
 
 	GenericTilesInit();
 
@@ -1049,7 +1048,7 @@ static INT32 DrvExit()
 	UPD7759Exit();
 	BurnYM2151Exit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	is_cuebrick = 0;
 	is_vulcan = 0;
@@ -1368,8 +1367,10 @@ static INT32 DrvFrame()
 		DrvDoReset();
 	}
 
+	ZetNewFrame(); // upd7759
+
 	{
-		memset (DrvInputs, 0xff, sizeof(DrvInputs));
+		memset(DrvInputs, 0xff, sizeof(DrvInputs));
 
 		for (INT32 i = 0; i < 16; i++)
 		{
@@ -1388,7 +1389,6 @@ static INT32 DrvFrame()
 		if ((DrvInputs[3] & 0x03) == 0) DrvInputs[3] |= 0x03;
 	}
 
-	INT32 nSoundBufferPos = 0;
 	INT32 nInterleave = 264;
 	if (twin16_custom_video == 0 && is_vulcan == 0) nInterleave = 600; // devilw
 	INT32 nCyclesTotal[3] = { 9216000 / 60, 9216000 / 60, 3579545 / 60 };
@@ -1399,40 +1399,27 @@ static INT32 DrvFrame()
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
 		SekOpen(0);
-		nCyclesDone[0] += SekRun(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, Sek);
 		if ((twin16_CPUA_register & 0x20) && i == nInterleave-1) SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
 		SekClose();
 
 		if (twin16_custom_video != 1) {
 			SekOpen(1);
-			nCyclesDone[1] += SekRun(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+			CPU_RUN(1, Sek);
 			if ((twin16_CPUB_register & 0x02) && i == nInterleave-1) SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
 			SekClose();
 		}
 
-		nCyclesDone[2] += ZetRun(((i + 1) * nCyclesTotal[2] / nInterleave) - nCyclesDone[2]);
-
-		if (pBurnSoundOut && (i%4)==3) {
-			INT32 nSegmentLength = nBurnSoundLen / (nInterleave / 4);
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			UPD7759Update(0, pSoundBuf, nSegmentLength);
-			K007232Update(0, pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
+		CPU_RUN_TIMER(2);
 
 		if (sprite_timer > 0) sprite_timer--;
 	}
 
 	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		if (nSegmentLength) {
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			UPD7759Update(0, pSoundBuf, nSegmentLength);
-			K007232Update(0, pSoundBuf, nSegmentLength);
-		}
-	}	
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
+		K007232Update(0, pBurnSoundOut, nBurnSoundLen);
+		UPD7759Render(pBurnSoundOut, nBurnSoundLen);
+	}
 
 	ZetClose();
 
@@ -1460,7 +1447,7 @@ static INT32 DrvFrame()
 	}
 
 	if (!is_devilw) {
-		memcpy (DrvSprBuf, DrvSprRAM, 0x4000);
+		memcpy(DrvSprBuf, DrvSprRAM, 0x4000);
 	}
 
 	return 0;
@@ -1503,6 +1490,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(twin16_CPUA_register);
 		SCAN_VAR(twin16_CPUB_register);
 		SCAN_VAR(sprite_timer);
+		SCAN_VAR(need_process_spriteram);
 
 		SCAN_VAR(nExtraCycles);
 	}
@@ -1598,7 +1586,7 @@ struct BurnDriver BurnDrvDevilw = {
 	"devilw", NULL, NULL, NULL, "1987",
 	"Devil World\0", NULL, "Konami", "GX687",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_MAZE | GBF_RUNGUN, 0,
 	NULL, devilwRomInfo, devilwRomName, NULL, NULL, NULL, NULL, DevilwInputInfo, DevilwDIPInfo,
 	devilwInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
@@ -1642,7 +1630,7 @@ struct BurnDriver BurnDrvMajuu = {
 	"majuu", "devilw", NULL, NULL, "1987",
 	"Majuu no Ohkoku\0", NULL, "Konami", "GX687",
 	L"\u9B54\u7363\u306E\u738B\u56FD\0Majuu no Ohkoku\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_MAZE | GBF_RUNGUN, 0,
 	NULL, majuuRomInfo, majuuRomName, NULL, NULL, NULL, NULL, DevilwInputInfo, DevilwDIPInfo,
 	devilwInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
@@ -1686,14 +1674,14 @@ struct BurnDriver BurnDrvDarkadv = {
 	"darkadv", "devilw", NULL, NULL, "1987",
 	"Dark Adventure\0", NULL, "Konami", "GX687",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 3, HARDWARE_PREFIX_KONAMI, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 3, HARDWARE_PREFIX_KONAMI, GBF_MAZE | GBF_RUNGUN, 0,
 	NULL, darkadvRomInfo, darkadvRomName, NULL, NULL, NULL, NULL, DarkadvInputInfo, DarkadvDIPInfo,
 	devilwInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// Vulcan Venture (New)
+// Vulcan Venture (new)
 
 static struct BurnRomInfo vulcanRomDesc[] = {
 	{ "785_w05.6n",		0x10000, 0x6e0e99cd, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1753,16 +1741,16 @@ static INT32 vulcanInit()
 
 struct BurnDriver BurnDrvVulcan = {
 	"vulcan", NULL, NULL, NULL, "1988",
-	"Vulcan Venture (New)\0", NULL, "Konami", "GX785",
+	"Vulcan Venture (new)\0", NULL, "Konami", "GX785",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, vulcanRomInfo, vulcanRomName, NULL, NULL, NULL, NULL, DrvInputInfo, VulcanDIPInfo,
 	vulcanInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// Vulcan Venture (Old)
+// Vulcan Venture (old)
 
 static struct BurnRomInfo vulcanaRomDesc[] = {
 	{ "785_r05.6n",		0x10000, 0x1777a57b, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1794,16 +1782,16 @@ STD_ROM_FN(vulcana)
 
 struct BurnDriver BurnDrvVulcana = {
 	"vulcana", "vulcan", NULL, NULL, "1988",
-	"Vulcan Venture (Old)\0", NULL, "Konami", "GX785",
+	"Vulcan Venture (old)\0", NULL, "Konami", "GX785",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, vulcanaRomInfo, vulcanaRomName, NULL, NULL, NULL, NULL, DrvInputInfo, VulcanDIPInfo,
 	vulcanInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// Vulcan Venture (Oldest)
+// Vulcan Venture (older)
 
 static struct BurnRomInfo vulcanbRomDesc[] = {
 	{ "785_n05.6n",		0x10000, 0x6371d475, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1835,16 +1823,16 @@ STD_ROM_FN(vulcanb)
 
 struct BurnDriver BurnDrvVulcanb = {
 	"vulcanb", "vulcan", NULL, NULL, "1988",
-	"Vulcan Venture (Oldest)\0", NULL, "Konami", "GX785",
+	"Vulcan Venture (older)\0", NULL, "Konami", "GX785",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, vulcanbRomInfo, vulcanbRomName, NULL, NULL, NULL, NULL, DrvInputInfo, VulcanDIPInfo,
 	vulcanInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// Gradius II - GOFER no Yabou (Japan New ver.)
+// Gradius II: GOFER no Yabou (Japan, new)
 
 static struct BurnRomInfo gradius2RomDesc[] = {
 	{ "785_x05.6n",		0x10000, 0x8a23a7b8, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1876,16 +1864,16 @@ STD_ROM_FN(gradius2)
 
 struct BurnDriver BurnDrvGradius2 = {
 	"gradius2", "vulcan", NULL, NULL, "1988",
-	"Gradius II - GOFER no Yabou (Japan New ver.)\0", NULL, "Konami", "GX785",
-	L"Gradius II - GOFER \u306E\u91CE\u671B (Japan New ver.)\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	"Gradius II: GOFER no Yabou (Japan, new)\0", NULL, "Konami", "GX785",
+	L"Gradius II: GOFER \u306E\u91CE\u671B GOFER no Yabou (Japan, new)\0", NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, gradius2RomInfo, gradius2RomName, NULL, NULL, NULL, NULL, DrvInputInfo, Gradius2DIPInfo,
 	vulcanInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// Gradius II - GOFER no Yabou (Japan Old ver.)
+// Gradius II: GOFER no Yabou (Japan, old)
 
 static struct BurnRomInfo gradius2aRomDesc[] = {
 	{ "785_p05.6n",		0x10000, 0x4db0e736, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1917,16 +1905,16 @@ STD_ROM_FN(gradius2a)
 
 struct BurnDriver BurnDrvGradius2a = {
 	"gradius2a", "vulcan", NULL, NULL, "1988",
-	"Gradius II - GOFER no Yabou (Japan Old ver.)\0", NULL, "Konami", "GX785",
-	L"Gradius II - GOFER \u306E\u91CE\u671B (Japan Old ver.)\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	"Gradius II: GOFER no Yabou (Japan, old)\0", NULL, "Konami", "GX785",
+	L"Gradius II: GOFER \u306E\u91CE\u671B (Japan, old)\0", NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, gradius2aRomInfo, gradius2aRomName, NULL, NULL, NULL, NULL, DrvInputInfo, VulcanDIPInfo,
 	vulcanInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// Gradius II - GOFER no Yabou (Japan Older ver.)
+// Gradius II: GOFER no Yabou (Japan, older)
 
 static struct BurnRomInfo gradius2bRomDesc[] = {
 	{ "785_p05.6n",		0x10000, 0x4db0e736, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1958,16 +1946,16 @@ STD_ROM_FN(gradius2b)
 
 struct BurnDriver BurnDrvGradius2b = {
 	"gradius2b", "vulcan", NULL, NULL, "1988",
-	"Gradius II - GOFER no Yabou (Japan Older ver.)\0", NULL, "Konami", "GX785",
-	L"Gradius II - GOFER \u306E\u91CE\u671B (Japan Older ver.)\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
+	"Gradius II: GOFER no Yabou (Japan, older)\0", NULL, "Konami", "GX785",
+	L"Gradius II: GOFER \u306E\u91CE\u671B (Japan, older)\0", NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_HORSHOOT, 0,
 	NULL, gradius2bRomInfo, gradius2bRomName, NULL, NULL, NULL, NULL, DrvInputInfo, VulcanDIPInfo,
 	vulcanInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// The Final Round (ver. M)
+// The Final Round (version M)
 
 static struct BurnRomInfo froundRomDesc[] = {
 	{ "870_m21.bin",	0x20000, 0x436dbffb, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -1985,6 +1973,8 @@ static struct BurnRomInfo froundRomDesc[] = {
 	{ "870_c01.5a",		0x20000, 0x6af96546, 7 | BRF_GRA },           //  8 K007232 Samples
 
 	{ "870_c02.7c",		0x20000, 0x54e12c6d, 8 | BRF_GRA },           //  9 UPD7759 Samples
+
+	{ "63s141n.e16",	0x00100, 0xed87c1f1, 0 | BRF_OPT },           // 10 Proms / priority (not used)
 };
 
 STD_ROM_PICK(fround)
@@ -2019,16 +2009,16 @@ static INT32 froundInit()
 
 struct BurnDriver BurnDrvFround = {
 	"fround", NULL, NULL, NULL, "1988",
-	"The Final Round (ver. M)\0", NULL, "Konami", "GX870",
+	"The Final Round (version M)\0", NULL, "Konami", "GX870",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, froundRomInfo, froundRomName, NULL, NULL, NULL, NULL, DrvInputInfo, FroundDIPInfo,
 	froundInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// The Final Round (ver. L)
+// The Final Round (version L)
 
 static struct BurnRomInfo froundlRomDesc[] = {
 	{ "870_l21.bin",	0x20000, 0xe21a3a19, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -2046,6 +2036,8 @@ static struct BurnRomInfo froundlRomDesc[] = {
 	{ "870_c01.5a",		0x20000, 0x6af96546, 7 | BRF_GRA },           //  8 K007232 Samples
 
 	{ "870_c02.7c",		0x20000, 0x54e12c6d, 8 | BRF_GRA },           //  9 UPD7759 Samples
+
+	{ "63s141n.e16",	0x00100, 0xed87c1f1, 0 | BRF_OPT },           // 10 Proms / priority (not used)
 };
 
 STD_ROM_PICK(froundl)
@@ -2053,9 +2045,9 @@ STD_ROM_FN(froundl)
 
 struct BurnDriver BurnDrvFroundl = {
 	"froundl", "fround", NULL, NULL, "1988",
-	"The Final Round (ver. L)\0", NULL, "Konami", "GX870",
+	"The Final Round (version L)\0", NULL, "Konami", "GX870",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, froundlRomInfo, froundlRomName, NULL, NULL, NULL, NULL, DrvInputInfo, FroundDIPInfo,
 	froundInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
@@ -2085,6 +2077,8 @@ static struct BurnRomInfo hpuncherRomDesc[] = {
 	{ "870_c01.5a",		0x20000, 0x6af96546, 7 | BRF_GRA },           // 12 K007232 Samples
 
 	{ "870_c02.7c",		0x20000, 0x54e12c6d, 8 | BRF_GRA },           // 13 UPD7759 Samples
+
+	{ "63s141n.e16",	0x00100, 0xed87c1f1, 0 | BRF_OPT },           // 14 Proms / priority (not used)
 };
 
 STD_ROM_PICK(hpuncher)
@@ -2123,14 +2117,14 @@ struct BurnDriver BurnDrvHpuncher = {
 	"hpuncher", "fround", NULL, NULL, "1988",
 	"Hard Puncher (Japan)\0", NULL, "Konami", "GX870",
 	L"Hard Puncher \uFF0D\u8840\u307E\u307F\u308C\u306E\u6804\u5149\uFF0D (Japan)\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_SPORTSMISC, 0,
 	NULL, hpuncherRomInfo, hpuncherRomName, NULL, NULL, NULL, NULL, DrvInputInfo, FroundDIPInfo,
 	hpuncherInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 224, 4, 3
 };
 
 
-// M.I.A. - Missing in Action (version R) (Japan)
+// M.I.A.: Missing in Action (Japan, version R)
 
 static struct BurnRomInfo miajRomDesc[] = {
 	{ "808_r05.6n",		0x10000, 0x91fd83f4, 1 | BRF_PRG | BRF_ESS }, //  0 68K #0 Code
@@ -2182,9 +2176,9 @@ static INT32 miajInit()
 
 struct BurnDriver BurnDrvMiaj = {
 	"miaj", "mia", NULL, NULL, "1989",
-	"M.I.A. - Missing in Action (version R) (Japan)\0", NULL, "Konami", "GX808",
+	"M.I.A.: Missing in Action (Japan, version R)\0", NULL, "Konami", "GX808",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_RUNGUN, 0,
 	NULL, miajRomInfo, miajRomName, NULL, NULL, NULL, NULL, DrvInputInfo, MiajDIPInfo,
 	miajInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	304, 224, 4, 3
@@ -2242,7 +2236,7 @@ struct BurnDriver BurnDrvCuebrckj = {
 	"cuebrickj", "cuebrick", NULL, NULL, "1989",
 	"Cue Brick (Japan)\0", NULL, "Konami", "GX903",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_PUZZLE, 0,
 	NULL, cuebrckjRomInfo, cuebrckjRomName, NULL, NULL, NULL, NULL, DrvInputInfo, CuebrckjDIPInfo,
 	cuebrckjInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	304, 224, 4, 3

@@ -1234,7 +1234,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 			MultiByteToWideChar(nFBACodepage, 0, szTemp, -1, szLine, sizeof(szLine) / sizeof(TCHAR));
 #ifdef _UNICODE
 		} else {
-			if (_fgetts(szLine, sizeof(szLine), h) == NULL) {
+			if (_fgetts(szLine, 5120, h) == NULL) {
 				break;
 			}
 		}
@@ -1244,7 +1244,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 
 		nLen = wcslen(szLine);
 		// Get rid of the linefeed at the end
-		while (szLine[nLen - 1] == 0x0A || szLine[nLen - 1] == 0x0D) {
+		while (nLen > 0 && (szLine[nLen - 1] == 0x0A || szLine[nLen - 1] == 0x0D)) {
 			szLine[nLen - 1] = 0;
 			nLen--;
 		}
@@ -1265,7 +1265,9 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 			nTemplateVersion = wcstol(s, &t, 0);
 
 			if (s != t) {
-				if (nTemplateVersion != nBurnVer) {
+				// check template version, but ignore last version#
+				// f.ex template version 0x100000 (v1.0.0.00) can load on fbn v. 0x100001 (v1.0.0.01)
+				if (nBurnVer != nTemplateVersion && nBurnVer-1 != nTemplateVersion) {
 					break;
 				}
 			}
@@ -1546,7 +1548,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 		fclose(h);
 	}
 
-	if (nTemplateVersion != nBurnVer) {
+	if (nBurnVer != nTemplateVersion && nBurnVer-1 != nTemplateVersion) {
 		if (nTemplateVersion == 0) {
 			return -1;
 		}

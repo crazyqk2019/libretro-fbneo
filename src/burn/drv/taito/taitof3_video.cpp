@@ -123,6 +123,7 @@ static UINT8 *m_tsrc4;
 static UINT8 *m_tsrc_s4;
 static UINT32 m_x_count4;
 static UINT32 m_x_zoom4;
+static UINT16 m_pal_add[5];
 
 static UINT8 m_add_sat[256][256];
 
@@ -181,8 +182,9 @@ struct f3_playfield_line_inf
 	UINT8 *tsrc[256],*tsrc_s[256];
 	INT32 x_count[256];
 	UINT32 x_zoom[256];
-	UINT32 clip0[256];
-	UINT32 clip1[256];
+	UINT32 clip_in[256];
+	UINT32 clip_ex[256];
+	UINT16 pal_add[256];
 };
 
 struct f3_spritealpha_line_inf
@@ -190,12 +192,10 @@ struct f3_spritealpha_line_inf
 	UINT16 alpha_level[256];
 	UINT16 spri[256];
 	UINT16 sprite_alpha[256];
-	UINT32 sprite_clip0[256];
-	UINT32 sprite_clip1[256];
-	INT16 clip0_l[256];
-	INT16 clip0_r[256];
-	INT16 clip1_l[256];
-	INT16 clip1_r[256];
+	UINT32 sprite_clip_in[256];
+	UINT32 sprite_clip_ex[256];
+	INT16 clip_l[4][256];
+	INT16 clip_r[4][256];
 };
 
 
@@ -245,8 +245,8 @@ static void draw_pf_layer(INT32 layer)
 		INT32 sx = (offs % wide) * 16;
 		INT32 sy = (offs / wide) * 16;
 
-		UINT16 tile = ram[offs * 2 + 0];
-		UINT16 code = (ram[offs * 2 + 1] & 0xffff) % TaitoCharModulo;
+		UINT16 tile = BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 0]);
+		UINT16 code = (BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 1]) & 0xffff) % TaitoCharModulo;
 
 		UINT8 category = (tile >> 9) & 1;
 
@@ -299,7 +299,7 @@ static void draw_vram_layer()
 		INT32 sx = (offs & 0x3f) * 8;
 		INT32 sy = (offs / 0x40) * 8;
 
-		INT32 tile = ram[offs] & 0xffff;
+		INT32 tile = BURN_ENDIAN_SWAP_INT16(ram[offs]) & 0xffff;
 
 		INT32 code = tile & 0x00ff;
 
@@ -357,7 +357,7 @@ static void draw_pixel_layer()
 
 	UINT16 *ram = (UINT16*)TaitoVideoRam;
 
-	UINT16 y_offs = *((UINT16*)(TaitoF3CtrlRAM + 0x1a)) & 0x1ff;
+	UINT16 y_offs = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(TaitoF3CtrlRAM + 0x1a))) & 0x1ff;
 	if (flipscreen) y_offs += 0x100;
 
 	for (INT32 offs = 0; offs < 64 * 32; offs++)
@@ -370,7 +370,7 @@ static void draw_pixel_layer()
 		if ((((offs & 0x1f) * 8 + y_offs) & 0x1ff) > 0xff)
 			col_off += 0x800;
 
-		INT32 tile = ram[col_off];
+		INT32 tile = BURN_ENDIAN_SWAP_INT16(ram[col_off]);
 
 		INT32 code = offs;
 
@@ -736,8 +736,8 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 		const INT32 current_offs=offs; /* Offs can change during loop, current_offs cannot */
 
 		/* Check if the sprite list jump command bit is set */
-		if ((spriteram16_ptr[current_offs+6+0]) & 0x8000) {
-			UINT32 jump = (spriteram16_ptr[current_offs+6+0])&0x3ff;
+		if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+6+0])) & 0x8000) {
+			UINT32 jump = (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+6+0]))&0x3ff;
 
 			INT32 new_offs=((offs&0x4000)|((jump<<4)/2));
 			if (new_offs==offs || jumpcnt > 250)
@@ -747,8 +747,8 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 		}
 
 		/* Check if special command bit is set */
-		if (spriteram16_ptr[current_offs+2+1] & 0x8000) {
-			UINT32 cntrl=(spriteram16_ptr[current_offs+4+1])&0xffff;
+		if (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+1]) & 0x8000) {
+			UINT32 cntrl=(BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+4+1]))&0xffff;
 			flipscreen=cntrl&0x2000;
 
 			/*  cntrl&0x1000 = disabled?  (From F2 driver, doesn't seem used anywhere)
@@ -767,33 +767,33 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 		}
 
 		/* Set global sprite scroll */
-		if (((spriteram16_ptr[current_offs+2+0]) & 0xf000) == 0xa000) {
-			global_x = (spriteram16_ptr[current_offs+2+0]) & 0xfff;
+		if (((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])) & 0xf000) == 0xa000) {
+			global_x = (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])) & 0xfff;
 			if (global_x >= 0x800) global_x -= 0x1000;
-			global_y = spriteram16_ptr[current_offs+2+1] & 0xfff;
+			global_y = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+1]) & 0xfff;
 			if (global_y >= 0x800) global_y -= 0x1000;
 		}
 
 		/* And sub-global sprite scroll */
-		if (((spriteram16_ptr[current_offs+2+0]) & 0xf000) == 0x5000) {
-			subglobal_x = (spriteram16_ptr[current_offs+2+0]) & 0xfff;
+		if (((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])) & 0xf000) == 0x5000) {
+			subglobal_x = (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])) & 0xfff;
 			if (subglobal_x >= 0x800) subglobal_x -= 0x1000;
-			subglobal_y = spriteram16_ptr[current_offs+2+1] & 0xfff;
+			subglobal_y = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+1]) & 0xfff;
 			if (subglobal_y >= 0x800) subglobal_y -= 0x1000;
 		}
 
-		if (((spriteram16_ptr[current_offs+2+0]) & 0xf000) == 0xb000) {
-			subglobal_x = (spriteram16_ptr[current_offs+2+0]) & 0xfff;
+		if (((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])) & 0xf000) == 0xb000) {
+			subglobal_x = (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])) & 0xfff;
 			if (subglobal_x >= 0x800) subglobal_x -= 0x1000;
-			subglobal_y = spriteram16_ptr[current_offs+2+1] & 0xfff;
+			subglobal_y = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+1]) & 0xfff;
 			if (subglobal_y >= 0x800) subglobal_y -= 0x1000;
 			global_y=subglobal_y;
 			global_x=subglobal_x;
 		}
 
 		/* A real sprite to process! */
-		sprite = (spriteram16_ptr[current_offs+0+0]) | ((spriteram16_ptr[current_offs+4+1]&1)<<16);
-		spritecont = spriteram16_ptr[current_offs+4+0]>>8;
+		sprite = (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+0+0])) | ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+4+1])&1)<<16);
+		spritecont = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+4+0])>>8;
 
 /* These games either don't set the XY control bits properly (68020 bug?), or
     have some different mode from the others */
@@ -806,7 +806,7 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 		if (multi) {
 			/* Bit 0x4 is 'use previous colour' for this block part */
 			if (spritecont&0x4) color=last_color;
-			else color=(spriteram16_ptr[current_offs+4+0])&0xff;
+			else color=(BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+4+0]))&0xff;
 
 #ifdef DARIUSG_KLUDGE
 			if (f3_game==DARIUSG || f3_game==GEKIRIDO || f3_game==CLEOPATR || f3_game==RECALH) {
@@ -815,12 +815,12 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 					if (spritecont & 0x4) {
 						x = block_x;
 					} else {
-						this_x = spriteram16_ptr[current_offs+2+0];
+						this_x = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]);
 						if (this_x&0x800) this_x= 0 - (0x800 - (this_x&0x7ff)); else this_x&=0x7ff;
 
-						if ((spriteram16_ptr[current_offs+2+0])&0x8000) {
+						if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]))&0x8000) {
 							this_x+=0;
-						} else if ((spriteram16_ptr[current_offs+2+0])&0x4000) {
+						} else if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]))&0x4000) {
 							/* Ignore subglobal (but apply global) */
 							this_x+=global_x;
 						} else { /* Apply both scroll offsets */
@@ -842,12 +842,12 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 					if (spritecont & 0x4) {
 						y = block_y;
 					} else {
-						this_y = spriteram16_ptr[current_offs+2+1]&0xffff;
+						this_y = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+1])&0xffff;
 						if (this_y&0x800) this_y= 0 - (0x800 - (this_y&0x7ff)); else this_y&=0x7ff;
 
-						if ((spriteram16_ptr[current_offs+2+0])&0x8000) {
+						if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]))&0x8000) {
 							this_y+=0;
-						} else if ((spriteram16_ptr[current_offs+2+0])&0x4000) {
+						} else if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]))&0x4000) {
 							/* Ignore subglobal (but apply global) */
 							this_y+=global_y;
 						} else { /* Apply both scroll offsets */
@@ -891,20 +891,20 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 		}
 		/* Else this sprite is the possible start of a block */
 		else {
-			color = (spriteram16_ptr[current_offs+4+0])&0xff;
+			color = (BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+4+0]))&0xff;
 			last_color=color;
 
 			/* Sprite positioning */
-			this_y = spriteram16_ptr[current_offs+2+1]&0xffff;
-			this_x = spriteram16_ptr[current_offs+2+0]&0xffff;
+			this_y = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+1])&0xffff;
+			this_x = BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0])&0xffff;
 			if (this_y&0x800) this_y= 0 - (0x800 - (this_y&0x7ff)); else this_y&=0x7ff;
 			if (this_x&0x800) this_x= 0 - (0x800 - (this_x&0x7ff)); else this_x&=0x7ff;
 
 			/* Ignore both scroll offsets for this block */
-			if ((spriteram16_ptr[current_offs+2+0])&0x8000) {
+			if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]))&0x8000) {
 				this_x+=0;
 				this_y+=0;
-			} else if ((spriteram16_ptr[current_offs+2+0])&0x4000) {
+			} else if ((BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+2+0]))&0x4000) {
 				/* Ignore subglobal (but apply global) */
 				this_x+=global_x;
 				this_y+=global_y;
@@ -916,7 +916,7 @@ static void get_sprite_info(UINT16 *spriteram16_ptr)
 			block_y = y = this_y;
 			block_x = x = this_x;
 
-			block_zoom_x=spriteram16_ptr[current_offs+0+1];
+			block_zoom_x=BURN_ENDIAN_SWAP_INT16(spriteram16_ptr[current_offs+0+1]);
 			block_zoom_y=(block_zoom_x>>8)&0xff;
 			block_zoom_x&=0xff;
 
@@ -1497,10 +1497,11 @@ static void init_alpha_blend_func()
 	m_tsrc_s##pf_num=line_tmp->tsrc_s[y]; \
 	m_x_count##pf_num=line_tmp->x_count[y]; \
 	m_x_zoom##pf_num=line_tmp->x_zoom[y]; \
-	m_clip_al##pf_num=line_tmp->clip0[y]&0xffff; \
-	m_clip_ar##pf_num=line_tmp->clip0[y]>>16; \
-	m_clip_bl##pf_num=line_tmp->clip1[y]&0xffff; \
-	m_clip_br##pf_num=line_tmp->clip1[y]>>16; \
+	m_clip_al##pf_num=line_tmp->clip_in[y]&0xffff; \
+	m_clip_ar##pf_num=line_tmp->clip_in[y]>>16; \
+	m_clip_bl##pf_num=line_tmp->clip_ex[y]&0xffff; \
+	m_clip_br##pf_num=line_tmp->clip_ex[y]>>16; \
+	m_pal_add[pf_num] = line_tmp->pal_add[y]; \
 }
 
 #define CULC_PIXMAP_POINTER(pf_num) \
@@ -1536,7 +1537,7 @@ if(cx>=clip_als && cx<clip_ars-1 && !(cx>=clip_bls && cx<clip_brs)) \
 	{ \
 		m_tval=*m_tsrc##pf_num; \
 		if(m_tval&0xf0) \
-			if((*m_dpix_lp[pf_num][m_pval>>4])(clut[*m_src##pf_num])) {*dsti=m_dval;break;} \
+			if((*m_dpix_lp[pf_num][m_pval>>4])(clut[(*m_src##pf_num + m_pal_add[pf_num]) & 0x1fff])) {*dsti=m_dval;break;} \
 	}
 
 
@@ -1588,10 +1589,10 @@ static void draw_scanlines(INT32 xsize,INT16 *draw_line_num,
 		{
 			INT32 cx=0;
 
-			clip_als=m_sa_line_inf[0].sprite_clip0[y]&0xffff;
-			clip_ars=m_sa_line_inf[0].sprite_clip0[y]>>16;
-			clip_bls=m_sa_line_inf[0].sprite_clip1[y]&0xffff;
-			clip_brs=m_sa_line_inf[0].sprite_clip1[y]>>16;
+			clip_als=m_sa_line_inf[0].sprite_clip_in[y]&0xffff;
+			clip_ars=m_sa_line_inf[0].sprite_clip_in[y]>>16;
+			clip_bls=m_sa_line_inf[0].sprite_clip_ex[y]&0xffff;
+			clip_brs=m_sa_line_inf[0].sprite_clip_ex[y]>>16;
 
 			length=xsize;
 			dsti = dsti0;
@@ -1695,7 +1696,7 @@ static void visible_tile_check(
 	alpha_type=0;
 	for(i=0;i<tile_num;i++)
 	{
-		UINT32 tile=(pf_base[(tile_index*2+0)&m_twidth_mask]<<16)|(pf_base[(tile_index*2+1)&m_twidth_mask]);
+		UINT32 tile=(BURN_ENDIAN_SWAP_INT16(pf_base[(tile_index*2+0)&m_twidth_mask])<<16)|(BURN_ENDIAN_SWAP_INT16(pf_base[(tile_index*2+1)&m_twidth_mask]));
 		UINT8  extra_planes = (tile>>(16+10)) & 3;
 		if(tile&0xffff)
 		{
@@ -1735,109 +1736,62 @@ static void visible_tile_check(
 		line_t->alpha_mode[line]|=0x80;
 }
 
-static void calculate_clip(INT32 y, UINT16 pri, UINT32* clip0, UINT32* clip1, int* line_enable)
+#define min(a,b) (((a)<(b))?(a):(b))
+#define max(a,b) (((a)>(b))?(a):(b))
+
+#define calc_clip(p) { \
+	clipl = max(sa_line->clip_l[p][y], clipl); \
+	clipr = min(sa_line->clip_r[p][y], clipr); \
+	};
+
+#define calc_clip_inv(p) { \
+	clipl = min(sa_line->clip_l[p][y], clipl); \
+	clipr = max(sa_line->clip_r[p][y], clipr); \
+	};
+
+static void calculate_clip(INT32 y, UINT16 pri, UINT32 *clip_in, UINT32 *clip_ex, INT32 *line_enable)
 {
-	const struct f3_spritealpha_line_inf *sa_line_t=&m_sa_line_inf[0];
+	const f3_spritealpha_line_inf *sa_line = &m_sa_line_inf[0];
 
-	switch (pri)
-	{
-	case 0x0100: /* Clip plane 1 enable */
-		{
-			if (sa_line_t->clip0_l[y] > sa_line_t->clip0_r[y])
-				*line_enable=0;
-			else
-				*clip0=(sa_line_t->clip0_l[y]) | (sa_line_t->clip0_r[y]<<16);
-			*clip1=0;
-		}
-		break;
-	case 0x0110: /* Clip plane 1 enable, inverted */
-		{
-			*clip1=(sa_line_t->clip0_l[y]) | (sa_line_t->clip0_r[y]<<16);
-			*clip0=0x7fff0000;
-		}
-		break;
-	case 0x0200: /* Clip plane 2 enable */
-		{
-			if (sa_line_t->clip1_l[y] > sa_line_t->clip1_r[y])
-				*line_enable=0;
-			else
-				*clip0=(sa_line_t->clip1_l[y]) | (sa_line_t->clip1_r[y]<<16);
-			*clip1=0;
-		}
-		break;
-	case 0x0220: /* Clip plane 2 enable, inverted */
-		{
-			*clip1=(sa_line_t->clip1_l[y]) | (sa_line_t->clip1_r[y]<<16);
-			*clip0=0x7fff0000;
-		}
-		break;
-	case 0x0300: /* Clip plane 1 & 2 enable */
-		{
-			INT32 clipl=0,clipr=0;
-
-			if (sa_line_t->clip1_l[y] > sa_line_t->clip0_l[y])
-				clipl=sa_line_t->clip1_l[y];
-			else
-				clipl=sa_line_t->clip0_l[y];
-
-			if (sa_line_t->clip1_r[y] < sa_line_t->clip0_r[y])
-				clipr=sa_line_t->clip1_r[y];
-			else
-				clipr=sa_line_t->clip0_r[y];
-
-			if (clipl > clipr)
-				*line_enable=0;
-			else
-				*clip0=(clipl) | (clipr<<16);
-			*clip1=0;
-		}
-		break;
-	case 0x0310: /* Clip plane 1 & 2 enable, plane 1 inverted */
-		{
-			if (sa_line_t->clip1_l[y] > sa_line_t->clip1_r[y])
-				line_enable=NULL;
-			else
-				*clip0=(sa_line_t->clip1_l[y]) | (sa_line_t->clip1_r[y]<<16);
-
-			*clip1=(sa_line_t->clip0_l[y]) | (sa_line_t->clip0_r[y]<<16);
-		}
-		break;
-	case 0x0320: /* Clip plane 1 & 2 enable, plane 2 inverted */
-		{
-			if (sa_line_t->clip0_l[y] > sa_line_t->clip0_r[y])
-				line_enable=NULL;
-			else
-				*clip0=(sa_line_t->clip0_l[y]) | (sa_line_t->clip0_r[y]<<16);
-
-			*clip1=(sa_line_t->clip1_l[y]) | (sa_line_t->clip1_r[y]<<16);
-		}
-		break;
-	case 0x0330: /* Clip plane 1 & 2 enable, both inverted */
-		{
-			INT32 clipl=0,clipr=0;
-
-			if (sa_line_t->clip1_l[y] < sa_line_t->clip0_l[y])
-				clipl=sa_line_t->clip1_l[y];
-			else
-				clipl=sa_line_t->clip0_l[y];
-
-			if (sa_line_t->clip1_r[y] > sa_line_t->clip0_r[y])
-				clipr=sa_line_t->clip1_r[y];
-			else
-				clipr=sa_line_t->clip0_r[y];
-
-			if (clipl > clipr)
-				*line_enable=0;
-			else
-				*clip1=(clipl) | (clipr<<16);
-			*clip0=0x7fff0000;
-		}
-		break;
-	default:
-		// Illegal clip mode
-		break;
+	/* landmakr and quizhuhu use clip planes 2 and 3,
+	   commandw enables all clip planes.
+	   only up to 2 valid clips ever used in existing games? */
+	UINT16 normal_planes = (pri >> 8) & (pri >> 4);
+	UINT16 invert_planes = (pri >> 8) & ~(pri >> 4);
+	// when bit 0x1000 set, invert bit ON is normal clip, OFF is inverted
+	if (pri & 0x1000) {
+		UINT16 temp = normal_planes;
+		normal_planes = invert_planes;
+		invert_planes = temp;
 	}
+
+	INT16 clipl = 0, clipr = 0x7fff;
+
+	if (normal_planes & 0x01) { calc_clip(0); };
+	if (normal_planes & 0x02) { calc_clip(1); };
+	if (normal_planes & 0x04) { calc_clip(2); };
+	if (normal_planes & 0x08) { calc_clip(3); };
+	if (clipl > clipr)
+		*line_enable = 0;
+	else
+		*clip_in = clipl | (clipr << 16);
+
+	// reset temp clip sides for the inverted/excluded window
+	clipl = 0x7fff; clipr = 0;
+	if (invert_planes & 0x01) { calc_clip_inv(0); };
+	if (invert_planes & 0x02) { calc_clip_inv(1); };
+	if (invert_planes & 0x04) { calc_clip_inv(2); };
+	if (invert_planes & 0x08) { calc_clip_inv(3); };
+	if (clipl > clipr)
+		*clip_ex = 0;
+	else
+		*clip_ex = clipl | (clipr << 16);
 }
+
+#undef min
+#undef max
+#undef calc_clip
+#undef calc_clip_inv
 
 static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UINT16 *f3_pf_data_n)
 {
@@ -1845,12 +1799,12 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 	struct f3_playfield_line_inf *line_t=&m_pf_line_inf[pos];
 
 	INT32 y,y_start,y_end,y_inc;
-	INT32 line_base,zoom_base,col_base,pri_base,inc;
+	INT32 line_base,zoom_base,col_base,pri_base,pal_add_base,inc;
 
 	INT32 line_enable;
 	INT32 colscroll=0,x_offset=0,line_zoom=0;
 	UINT32 _y_zoom[256];
-	UINT16 pri=0;
+	UINT16 pri=0, pal_add = 0;
 	INT32 bit_select=1<<pos;
 
 	INT32 _colscroll[256];
@@ -1865,6 +1819,7 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 		zoom_base=0x81fe;// + (pos*0x200);
 		col_base =0x41fe + (pos*0x200);
 		pri_base =0xb1fe + (pos*0x200);
+		pal_add_base = 0x91fe + (pos << 9);
 		inc=-2;
 		y_start=255;
 		y_end=-1;
@@ -1879,6 +1834,7 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 		zoom_base=0x8000;// + (pos*0x200);
 		col_base =0x4000 + (pos*0x200);
 		pri_base =0xb000 + (pos*0x200);
+		pal_add_base = 0x9000 + (pos << 9);
 		inc=2;
 		y_start=0;
 		y_end=256;
@@ -1887,47 +1843,51 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 		y_index_fx=sy;
 	}
 
+	UINT16* pfdata = f3_pf_data_n;
 	y=y_start;
 
 	while(y!=y_end)
 	{
 		/* The zoom, column and row values can latch according to control ram */
 		{
-			if (m_f3_line_ram[0x600+(y)]&bit_select)
-				x_offset=(m_f3_line_ram[line_base/2]&0xffff)<<10;
-			if (m_f3_line_ram[0x700+(y)]&bit_select)
-				pri=m_f3_line_ram[pri_base/2]&0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x600+(y)])&bit_select)
+				x_offset=(BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[line_base/2])&0xffff)<<10;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x700+(y)])&bit_select)
+				pri=BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[pri_base/2])&0xffff;
 
 			// Zoom for playfields 1 & 3 is interleaved, as is the latch select
 			switch (pos)
 			{
-			case 0:
-				if (m_f3_line_ram[0x400+(y)]&bit_select)
-					line_zoom=m_f3_line_ram[(zoom_base+0x000)/2]&0xffff;
-				break;
-			case 1:
-				if (m_f3_line_ram[0x400+(y)]&0x2)
-					line_zoom=((m_f3_line_ram[(zoom_base+0x200)/2]&0xffff)&0xff00) | (line_zoom&0x00ff);
-				if (m_f3_line_ram[0x400+(y)]&0x8)
-					line_zoom=((m_f3_line_ram[(zoom_base+0x600)/2]&0xffff)&0x00ff) | (line_zoom&0xff00);
-				break;
-			case 2:
-				if (m_f3_line_ram[0x400+(y)]&bit_select)
-					line_zoom=m_f3_line_ram[(zoom_base+0x400)/2]&0xffff;
-				break;
-			case 3:
-				if (m_f3_line_ram[0x400+(y)]&0x8)
-					line_zoom=((m_f3_line_ram[(zoom_base+0x600)/2]&0xffff)&0xff00) | (line_zoom&0x00ff);
-				if (m_f3_line_ram[0x400+(y)]&0x2)
-					line_zoom=((m_f3_line_ram[(zoom_base+0x200)/2]&0xffff)&0x00ff) | (line_zoom&0xff00);
-				break;
-			default:
-				break;
+				case 0:
+					if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x400+(y)])&bit_select)
+						line_zoom=BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(zoom_base+0x000)/2])&0xffff;
+					break;
+				case 1:
+					if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x400+(y)])&0x2)
+						line_zoom=((BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(zoom_base+0x200)/2])&0xffff)&0xff00) | (line_zoom&0x00ff);
+					if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x400+(y)])&0x8)
+						line_zoom=((BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(zoom_base+0x600)/2])&0xffff)&0x00ff) | (line_zoom&0xff00);
+					break;
+				case 2:
+					if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x400+(y)])&bit_select)
+						line_zoom=BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(zoom_base+0x400)/2])&0xffff;
+					break;
+				case 3:
+					if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x400+(y)])&0x8)
+						line_zoom=((BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(zoom_base+0x600)/2])&0xffff)&0xff00) | (line_zoom&0x00ff);
+					if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x400+(y)])&0x2)
+						line_zoom=((BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(zoom_base+0x200)/2])&0xffff)&0x00ff) | (line_zoom&0xff00);
+					break;
+				default:
+					break;
 			}
 
 			// Column scroll only affects playfields 2 & 3
-			if (pos>=2 && m_f3_line_ram[0x000+(y)]&bit_select)
-				colscroll=(m_f3_line_ram[col_base/2]>> 0)&0x3ff;
+			if (pos>=2 && BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x000+(y)])&bit_select)
+				colscroll=(BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[col_base/2])>> 0)&0x3ff;
+
+			if (m_f3_line_ram[0x500 + y] & bit_select)
+				pal_add = (m_f3_line_ram[pal_add_base / 2] & 0x1ff) * 16;
 		}
 
 		if (!pri || (!flipscreen && y<24) || (flipscreen && y>231) ||
@@ -1937,8 +1897,9 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 			line_enable=2;
 		else if(pri&0x8000) //alpha2
 			line_enable=3;
-		else if((pri&0x3000) && (m_f3_line_ram[0x6230/2] != 0)  && (pos == 2) &&
-				(((m_f3_line_ram[(0x6200/2) + (y)] >> 4) & 0xf) != 0xb) && (f3_game == EACTION2))
+		else if((pri&0x3000) && (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x6230/2]) != 0)  && (pos == 2) &&
+				(((BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x6200/2) + (y)]) >> 4) & 0xf) != 0xb) &&
+				(BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x6200/2) + (y)]) != 0x7777) && (f3_game == EACTION2))
 		{
 			line_enable=0x22;
 		}
@@ -1950,41 +1911,39 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 		_y_zoom[y] = (line_zoom&0xff) << 9;
 
 		/* Evaluate clipping */
-		/* Notes:
-		   kludge: line-disable breaks quizhuhu text & landmakr "you win / you lose" text. [april 23, 2017 -dink]
-		   somehow I think 0x0800 has nothing to do with line-disable.
-		   although tcobra2 uses this to clip the sides of the playfield
-		*/
-
-		if (pri&0x0800 && f3_game != QUIZHUHU && f3_game != LANDMAKR)
-		{
-			line_enable=0;
-		}
-		else if (pri&0x0330 && f3_game != PBOBBLE4) // kludge: clipping breaks win/lose animation [april 23, 2017 -dink]
+		if (pri & 0x0f00)
 		{
 			//fast path todo - remove line enable
-			calculate_clip(y, pri&0x0330, &line_t->clip0[y], &line_t->clip1[y], &line_enable);
+			calculate_clip(y, pri & 0x1ff0, &line_t->clip_in[y], &line_t->clip_ex[y], &line_enable);
 		}
 		else
 		{
 			/* No clipping */
-			line_t->clip0[y]=0x7fff0000;
-			line_t->clip1[y]=0;
+			line_t->clip_in[y] = 0x7fff0000;
+			line_t->clip_ex[y] = 0;
 		}
 
 		line_t->x_zoom[y]=0x10000 - (line_zoom&0xff00);
 		line_t->alpha_mode[y]=line_enable;
 		line_t->pri[y]=pri;
+		line_t->pal_add[y] = pal_add;
 
 		zoom_base+=inc;
 		line_base+=inc;
 		col_base +=inc;
 		pri_base +=inc;
+		pal_add_base += inc;
 		y +=y_inc;
 	}
 
+	// ignore the first zoom value from ram and use the default
+	_y_zoom[y_start] = 0;
+	line_t->x_zoom[y_start] = 0x10000;
+
+	INT32 which_map_orig = which_map;
+
 	UINT8 *pmap = bitmap_flags[which_map];
-	UINT16 * tm = bitmap_layer[which_map];
+	//UINT16 * tm = bitmap_layer[which_map];
 	UINT16 * tmap = bitmap_layer[which_map];
 	INT32 map_width = bitmap_width[which_map];
 
@@ -1994,16 +1953,12 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 		UINT32 x_index_fx;
 		UINT32 y_index;
 
-		/* The football games use values in the range 0x200-0x3ff where the crowd should be drawn - !?
+		/* lines with 0x0200 set in column scroll look up in alternate tilemaps
+		   playfield 3 2000 -> 4000, playfield 4 3000 -> 5000 (non-extended only?)
+		   used by kaiserkn (high scores), kirameki, football games (crowd, goals)
 
-		   This appears to cause it to reference outside of the normal tilemap RAM area into the unused
-		   area on the 32x32 tilemap configuration.. but exactly how isn't understood
-
-		    Until this is understood we're creating additional tilemaps for the otherwise unused area of
-		    RAM and forcing it to look up there.
-
-		    the crowd area still seems to 'lag' behind the pitch area however.. but these are the values
-		    in ram??
+		   there's some seemingly unrelated issue with the timing of y scrolling,
+		   causing the pitch to scroll ahead of crowd areas
 		*/
 		INT32 cs = _colscroll[y];
 
@@ -2011,18 +1966,25 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 		{
 			if (extended_layers == 0)
 			{
-				if (which_map == 2) {
-					tmap = bitmap_layer[4];
-				}
-				if (which_map == 3) {
-					tmap = bitmap_layer[5];
+				if (which_map == 2 || which_map == 3) {
+					which_map += 2; // morph 2 -> 4, 3 -> 5
+					tmap = bitmap_layer[which_map];
+					pmap = bitmap_flags[which_map];
+					map_width = bitmap_width[which_map];
+
+					UINT16 *ram = (UINT16*)(TaitoF3PfRAM + (which_map * (0x1000 << extended_layers)));
+
+					f3_pf_data_n = ram;
 				}
 			}
 		}
 		else
 		{
-			tmap = tm;
+			which_map = which_map_orig;
+			tmap = bitmap_layer[which_map];
+			pmap = bitmap_flags[which_map];
 			map_width = bitmap_width[which_map];
+			f3_pf_data_n = pfdata;
 		}
 
 		/* set pixmap pointer */
@@ -2040,10 +2002,10 @@ static void get_line_ram_info(INT32 which_map, INT32 sx, INT32 sy, INT32 pos, UI
 			/* check tile status */
 			visible_tile_check(line_t,y,x_index_fx,y_index,f3_pf_data_n);
 
-			if ((pos == 1) && ((((m_f3_line_ram[(0x6200/2) + (y)]) >> 4) & 0xf) > 0xb)  && (f3_game==EACTION2)) line_t->alpha_mode[y] = 0x22;  //from shmupmame
+			if ((pos == 1) && ((((BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x6200/2) + (y)])) >> 4) & 0xf) > 0xb)  && (f3_game==EACTION2)) line_t->alpha_mode[y] = 0x22;  //from shmupmame
 
 			/* If clipping enabled for this line have to disable 'all opaque' optimisation */
-			if (line_t->clip0[y]!=0x7fff0000 || line_t->clip1[y]!=0)
+			if (line_t->clip_in[y] != 0x7fff0000 || line_t->clip_ex[y] != 0)
 				line_t->alpha_mode[y]&=~0x80;
 
 			/* set pixmap index */
@@ -2075,7 +2037,7 @@ static void get_vram_info(INT32 sx, INT32 sy)
 
 	UINT16 pri=0;
 
-	const INT32 vram_width_mask=0x3ff;
+	const INT32 vram_width_mask=0x1ff;
 
 	if (flipscreen)
 	{
@@ -2099,8 +2061,8 @@ static void get_vram_info(INT32 sx, INT32 sy)
 	{
 		/* The zoom, column and row values can latch according to control ram */
 		{
-			if (m_f3_line_ram[(0x0600/2)+(y)]&0x2)
-				pri=(m_f3_line_ram[pri_base/2]&0xffff);
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x0600/2)+(y)])&0x2)
+				pri=(BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[pri_base/2])&0xffff);
 		}
 
 		if (!pri || (!flipscreen && y<24) || (flipscreen && y>231) ||
@@ -2121,18 +2083,16 @@ static void get_vram_info(INT32 sx, INT32 sy)
 		line_t->pri[y]=pri;
 
 		/* Evaluate clipping */
-		if (pri&0x0800)
-			line_enable=0;
-		else if (pri&0x0330)
+		if (pri & 0x0f00)
 		{
 			//fast path todo - remove line enable
-			calculate_clip(y, pri&0x0330, &line_t->clip0[y], &line_t->clip1[y], &line_enable);
+			calculate_clip(y, pri & 0x1ff0, &line_t->clip_in[y], &line_t->clip_ex[y], &line_enable);
 		}
 		else
 		{
 			/* No clipping */
-			line_t->clip0[y]=0x7fff0000;
-			line_t->clip1[y]=0;
+			line_t->clip_in[y] = 0x7fff0000;
+			line_t->clip_ex[y] = 0;
 		}
 
 		line_t->x_zoom[y]=0x10000;
@@ -2599,6 +2559,7 @@ static void get_spritealphaclip_info()
 	UINT16 spri=0;
 	UINT16 sprite_clip=0;
 	UINT16 clip0_low=0, clip0_high=0, clip1_low=0;
+	UINT16 clip2_low = 0, clip2_high = 0, clip3_low = 0;
 	INT32 alpha_level=0;
 	UINT16 sprite_alpha=0;
 
@@ -2628,53 +2589,63 @@ static void get_spritealphaclip_info()
 	{
 		/* The zoom, column and row values can latch according to control ram */
 		{
-			if (m_f3_line_ram[0x100+(y)]&1)
-				clip0_low=(m_f3_line_ram[clip_base_low/2]>> 0)&0xffff;
-			if (m_f3_line_ram[0x000+(y)]&4)
-				clip0_high=(m_f3_line_ram[clip_base_high/2]>> 0)&0xffff;
-			if (m_f3_line_ram[0x100+(y)]&2)
-				clip1_low=(m_f3_line_ram[(clip_base_low+0x200)/2]>> 0)&0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x100 + y]) & 1) // 5000 control playfield 1
+				clip0_low = (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[clip_base_low / 2]) >> 0) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x000 + y]) & 4) // 4000 control
+				clip0_high = (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[clip_base_high / 2]) >> 0) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x100 + y]) & 2) // 5000 control playfield 2
+				clip1_low = (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(clip_base_low + 0x200) / 2]) >> 0) & 0xffff;
 
-			if (m_f3_line_ram[(0x0600/2)+(y)]&0x8)
-				spri=m_f3_line_ram[spri_base/2]&0xffff;
-			if (m_f3_line_ram[(0x0600/2)+(y)]&0x4)
-				sprite_clip=m_f3_line_ram[(spri_base-0x200)/2]&0xffff;
-			if (m_f3_line_ram[(0x0400/2)+(y)]&0x1)
-				sprite_alpha=m_f3_line_ram[(spri_base-0x1600)/2]&0xffff;
-			if (m_f3_line_ram[(0x0400/2)+(y)]&0x2)
-				alpha_level=m_f3_line_ram[(spri_base-0x1400)/2]&0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x100 + y]) & 4) // 5000 control playfield 3
+				clip2_low = (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(clip_base_low + 0x400) / 2]) >> 0) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x000 + y]) & 8) // 4000 control
+				clip2_high = (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(clip_base_high + 0x200) / 2]) >> 0) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[0x100 + y]) & 8) // 5000 control playfield 4
+				clip3_low = (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(clip_base_low + 0x600) / 2]) >> 0) & 0xffff;
+
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x0600 / 2) + y]) & 0x8)
+				spri = BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[spri_base / 2]) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x0600 / 2) + y]) & 0x4)
+				sprite_clip = BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(spri_base-0x200) / 2]) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x0400 / 2) + y]) & 0x1)
+				sprite_alpha = BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(spri_base-0x1600) / 2]) & 0xffff;
+			if (BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(0x0400 / 2) + y]) & 0x2)
+				alpha_level = BURN_ENDIAN_SWAP_INT16(m_f3_line_ram[(spri_base-0x1400) / 2]) & 0xffff;
 		}
 
 
 		line_t->alpha_level[y]=alpha_level;
 		line_t->spri[y]=spri;
 		line_t->sprite_alpha[y]=sprite_alpha;
-		line_t->clip0_l[y]=((clip0_low&0xff)|((clip0_high&0x1000)>>4)) - 47;
-		line_t->clip0_r[y]=(((clip0_low&0xff00)>>8)|((clip0_high&0x2000)>>5)) - 47;
-		line_t->clip1_l[y]=((clip1_low&0xff)|((clip0_high&0x4000)>>6)) - 47;
-		line_t->clip1_r[y]=(((clip1_low&0xff00)>>8)|((clip0_high&0x8000)>>7)) - 47;
-		if (line_t->clip0_l[y]<0) line_t->clip0_l[y]=0;
-		if (line_t->clip0_r[y]<0) line_t->clip0_r[y]=0;
-		if (line_t->clip1_l[y]<0) line_t->clip1_l[y]=0;
-		if (line_t->clip1_r[y]<0) line_t->clip1_r[y]=0;
+		line_t->clip_l[0][y] = ((clip0_low & 0xff) | ((clip0_high & 0x1000) >> 4)) - 47;
+		line_t->clip_r[0][y] = (((clip0_low & 0xff00) >> 8) | ((clip0_high & 0x2000) >> 5)) - 48;
+		line_t->clip_l[1][y] = ((clip1_low & 0xff) | ((clip0_high & 0x4000) >> 6)) - 47;
+		line_t->clip_r[1][y] = (((clip1_low & 0xff00) >> 8) | ((clip0_high & 0x8000) >> 7)) - 48;
+		line_t->clip_l[2][y] = ((clip2_low & 0xff) | ((clip2_high & 0x1000) >> 4)) - 47;
+		line_t->clip_r[2][y] = (((clip2_low & 0xff00) >> 8) | ((clip2_high & 0x2000) >> 5)) - 48;
+		line_t->clip_l[3][y] = ((clip3_low & 0xff) | ((clip2_high & 0x4000) >> 6)) - 47;
+		line_t->clip_r[3][y] = (((clip3_low & 0xff00) >> 8) | ((clip2_high & 0x8000) >> 7)) - 48;
+		if (line_t->clip_l[0][y] < 0) line_t->clip_l[0][y] = 0;
+		if (line_t->clip_r[0][y] < 0) line_t->clip_r[0][y] = 0;
+		if (line_t->clip_l[1][y] < 0) line_t->clip_l[1][y] = 0;
+		if (line_t->clip_r[1][y] < 0) line_t->clip_r[1][y] = 0;
+		if (line_t->clip_l[2][y] < 0) line_t->clip_l[2][y] = 0;
+		if (line_t->clip_r[2][y] < 0) line_t->clip_r[2][y] = 0;
+		if (line_t->clip_l[3][y] < 0) line_t->clip_l[3][y] = 0;
+		if (line_t->clip_r[3][y] < 0) line_t->clip_r[3][y] = 0;
 
 		/* Evaluate sprite clipping */
-		if (sprite_clip&0x080)
+		if (sprite_clip & 0xf0)
 		{
-			line_t->sprite_clip0[y]=0x7fff7fff;
-			line_t->sprite_clip1[y]=0;
-		}
-		else if (sprite_clip&0x33)
-		{
-			INT32 line_enable=1;
-			calculate_clip(y, ((sprite_clip&0x33)<<4), &line_t->sprite_clip0[y], &line_t->sprite_clip1[y], &line_enable);
-			if (line_enable==0)
-				line_t->sprite_clip0[y]=0x7fff7fff;
+			int line_enable = 1;
+			calculate_clip(y, ((sprite_clip & 0x1ff) << 4), &line_t->sprite_clip_in[y], &line_t->sprite_clip_ex[y], &line_enable);
+			if (line_enable == 0)
+				line_t->sprite_clip_in[y] = 0x7fff7fff;
 		}
 		else
 		{
-			line_t->sprite_clip0[y]=0x7fff0000;
-			line_t->sprite_clip1[y]=0;
+			line_t->sprite_clip_in[y] = 0x7fff0000;
+			line_t->sprite_clip_ex[y] = 0;
 		}
 
 		spri_base+=inc;
@@ -2755,21 +2726,21 @@ void TaitoF3DrawCommon(INT32 scanline_start)
 	UINT32 sy_fix[5],sx_fix[5];
 
 	/* Setup scroll */
-	sy_fix[0]=((m_f3_control_0[4]&0xffff)<< 9) + (1<<16);
-	sy_fix[1]=((m_f3_control_0[5]&0xffff)<< 9) + ((f3_game==LANDMAKR) ? 0 : 1<<16);
-	sy_fix[2]=((m_f3_control_0[6]&0xffff)<< 9) + ((f3_game==LANDMAKR) ? 0 : 1<<16);
-	sy_fix[3]=((m_f3_control_0[7]&0xffff)<< 9) + (1<<16);
-	sx_fix[0]=((m_f3_control_0[0]&0xffc0)<<10) - (6<<16);
-	sx_fix[1]=((m_f3_control_0[1]&0xffc0)<<10) - (10<<16);
-	sx_fix[2]=((m_f3_control_0[2]&0xffc0)<<10) - (14<<16);
-	sx_fix[3]=((m_f3_control_0[3]&0xffc0)<<10) - (18<<16);
-	sx_fix[4]=-(m_f3_control_1[4])+41;
-	sy_fix[4]=-(m_f3_control_1[5]&0x1ff);
+	sy_fix[0]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[4])&0xffff)<< 9) + (1<<16);
+	sy_fix[1]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[5])&0xffff)<< 9) + (1<<16);
+	sy_fix[2]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[6])&0xffff)<< 9) + (1<<16);
+	sy_fix[3]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[7])&0xffff)<< 9) + (1<<16);
+	sx_fix[0]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[0])&0xffc0)<<10) - (6<<16);
+	sx_fix[1]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[1])&0xffc0)<<10) - (10<<16);
+	sx_fix[2]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[2])&0xffc0)<<10) - (14<<16);
+	sx_fix[3]=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[3])&0xffc0)<<10) - (18<<16);
+	sx_fix[4]=-(BURN_ENDIAN_SWAP_INT16(m_f3_control_1[4]))+41;
+	sy_fix[4]=-(BURN_ENDIAN_SWAP_INT16(m_f3_control_1[5])&0x1ff);
 
-	sx_fix[0]-=((m_f3_control_0[0]&0x003f)<<10)+0x0400-0x10000;
-	sx_fix[1]-=((m_f3_control_0[1]&0x003f)<<10)+0x0400-0x10000;
-	sx_fix[2]-=((m_f3_control_0[2]&0x003f)<<10)+0x0400-0x10000;
-	sx_fix[3]-=((m_f3_control_0[3]&0x003f)<<10)+0x0400-0x10000;
+	sx_fix[0]-=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[0])&0x003f)<<10)+0x0400-0x10000;
+	sx_fix[1]-=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[1])&0x003f)<<10)+0x0400-0x10000;
+	sx_fix[2]-=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[2])&0x003f)<<10)+0x0400-0x10000;
+	sx_fix[3]-=((BURN_ENDIAN_SWAP_INT16(m_f3_control_0[3])&0x003f)<<10)+0x0400-0x10000;
 
 	if (flipscreen)
 	{
@@ -2842,10 +2813,10 @@ void TaitoF3DrawCommon(INT32 scanline_start)
 				} else if (nBurnBpp == 4) { // quad block-32bit (fast)
 					for (INT32 x = 0; x < nScreenWidth; x+=4, i++, dst += (nBurnBpp*4))
 					{
-						*((UINT32*)(dst + 0)) = src[x + 0];
-						*((UINT32*)(dst + 4)) = src[x + 1];
-						*((UINT32*)(dst + 8)) = src[x + 2];
-						*((UINT32*)(dst + 12))= src[x + 3];
+						*((UINT32*)(dst + 0)) = BURN_ENDIAN_SWAP_INT32(src[x + 0]);
+						*((UINT32*)(dst + 4)) = BURN_ENDIAN_SWAP_INT32(src[x + 1]);
+						*((UINT32*)(dst + 8)) = BURN_ENDIAN_SWAP_INT32(src[x + 2]);
+						*((UINT32*)(dst + 12))= BURN_ENDIAN_SWAP_INT32(src[x + 3]);
 					}
 
 					src -= 512;
@@ -2876,10 +2847,10 @@ void TaitoF3DrawCommon(INT32 scanline_start)
 				} else if (nBurnBpp == 4) { // quad block-32bit (fast)
 					for (INT32 x = 0; x < nScreenWidth; x+=4, i++, dst += (nBurnBpp*4))
 					{
-						*((UINT32*)(dst + 0)) = src[x + 0];
-						*((UINT32*)(dst + 4)) = src[x + 1];
-						*((UINT32*)(dst + 8)) = src[x + 2];
-						*((UINT32*)(dst + 12))= src[x + 3];
+						*((UINT32*)(dst + 0)) = BURN_ENDIAN_SWAP_INT32(src[x + 0]);
+						*((UINT32*)(dst + 4)) = BURN_ENDIAN_SWAP_INT32(src[x + 1]);
+						*((UINT32*)(dst + 8)) = BURN_ENDIAN_SWAP_INT32(src[x + 2]);
+						*((UINT32*)(dst + 12))= BURN_ENDIAN_SWAP_INT32(src[x + 3]);
 					}
 
 					src += 512;

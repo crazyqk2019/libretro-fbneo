@@ -1,6 +1,9 @@
 // FB Alpha Namco System 1 driver module
 // Based on MAME driver by Ernesto Corvi
 
+// Note:
+// Dip values are bitswapped compared to latest mame
+
 #include "tiles_generic.h"
 #include "m6809_intf.h"
 #include "m6800_intf.h"
@@ -8,6 +11,7 @@
 #include "namco_snd.h"
 #include "dac.h"
 #include "driver.h"
+#include "burn_gun.h" // paddle (quester)
 
 static UINT8 *AllRam;
 static UINT8 *RamEnd;
@@ -95,10 +99,12 @@ static UINT8 DrvDips[2];
 static UINT8 DrvInputs[7];
 static UINT8 DrvReset;
 
-static INT16 Paddle[2]; // quester
 static UINT8 quester = 0; // use paddle?
+static INT16 Analog[2];
 
 static UINT8 sixtyhz = 0; // some games only like 60hz
+
+static INT32 nCyclesExtra[4];
 
 static struct BurnInputInfo DrvInputList[] = {
 	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 4,	"p1 coin"	},
@@ -127,6 +133,29 @@ static struct BurnInputInfo DrvInputList[] = {
 };
 
 STDINPUTINFO(Drv)
+
+#define A(a, b, c, d) {a, b, (UINT8*)(c), d}
+static struct BurnInputInfo QuesterInputList[] = {
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 4,	"p1 coin"	},
+	{"P1 Start",		BIT_DIGITAL,	DrvJoy1 + 7,	"p1 start"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 left"	},
+	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 right"	},
+	A("P1 Paddle",		BIT_ANALOG_REL, &Analog[0],		"p1 x-axis"),
+	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
+
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy3 + 3,	"p2 coin"	},
+	{"P2 Start",		BIT_DIGITAL,	DrvJoy2 + 7,	"p2 start"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 left"	},
+	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 right"	},
+	A("P2 Paddle",		BIT_ANALOG_REL, &Analog[1],		"p2 x-axis"),
+	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
+
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy3 + 6,	"service"	},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+};
+
+STDINPUTINFO(Quester)
 
 static struct BurnInputInfo Tankfrce4InputList[] = {
 	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 4,	"p1 coin"	},
@@ -241,6 +270,34 @@ static struct BurnDIPInfo DrvDIPList[]=
 };
 
 STDDIPINFO(Drv)
+
+static struct BurnDIPInfo QuesterDIPList[]=
+{
+	DIP_OFFSET(0x0e)
+	{0x00, 0xff, 0xff, 0xfb, NULL					},
+
+	{0   , 0xfe, 0   ,    2, "Unk 1"				},
+	{0x00, 0x01, 0x40, 0x40, "Off"					},
+	{0x00, 0x01, 0x40, 0x00, "On"					},
+
+	{0   , 0xfe, 0   ,    2, "Freeze"				},
+	{0x00, 0x01, 0x10, 0x10, "Off"					},
+	{0x00, 0x01, 0x10, 0x00, "On"					},
+
+	{0   , 0xfe, 0   ,    2, "Brightness"			},
+	{0x00, 0x01, 0x04, 0x04, "Low"					},
+	{0x00, 0x01, 0x04, 0x00, "Normal"				},
+
+	{0   , 0xfe, 0   ,    2, "Level Select"			},
+	{0x00, 0x01, 0x01, 0x01, "Off"					},
+	{0x00, 0x01, 0x01, 0x00, "On"					},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"			},
+	{0x00, 0x01, 0x80, 0x80, "Off"					},
+	{0x00, 0x01, 0x80, 0x00, "On"					},
+};
+
+STDDIPINFO(Quester)
 
 static struct BurnDIPInfo ShadowldDIPList[]=
 {
@@ -502,11 +559,15 @@ STDDIPINFO(Faceoff)
 
 static struct BurnDIPInfo BerabohmDIPList[]=
 {
-	{0x1a, 0xff, 0xff, 0xa1, NULL			},
+	{0x1a, 0xff, 0xff, 0xb1, NULL			},
 
 	{0   , 0xfe, 0   ,    2, "Freeze"		},
 	{0x1a, 0x01, 0x01, 0x01, "Off"			},
 	{0x1a, 0x01, 0x01, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0x1a, 0x01, 0x10, 0x00, "Off"			},
+	{0x1a, 0x01, 0x10, 0x10, "On"			},
 
 	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
 	{0x1a, 0x01, 0x20, 0x20, "Off"			},
@@ -615,9 +676,9 @@ static UINT8 quester_paddle_read(INT32 offset)
 		INT32 ret;
 
 		if (!(strobe_count & 0x20))
-			ret = (DrvInputs[0]&0x90) | (strobe_count & 0x40) | (Paddle[0]&0x0f);
+			ret = (DrvInputs[0]&0x90) | (strobe_count & 0x40) | (BurnTrackballRead(0, 0)&0x0f);
 		else
-			ret = (DrvInputs[0]&0x90) | (strobe_count & 0x40) | (Paddle[1]&0x0f);
+			ret = (DrvInputs[0]&0x90) | (strobe_count & 0x40) | (BurnTrackballRead(0, 1)&0x0f);
 
 		strobe_count ^= 0x40;
 
@@ -628,9 +689,9 @@ static UINT8 quester_paddle_read(INT32 offset)
 		INT32 ret;
 
 		if (!(strobe_count & 0x20))
-			ret = (DrvInputs[1]&0x90) | 0x00 | (Paddle[0]>>4);
+			ret = (DrvInputs[1]&0x90) | 0x00 | (BurnTrackballRead(0, 0)>>4);
 		else
-			ret = (DrvInputs[1]&0x90) | 0x20 | (Paddle[1]>>4);
+			ret = (DrvInputs[1]&0x90) | 0x20 | (BurnTrackballRead(0, 1)>>4);
 
 		if (!(strobe_count & 0x40)) strobe_count ^= 0x20;
 
@@ -928,34 +989,6 @@ static void virtual_write(UINT32 address, UINT8 data)
 	}
 }
 
-static void subres_callback(INT32 state)
-{
-	if (state != sub_cpu_in_reset)
-	{
-		mcu_patch_data = 0;
-		sub_cpu_in_reset = state;
-	}
-
-	if (state == CPU_IRQSTATUS_ACK)
-	{
-		M6809Close();
-
-		M6809Open(1);
-		M6809Reset();
-		M6809Close();
-
-		M6809Open(2);
-		M6809Reset();
-		M6809Close();
-
-		M6809Open(0);
-
-		HD63701Open(0);
-		HD63701ResetSoft();
-		HD63701Close();
-	}
-}
-
 static void bankswitch(int whichcpu, int whichbank, int a0, UINT8 data)
 {
 	UINT32 &bank = bank_offsets[whichcpu][whichbank];
@@ -991,7 +1024,7 @@ static void kick_watchdog(int whichcpu)
 
 	shared_watchdog |= (1 << whichcpu);
 
-	if (shared_watchdog == ALL_CPU_MASK || !sub_cpu_reset)
+	if (shared_watchdog == ALL_CPU_MASK || sub_cpu_reset)
 	{
 		shared_watchdog = 0;
 		watchdog = 0;
@@ -1016,10 +1049,17 @@ static void register_write(int whichcpu, UINT16 offset, UINT8 data)
 		break;
 
 		case 8:  // F000 - SUBRES (halt/reset everything but main CPU)
-			if (whichcpu == 0)
-			{
-				sub_cpu_reset = data & 1;
-				subres_callback(sub_cpu_reset ? CLEAR_LINE : ASSERT_LINE);
+			if (whichcpu == 0) {
+				sub_cpu_reset = ~data & 1;
+
+				if (sub_cpu_reset != sub_cpu_in_reset) {
+					mcu_patch_data = 0;
+					sub_cpu_in_reset = sub_cpu_reset;
+				}
+
+				M6809SetRESETLine(1, sub_cpu_reset);
+				M6809SetRESETLine(2, sub_cpu_reset);
+				HD63701SetRESETLine(0, sub_cpu_reset);
 			}
 		break;
 
@@ -1036,26 +1076,18 @@ static void register_write(int whichcpu, UINT16 offset, UINT8 data)
 		break;
 
 		case 13: // FA00 - assert FIRQ on sub CPU
-			if (whichcpu == 0)
-			{
-				M6809Close();
-				M6809Open(1);
-				M6809SetIRQLine(1, CPU_IRQSTATUS_ACK);
-				M6809Close();
-				M6809Open(0);
+			if (whichcpu == 0) {
+				M6809SetIRQLine(1, 1, CPU_IRQSTATUS_ACK);
 			}
 		break;
 
 		case 14: // FC00 - set initial ROM bank for sub CPU
-			if (whichcpu == 0)
-			{
+			if (whichcpu == 0) {
 				bank_offsets[1][7] = 0x600000 | (data * 0x2000);
 
-				M6809Close();
-				M6809Open(1);
+				M6809CPUPush(1);
 				M6809MapMemory(DrvMainROM + (bank_offsets[1][7] & 0x3fffff), 0xe000, 0xffff, MAP_ROM);
-				M6809Close();
-				M6809Open(0);
+				M6809CPUPop();
 			}
 		break;
 	}
@@ -1119,11 +1151,8 @@ static void sound_write(UINT16 address, UINT8 data)
 	switch (address)
 	{
 		case 0x4000:
-			BurnYM2151SelectRegister(data);
-		return;
-
 		case 0x4001:
-			BurnYM2151WriteRegister(data);
+			BurnYM2151Write(address & 1, data);
 		return;
 
 		case 0xc000:
@@ -1269,7 +1298,7 @@ static void mcu_write_port(UINT16 port, UINT8 data)
 	switch (port & 0x1ff)
 	{
 		case HD63701_PORT1:
-			coin_lockout = (data & 1) ? 0 : 0x18;
+			coin_lockout = 0;//(data & 1) ? 0 : 0x18; causes problems with 4p games
 		return;
 
 		case HD63701_PORT2:
@@ -1341,7 +1370,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 		memset (AllRam, 0, RamEnd - AllRam);
 	}
 
-	if (clear_mem) set_initial_map_banks();  // this fixes rompers boot. (relies on wdt after warning screen)
+	set_initial_map_banks();
 
 	M6809Open(0);
 	M6809Reset();
@@ -1351,6 +1380,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	M6809Open(1);
 	M6809Reset();
 	if (clear_mem) m6809_reset_hard(); // this gets shadowld to reboot
+	M6809SetRESETLine(1, 1); // all subs get latched up until signal from SUBRES
 	M6809Close();
 
 	M6809Open(2);
@@ -1359,6 +1389,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 		M6809MapMemory(NULL, 0x0000, 0x3fff, MAP_ROM);
 		m6809_reset_hard();
 	}
+	M6809SetRESETLine(2, 1);
 	NamcoSoundReset();
 	BurnYM2151Reset();
 	DACReset();
@@ -1371,6 +1402,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 		HD63701MapMemory(NULL, 0x4000, 0xbfff, MAP_ROM);
 		HD63701Reset();
 	}
+	HD63701SetRESETLine(0, 1);
 	HD63701Close();
 
 	HiscoreReset();
@@ -1392,7 +1424,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	strobe_count = 0;
 	stored_input[0] = stored_input[1] = 0;
 
-	Paddle[0] = Paddle[1] = 0;
+	memset(nCyclesExtra, 0, sizeof(nCyclesExtra));
 
 	return 0;
 }
@@ -1566,12 +1598,7 @@ static INT32 DrvInit()
 {
 	// above 60hz is a no-go, causes clicky audio on some systems.
 	//BurnSetRefreshRate((sixtyhz) ? 60.00 : 60.6060);
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	if (Namcos1GetRoms()) return 1;
 
@@ -1579,16 +1606,12 @@ static INT32 DrvInit()
 	M6809Open(0);
 	M6809SetWriteHandler(main_write);
 	M6809SetReadHandler(main_read);
-	M6809SetReadOpHandler(main_read);
-	M6809SetReadOpArgHandler(main_read);
 	M6809Close();
 
 	M6809Init(1);
 	M6809Open(1);
 	M6809SetWriteHandler(sub_write);
 	M6809SetReadHandler(sub_read);
-	M6809SetReadOpHandler(sub_read);
-	M6809SetReadOpArgHandler(sub_read);
 	M6809Close();
 
 	M6809Init(2);
@@ -1613,10 +1636,11 @@ static INT32 DrvInit()
 	HD63701SetReadPortHandler(mcu_read_port);
 	HD63701Close();
 
-	BurnYM2151Init(3579580);
+	BurnYM2151InitBuffered(3579580, 1, NULL, 0);
 	BurnYM2151SetIrqHandler(&YM2151IrqHandler);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 0.60, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 0.60, BURN_SND_ROUTE_RIGHT);
+	BurnTimerAttachM6809(1536000);
 
 	NamcoSoundInit(24000/2, 8, 1);
 	NamcoSoundSetAllRoutes(0.50 * 10.0 / 16.0, BURN_SND_ROUTE_BOTH);
@@ -1641,9 +1665,6 @@ static INT32 DrvExit()
 	key_read_callback = NULL;
 	key_write_callback = NULL;
 
-	sixtyhz = 0;
-	quester = 0;
-
 	M6809Exit();
 	HD63701Exit();
 
@@ -1654,7 +1675,12 @@ static INT32 DrvExit()
 
 	BurnYM2151Exit();
 
-	BurnFree(AllMem);
+	if (quester) BurnTrackballExit();
+
+	BurnFreeMemIndex();
+
+	sixtyhz = 0;
+	quester = 0;
 
 	return 0;
 }
@@ -1926,26 +1952,20 @@ static INT32 DrvFrame()
 		}
 
 		if (quester) {
-			if (DrvJoy1[0]) Paddle[0] += 0x04;
-			if (DrvJoy1[1]) Paddle[0] -= 0x04;
-			if (Paddle[0] >= 0x100) Paddle[0] = 0;
-			if (Paddle[0] < 0) Paddle[0] = 0xfc;
-			if (DrvJoy2[0]) Paddle[1] += 0x04;
-			if (DrvJoy2[1]) Paddle[1] -= 0x04;
-			if (Paddle[1] >= 0x100) Paddle[1] = 0;
-			if (Paddle[1] < 0) Paddle[1] = 0xfc;
+			BurnTrackballConfig(0, AXIS_NORMAL, AXIS_NORMAL);
+			BurnTrackballFrame(0, Analog[0], Analog[1], 0x02, 0x3f);
+			BurnTrackballUDLR(0, DrvJoy2[1], DrvJoy2[0], DrvJoy1[1], DrvJoy1[0], 8);
+			BurnTrackballUpdate(0);
 		}
 	}
 
-	INT32 nSegment = 0;
 	INT32 nInterleave = 640; // mame interleave
-	INT32 S1VBL = ((nInterleave * 240) / 256);
-	INT32 nSoundBufferPos = 0;
-	INT32 nCyclesTotal[4] = { (INT32)((double)1536000 / 60.6060), (INT32)((double)1536000 / 60.6060), (INT32)((double)1536000 / 60.6060), (INT32)((double)1536000 / 60.00/*6060*/) }; // run dac cpu @ 60hz for better dac sound quality
+	INT32 S1VBL = ((nInterleave * 240) / 264);
+	INT32 nCyclesTotal[4] = { (INT32)((double)1536000 / 60.6060), (INT32)((double)1536000 / 60.6060), (INT32)((double)1536000 / 60.6060), (INT32)((double)1536000 / 60) }; // run dac cpu @ 60hz for better dac sound quality
 	if (sixtyhz) {
 		nCyclesTotal[0] = nCyclesTotal[1] = nCyclesTotal[2] = nCyclesTotal[3] = 1536000 / 60;
 	}
-	INT32 nCyclesDone[4] = { 0, 0, 0, 0 };
+	INT32 nCyclesDone[4] = { nCyclesExtra[0], nCyclesExtra[1], nCyclesExtra[2], nCyclesExtra[3] };
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
@@ -1954,37 +1974,20 @@ static INT32 DrvFrame()
 		if (i == S1VBL) M6809SetIRQLine(0, CPU_IRQSTATUS_ACK);
 		M6809Close();
 
-		if (sub_cpu_in_reset == 0)
-		{
-			M6809Open(1);
-			CPU_RUN(1, M6809);
-			if (i == S1VBL) M6809SetIRQLine(0, CPU_IRQSTATUS_ACK);
-			M6809Close();
+		M6809Open(1);
+		CPU_RUN(1, M6809);
+		if (i == S1VBL) M6809SetIRQLine(0, CPU_IRQSTATUS_ACK);
+		M6809Close();
 
-			M6809Open(2);
-			CPU_RUN(2, M6809);
-			if (i == S1VBL) M6809SetIRQLine(0, CPU_IRQSTATUS_ACK);
-			M6809Close();
+		M6809Open(2);
+		CPU_RUN_TIMER(2);
+		if (i == S1VBL) M6809SetIRQLine(0, CPU_IRQSTATUS_ACK);
+		M6809Close();
 
-			HD63701Open(0);
-			CPU_RUN(3, HD63701);
-			if (i == S1VBL) HD63701SetIRQLine(0, CPU_IRQSTATUS_ACK);
-			HD63701Close();
-		}
-		else
-		{
-			M6809Open(1);
-			CPU_IDLE(1, M6809);
-			M6809Close();
-
-			M6809Open(2);
-			CPU_IDLE(2, M6809);
-			M6809Close();
-
-			HD63701Open(0);
-			CPU_IDLE(3, HD63701);
-			HD63701Close();
-		}
+		HD63701Open(0);
+		CPU_RUN(3, HD63701);
+		if (i == S1VBL) HD63701SetIRQLine(0, CPU_IRQSTATUS_ACK);
+		HD63701Close();
 
 		if (i == S1VBL) {
 			if (buffer_sprites) {
@@ -1995,38 +1998,22 @@ static INT32 DrvFrame()
 				}
 				buffer_sprites = 0;
 			}
-		}
 
-		if ((i % 8) == 7) {
-			if (pBurnSoundOut) {
-				nSegment = nBurnSoundLen / (nInterleave / 8);
-				M6809Open(2);
-				BurnYM2151Render(pBurnSoundOut + (nSoundBufferPos << 1), nSegment);
-				M6809Close();
-				nSoundBufferPos += nSegment;
+			if (pBurnDraw) {
+				DrvDraw();
 			}
 		}
 	}
 
-	M6809Open(2);
+	nCyclesExtra[0] = nCyclesDone[0] - nCyclesTotal[0];
+	nCyclesExtra[1] = nCyclesDone[1] - nCyclesTotal[1];
+	nCyclesExtra[2] = nCyclesDone[2] - nCyclesTotal[2];
+	nCyclesExtra[3] = nCyclesDone[3] - nCyclesTotal[3];
 
 	if (pBurnSoundOut) {
-		nSegment = nBurnSoundLen - nSoundBufferPos;
-		if (nSegment > 0) {
-			BurnYM2151Render(pBurnSoundOut + (nSoundBufferPos << 1), nSegment);
-		}
-
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 		NamcoSoundUpdate(pBurnSoundOut, nBurnSoundLen);
-
-		HD63701Open(0);
 		DACUpdate(pBurnSoundOut, nBurnSoundLen);
-		HD63701Close();
-	}
-
-	M6809Close();
-
-	if (pBurnDraw) {
-		DrvDraw();
 	}
 
 	return 0;
@@ -2096,8 +2083,11 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(dac1_value);
 		SCAN_VAR(dac0_gain);
 		SCAN_VAR(dac1_gain);
+		if (quester) BurnTrackballScan();
 
 		BurnRandomScan(nAction);
+
+		SCAN_VAR(nCyclesExtra);
 	}
 
 	if (nAction & ACB_WRITE) {
@@ -2183,7 +2173,7 @@ struct BurnDriver BurnDrvShadowld = {
 };
 
 
-// Yokai Douchuuki (Japan, new version (YD2, Rev B))
+// Youkai Douchuuki (Japan, new version (YD2, Rev B))
 
 static struct BurnRomInfo youkaidk2RomDesc[] = {
 	{ "yd1_s0.bin",		0x10000, 0xa9cb51fb, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -2226,7 +2216,7 @@ STD_ROM_FN(youkaidk2)
 
 struct BurnDriver BurnDrvYoukaidk2 = {
 	"youkaidk2", "shadowld", NULL, NULL, "1987",
-	"Yokai Douchuuki (Japan, new version (YD2, Rev B))\0", NULL, "Namco", "System 1",
+	"Youkai Douchuuki (Japan, new version (YD2, Rev B))\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, youkaidk2RomInfo, youkaidk2RomName, NULL, NULL, NULL, NULL, DrvInputInfo, ShadowldDIPInfo,
@@ -2235,7 +2225,7 @@ struct BurnDriver BurnDrvYoukaidk2 = {
 };
 
 
-// Yokai Douchuuki (Japan, old version (YD1))
+// Youkai Douchuuki (Japan, old version (YD1))
 
 static struct BurnRomInfo youkaidk1RomDesc[] = {
 	{ "yd1.sd0",		0x10000, 0xa9cb51fb, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -2278,7 +2268,7 @@ STD_ROM_FN(youkaidk1)
 
 struct BurnDriver BurnDrvYoukaidk1 = {
 	"youkaidk1", "shadowld", NULL, NULL, "1987",
-	"Yokai Douchuuki (Japan, old version (YD1))\0", NULL, "Namco", "System 1",
+	"Youkai Douchuuki (Japan, old version (YD1))\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, youkaidk1RomInfo, youkaidk1RomName, NULL, NULL, NULL, NULL, DrvInputInfo, ShadowldDIPInfo,
@@ -2557,6 +2547,8 @@ static INT32 QuesterInit()
 	input_read_callback = quester_paddle_read;
 	quester = 1;
 
+	BurnTrackballInit(1); // 1 device = 2 paddles
+
 	return DrvInit();
 }
 
@@ -2565,7 +2557,7 @@ struct BurnDriver BurnDrvQuester = {
 	"Quester (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
-	NULL, questerRomInfo, questerRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo, //QuesterInputInfo, QuesterDIPInfo,
+	NULL, questerRomInfo, questerRomName, NULL, NULL, NULL, NULL, QuesterInputInfo, QuesterDIPInfo,
 	QuesterInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	224, 288, 3, 4
 };
@@ -2602,7 +2594,7 @@ struct BurnDriver BurnDrvQuesters = {
 	"Quester Special Edition (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_BREAKOUT, 0,
-	NULL, questersRomInfo, questersRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo, //QuesterInputInfo, QuesterDIPInfo,
+	NULL, questersRomInfo, questersRomName, NULL, NULL, NULL, NULL, QuesterInputInfo, QuesterDIPInfo,
 	QuesterInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	224, 288, 3, 4
 };
@@ -2646,7 +2638,7 @@ struct BurnDriver BurnDrvPacmania = {
 	"pacmania", NULL, NULL, NULL, "1987",
 	"Pac-Mania\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, pacmaniaRomInfo, pacmaniaRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PacmaniaDIPInfo,
 	PacmaniaInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	224, 288, 3, 4
@@ -2684,7 +2676,7 @@ struct BurnDriver BurnDrvPacmaniao = {
 	"pacmaniao", "pacmania", NULL, NULL, "1987",
 	"Pac-Mania (111187 sound program)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, pacmaniaoRomInfo, pacmaniaoRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PacmaniaDIPInfo,
 	PacmaniaInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	224, 288, 3, 4
@@ -2722,7 +2714,7 @@ struct BurnDriver BurnDrvPacmaniaj = {
 	"pacmaniaj", "pacmania", NULL, NULL, "1987",
 	"Pac-Mania (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_ACTION, 0,
 	NULL, pacmaniajRomInfo, pacmaniajRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PacmaniaDIPInfo,
 	PacmaniaInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	224, 288, 3, 4
@@ -2738,8 +2730,8 @@ static struct BurnRomInfo galaga88RomDesc[] = {
 	{ "g81_p0.bin",		0x10000, 0x0f0778ca, 2 | BRF_PRG | BRF_ESS }, //  2 Main and Sub m6809 Code
 	{ "g81_p1.bin",		0x10000, 0xe68cb351, 2 | BRF_PRG | BRF_ESS }, //  3
 	{ "g81_p5.bin",		0x10000, 0x4fbd3f6c, 2 | BRF_PRG | BRF_ESS }, //  4
-	{ "g8x_p6.bin",		0x10000, 0x403d01c1, 2 | BRF_PRG | BRF_ESS }, //  5
-	{ "g8x_p7.bin",		0x10000, 0xdf75b7fc, 2 | BRF_PRG | BRF_ESS }, //  6
+	{ "g82_p6.bin",		0x10000, 0x403d01c1, 2 | BRF_PRG | BRF_ESS }, //  5
+	{ "g82_p7.bin",		0x10000, 0xdf75b7fc, 2 | BRF_PRG | BRF_ESS }, //  6
 
 	{ "cus64-64a1.mcu",	0x01000, 0xffb5c0bd, 3 | BRF_PRG | BRF_ESS }, //  7 Internal MCU Code
 
@@ -2887,7 +2879,7 @@ struct BurnDriver BurnDrvGalaga88a = {
 };
 
 
-// World Stadium (Japan)
+// Pro Yakyuu World Stadium (Japan)
 
 static struct BurnRomInfo wsRomDesc[] = {
 	{ "ws1_snd0.bin",	0x10000, 0x45a87810, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -2930,7 +2922,7 @@ static INT32 WsInit()
 
 struct BurnDriver BurnDrvWs = {
 	"ws", NULL, NULL, NULL, "1988",
-	"World Stadium (Japan)\0", NULL, "Namco", "System 1",
+	"Pro Yakyuu World Stadium (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SPORTSMISC, 0,
 	NULL, wsRomInfo, wsRomName, NULL, NULL, NULL, NULL, DrvInputInfo, DrvDIPInfo,
@@ -2939,7 +2931,7 @@ struct BurnDriver BurnDrvWs = {
 };
 
 
-// Beraboh Man (Japan, Rev C)
+// Chou Zetsurinjin Berabowman (Japan, Rev C)
 
 static struct BurnRomInfo berabohmRomDesc[] = {
 	{ "bm1_s0.bin",		0x10000, 0xd5d53cb1, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -2987,7 +2979,7 @@ static INT32 BerabohmInit()
 
 struct BurnDriver BurnDrvBerabohm = {
 	"berabohm", NULL, NULL, NULL, "1988",
-	"Beraboh Man (Japan, Rev C)\0", NULL, "Namco", "System 1",
+	"Chou Zetsurinjin Berabowman (Japan, Rev C)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
 	NULL, berabohmRomInfo, berabohmRomName, NULL, NULL, NULL, NULL, BerabohmInputInfo, BerabohmDIPInfo,
@@ -2996,7 +2988,7 @@ struct BurnDriver BurnDrvBerabohm = {
 };
 
 
-// Beraboh Man (Japan, Rev B)
+// Chou Zetsurinjin Berabowman (Japan, Rev B)
 
 static struct BurnRomInfo berabohmbRomDesc[] = {
 	{ "bm1_s0.bin",		0x10000, 0xd5d53cb1, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -3037,7 +3029,7 @@ STD_ROM_FN(berabohmb)
 
 struct BurnDriver BurnDrvBerabohmb = {
 	"berabohmb", "berabohm", NULL, NULL, "1988",
-	"Beraboh Man (Japan, Rev B)\0", NULL, "Namco", "System 1",
+	"Chou Zetsurinjin Berabowman (Japan, Rev B)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
 	NULL, berabohmbRomInfo, berabohmbRomName, NULL, NULL, NULL, NULL, BerabohmInputInfo, BerabohmDIPInfo,
@@ -3205,7 +3197,7 @@ struct BurnDriver BurnDrvBakutotu = {
 };
 
 
-// World Court (Japan)
+// Pro Tennis World Court (Japan)
 
 static struct BurnRomInfo wldcourtRomDesc[] = {
 	{ "wc1_snd0.bin",	0x10000, 0x17a6505d, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -3243,7 +3235,7 @@ static INT32 WldcourtInit()
 
 struct BurnDriver BurnDrvWldcourt = {
 	"wldcourt", NULL, NULL, NULL, "1988",
-	"World Court (Japan)\0", NULL, "Namco", "System 1",
+	"Pro Tennis World Court (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SPORTSMISC, 0,
 	NULL, wldcourtRomInfo, wldcourtRomName, NULL, NULL, NULL, NULL, DrvInputInfo, WldcourtDIPInfo,
@@ -3621,7 +3613,7 @@ struct BurnDriver BurnDrvBlastoff = {
 };
 
 
-// World Stadium '89 (Japan)
+// Pro Yakyuu World Stadium '89 (Japan)
 
 static struct BurnRomInfo ws89RomDesc[] = {
 	{ "w91_snd0.bin",	0x10000, 0x52b84d5a, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -3664,7 +3656,7 @@ static INT32 Ws89Init()
 
 struct BurnDriver BurnDrvWs89 = {
 	"ws89", "ws", NULL, NULL, "1989",
-	"World Stadium '89 (Japan)\0", NULL, "Namco", "System 1",
+	"Pro Yakyuu World Stadium '89 (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SPORTSMISC, 0,
 	NULL, ws89RomInfo, ws89RomName, NULL, NULL, NULL, NULL, DrvInputInfo, Ws89DIPInfo,
@@ -3722,7 +3714,7 @@ struct BurnDriver BurnDrvDangseed = {
 };
 
 
-// World Stadium '90 (Japan)
+// Pro Yakyuu World Stadium '90 (Japan)
 
 static struct BurnRomInfo ws90RomDesc[] = {
 	{ "w91_snd0.bin",	0x10000, 0x52b84d5a, 1 | BRF_PRG | BRF_ESS }, //  0 Sound m6809 Code
@@ -3765,7 +3757,7 @@ static INT32 Ws90Init()
 
 struct BurnDriver BurnDrvWs90 = {
 	"ws90", "ws", NULL, NULL, "1990",
-	"World Stadium '90 (Japan)\0", NULL, "Namco", "System 1",
+	"Pro Yakyuu World Stadium '90 (Japan)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_SPORTSMISC, 0,
 	NULL, ws90RomInfo, ws90RomName, NULL, NULL, NULL, NULL, DrvInputInfo, Ws90DIPInfo,
@@ -3981,7 +3973,7 @@ struct BurnDriver BurnDrvPuzlclub = {
 	"puzlclub", NULL, NULL, NULL, "1990",
 	"Puzzle Club (Japan prototype)\0", NULL, "Namco", "System 1",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, puzlclubRomInfo, puzlclubRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PuzlclubDIPInfo,
 	PuzlclubInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	224, 288, 3, 4
@@ -3995,7 +3987,7 @@ static struct BurnRomInfo tankfrceRomDesc[] = {
 
 	{ "tf1_prg0.bin",	0x20000, 0x2ae4b9eb, 2 | BRF_PRG | BRF_ESS }, //  1 Main and Sub m6809 Code
 	{ "tf1_prg1.bin",	0x20000, 0x4a8bb251, 2 | BRF_PRG | BRF_ESS }, //  2
-	{ "tf1prg7.bin",	0x20000, 0x2ec28a87, 2 | BRF_PRG | BRF_ESS }, //  3
+	{ "tf6_prg7.bin",	0x20000, 0x2ec28a87, 2 | BRF_PRG | BRF_ESS }, //  3
 
 	{ "cus64-64a1.mcu",	0x01000, 0xffb5c0bd, 3 | BRF_PRG | BRF_ESS }, //  4 Internal MCU Code
 

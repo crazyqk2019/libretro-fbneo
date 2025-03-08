@@ -2,27 +2,28 @@
 
 typedef UINT8 (*pReadByteHandler)(UINT16 a);
 typedef void (*pWriteByteHandler)(UINT16 a, UINT8 d);
-typedef UINT8 (*pReadOpHandler)(UINT16 a);
-typedef UINT8 (*pReadOpArgHandler)(UINT16 a);
 
 struct M6809Ext {
 
 	m6809_Regs reg;
-	
+
 	UINT8* pMemMap[0x100 * 3];
 
 	pReadByteHandler ReadByte;
 	pWriteByteHandler WriteByte;
-	pReadOpHandler ReadOp;
-	pReadOpArgHandler ReadOpArg;
-	
+
 	INT32 nCyclesTotal;
+	UINT32 bResetLine;
 };
 
 extern INT32 nM6809Count;
 
 void M6809Reset();
 void M6809Reset(INT32 nCPU);
+void M6809SetRESETLine(INT32 nStatus);
+void M6809SetRESETLine(INT32 nCPU, INT32 nStatus);
+INT32 M6809GetRESETLine();
+INT32 M6809GetRESETLine(INT32 nCPU);
 void M6809NewFrame();
 INT32 M6809Init(INT32 cpu);
 void M6809Exit();
@@ -42,11 +43,13 @@ INT32 M6809MapMemory(UINT8* pMemory, UINT16 nStart, UINT16 nEnd, INT32 nType);
 INT32 M6809UnmapMemory(UINT16 nStart, UINT16 nEnd, INT32 nType);
 void M6809SetReadHandler(UINT8 (*pHandler)(UINT16));
 void M6809SetWriteHandler(void (*pHandler)(UINT16, UINT8));
-void M6809SetReadOpHandler(UINT8 (*pHandler)(UINT16));
-void M6809SetReadOpArgHandler(UINT8 (*pHandler)(UINT16));
+void M6809SetCallback(int (*cb)(int));
 INT32 M6809Scan(INT32 nAction);
 UINT16 M6809GetPC();
 UINT16 M6809GetPrevPC();
+
+void M6809CPUPush(INT32 nCPU);
+void M6809CPUPop();
 
 UINT8 M6809ReadByte(UINT16 Address);
 void M6809WriteByte(UINT16 Address, UINT8 Data);

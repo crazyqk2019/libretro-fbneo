@@ -49,21 +49,21 @@ static UINT32 scanline;
 static void partial_update();
 
 static struct BurnInputInfo ToobinInputList[] = {
-	{"Coin 1",						BIT_DIGITAL,	DrvJoy2 + 0,	"p1 coin"	},
-	{"Coin 2",						BIT_DIGITAL,	DrvJoy2 + 1,	"p2 coin"	},
-	{"Coin 3",						BIT_DIGITAL,	DrvJoy2 + 2,	"p3 coin"	},
-
+	{"P1 Coin",						BIT_DIGITAL,	DrvJoy2 + 0,	"p1 coin"	},
 	{"P1 Throw",					BIT_DIGITAL,	DrvJoy1 + 8,	"p1 fire 1"	},
 	{"P1 Right Paddle Forward",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 2"	},
 	{"P1 Left Paddle Forward",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 3"	},
 	{"P1 Left Paddle Backward",		BIT_DIGITAL,	DrvJoy1 + 6,	"p1 fire 4"	},
 	{"P1 Right Paddle Backward",	BIT_DIGITAL,	DrvJoy1 + 7,	"p1 fire 5"	},
 
+	{"P2 Coin",						BIT_DIGITAL,	DrvJoy2 + 1,	"p2 coin"	},
 	{"P2 Throw",					BIT_DIGITAL,	DrvJoy1 + 9,	"p2 fire 1"	},
 	{"P2 Right Paddle Forward",		BIT_DIGITAL,	DrvJoy1 + 0,	"p2 fire 2"	},
 	{"P2 Left Paddle Forward",		BIT_DIGITAL,	DrvJoy1 + 1,	"p2 fire 3"	},
 	{"P2 Left Paddle Backward",		BIT_DIGITAL,	DrvJoy1 + 2,	"p2 fire 4"	},
 	{"P2 Right Paddle Backward",	BIT_DIGITAL,	DrvJoy1 + 3,	"p2 fire 5"	},
+
+	{"P3 Coin",						BIT_DIGITAL,	DrvJoy2 + 2,	"p3 coin"	},
 
 	{"Reset",						BIT_DIGITAL,	&DrvReset,		"reset"		},
 	{"Dip A",						BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
@@ -97,7 +97,7 @@ static void update_interrupts()
 static void __fastcall toobin_main_write_word(UINT32 address, UINT16 data)
 {
 	if ((address & 0xfff800) == 0xc09800) {
-		*((UINT16*)(DrvMobRAM + (address & 0x7fe))) = data;
+		*((UINT16*)(DrvMobRAM + (address & 0x7fe))) = BURN_ENDIAN_SWAP_INT16(data);
 		AtariMoWrite(0, (address / 2) & 0x3ff, data);
 		return;
 	}
@@ -109,7 +109,7 @@ static void __fastcall toobin_main_write_word(UINT32 address, UINT16 data)
 		return;
 
 		case 0xff8100:
-			M6502Run(((double)SekTotalCycles()/4.47) - M6502TotalCycles());
+			M6502Run(((double)SekTotalCycles()/4.46984) - M6502TotalCycles());
 			AtariJSAWrite(data);
 		return;
 
@@ -123,8 +123,8 @@ static void __fastcall toobin_main_write_word(UINT32 address, UINT16 data)
 
 		case 0xff8380:
 			{
-				UINT8 old = atarimo_0_slipram[0];
-				atarimo_0_slipram[0] = data;
+				UINT8 old = BURN_ENDIAN_SWAP_INT16(atarimo_0_slipram[0]);
+				atarimo_0_slipram[0] = BURN_ENDIAN_SWAP_INT16(data);
 				if (old != data)
 					partial_update();
 				return;
@@ -145,14 +145,14 @@ static void __fastcall toobin_main_write_word(UINT32 address, UINT16 data)
 
 		case 0xff8600:
 			partial_update();
-			// iq_132 - partial update!!
 			playfield_scrollx = (data >> 6) & 0x3ff;
+			atarimo_set_xscroll(0, playfield_scrollx);
 		return;
 
 		case 0xff8700:
 			partial_update();
-			// iq_132 - partial update!!
 			playfield_scrolly = (data >> 6) & 0x1ff;
+			atarimo_set_yscroll(0, playfield_scrolly);
 		return;
 	}
 
@@ -163,7 +163,7 @@ static void __fastcall toobin_main_write_byte(UINT32 address, UINT8 data)
 {
 	if ((address & 0xfff800) == 0xc09800) {
 		DrvMobRAM[(address & 0x7ff)^1] = data;
-		AtariMoWrite(0, (address / 2) & 0x3ff, *((UINT16*)(DrvMobRAM + (address & 0x7fe))));
+		AtariMoWrite(0, (address / 2) & 0x3ff, BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvMobRAM + (address & 0x7fe)))));
 		return;
 	}
 
@@ -236,15 +236,15 @@ static UINT8 __fastcall toobin_main_read_byte(UINT32 address)
 
 static tilemap_callback( alpha )
 {
-	UINT16 data = *((UINT16*)(DrvAlphaRAM + (offs * 2)));
+	UINT16 data = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvAlphaRAM + (offs * 2))));
 
 	TILE_SET_INFO(2, data, data >> 12, TILE_FLIPYX((data >> 10) & 1));
 }
 
 static tilemap_callback( bg )
 {
-	UINT16 data0 = *((UINT16*)(DrvPfRAM + (offs * 4 + 0)));
-	UINT16 data1 = *((UINT16*)(DrvPfRAM + (offs * 4 + 2)));
+	UINT16 data0 = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPfRAM + (offs * 4 + 0))));
+	UINT16 data1 = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPfRAM + (offs * 4 + 2))));
 
 	TILE_SET_INFO(0, data1, data0, TILE_FLIPYX(data1 >> 14) | TILE_GROUP((data0 >> 4) & 3));
 }
@@ -372,12 +372,7 @@ static INT32 DrvInit()
 		0					// callback routine for special entries
 	};
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		INT32 k = 0;
@@ -471,7 +466,7 @@ static INT32 DrvExit()
 	AtariMoExit();
 	AtariEEPROMExit();
 
-	BurnFree(AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -482,15 +477,15 @@ static void DrvPaletteUpdate()
 
 	for (INT32 offs = 0; offs < 0x800/2; offs++)
 	{
-		INT32 r = ((p[offs] >> 10) & 0x1f);
-		INT32 g = ((p[offs] >>  5) & 0x1f);
-		INT32 b = ((p[offs] >>  0) & 0x1f);
+		INT32 r = ((BURN_ENDIAN_SWAP_INT16(p[offs]) >> 10) & 0x1f);
+		INT32 g = ((BURN_ENDIAN_SWAP_INT16(p[offs]) >>  5) & 0x1f);
+		INT32 b = ((BURN_ENDIAN_SWAP_INT16(p[offs]) >>  0) & 0x1f);
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
 		b = (b << 3) | (b >> 2);
 
-		if ((p[offs] & 0x8000) == 0) {
+		if ((BURN_ENDIAN_SWAP_INT16(p[offs]) & 0x8000) == 0) {
 			r = (r * palette_brightness) / 31;
 			g = (g * palette_brightness) / 31;
 			b = (b * palette_brightness) / 31;
@@ -542,8 +537,6 @@ static INT32 DrvDraw()
 
 	GenericTilemapSetScrollX(0, playfield_scrollx);
 	GenericTilemapSetScrollY(0, playfield_scrolly);
-	atarimo_set_xscroll(0, playfield_scrollx);
-	atarimo_set_yscroll(0, playfield_scrolly);
 
 	if (nBurnLayer & 1) GenericTilemapDraw(0, pTransDraw, 0); // opaque!!
 	if (nBurnLayer & 2) GenericTilemapDraw(0, pTransDraw, 1 | TMAP_SET_GROUP(1));
@@ -607,8 +600,8 @@ static INT32 DrvFrame()
 
 		linecycles = SekTotalCycles();
 
-		nCyclesDone[0] += SekRun(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
-		nCyclesDone[1] += M6502Run(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+		CPU_RUN(0, Sek);
+		CPU_RUN(1, M6502);
 
 		if (i == 384) {
 			vblank = 1;
@@ -726,7 +719,7 @@ struct BurnDriver BurnDrvToobin = {
 	"toobin", NULL, NULL, NULL, "1988",
 	"Toobin' (rev 3)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, toobinRomInfo, toobinRomName, NULL, NULL, NULL, NULL, ToobinInputInfo, ToobinDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	384, 512, 3, 4
@@ -783,7 +776,7 @@ struct BurnDriver BurnDrvToobine = {
 	"toobine", "toobin", NULL, NULL, "1988",
 	"Toobin' (Europe, rev 3)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, toobineRomInfo, toobineRomName, NULL, NULL, NULL, NULL, ToobinInputInfo, ToobinDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	384, 512, 3, 4
@@ -840,7 +833,7 @@ struct BurnDriver BurnDrvToobing = {
 	"toobing", "toobin", NULL, NULL, "1988",
 	"Toobin' (German, rev 3)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, toobingRomInfo, toobingRomName, NULL, NULL, NULL, NULL, ToobinInputInfo, ToobinDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	384, 512, 3, 4
@@ -897,7 +890,7 @@ struct BurnDriver BurnDrvToobin2e = {
 	"toobin2e", "toobin", NULL, NULL, "1988",
 	"Toobin' (Europe, rev 2)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, toobin2eRomInfo, toobin2eRomName, NULL, NULL, NULL, NULL, ToobinInputInfo, ToobinDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	384, 512, 3, 4
@@ -954,7 +947,7 @@ struct BurnDriver BurnDrvToobin2 = {
 	"toobin2", "toobin", NULL, NULL, "1988",
 	"Toobin' (rev 2)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, toobin2RomInfo, toobin2RomName, NULL, NULL, NULL, NULL, ToobinInputInfo, ToobinDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	384, 512, 3, 4
@@ -1011,7 +1004,7 @@ struct BurnDriver BurnDrvToobin1 = {
 	"toobin1", "toobin", NULL, NULL, "1988",
 	"Toobin' (rev 1)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, toobin1RomInfo, toobin1RomName, NULL, NULL, NULL, NULL, ToobinInputInfo, ToobinDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	384, 512, 3, 4

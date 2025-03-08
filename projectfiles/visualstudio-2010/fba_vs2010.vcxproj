@@ -924,6 +924,7 @@ rm %(Filename).exe</Command>
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_tbowl.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_tceptor.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_tecmo.cpp" />
+    <ClCompile Include="..\..\src\burn\drv\pre90s\d_tehkanwc.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_tempest.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_terracre.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_thedeep.cpp" />
@@ -1046,7 +1047,6 @@ rm %(Filename).exe</Command>
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_thoop2.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_tumbleb.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_unico.cpp" />
-    <ClCompile Include="..\..\src\burn\drv\pst90s\d_vmetal.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_welltris.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_wrally.cpp" />
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_wwfwfest.cpp" />

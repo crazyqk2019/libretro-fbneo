@@ -10,8 +10,6 @@ static UINT8 DrvJoy2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 static UINT8 DrvInput[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static UINT8 DrvReset = 0;
-static UINT8 bDrawScreen;
-static bool bVBlank;
 
 static INT32 nPreviousOkiBank;
 
@@ -364,6 +362,8 @@ static INT32 DrvDoReset()
 	nPreviousOkiBank = -1;
 	oki_set_bank(0);
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -407,10 +407,10 @@ static INT32 DrvInit()
 		SekClose();
 	}
 
-	MSM6295Init(0, 1000000 / 132, 1);
+	MSM6295Init(0, 1000000 / 132, 0);
 	MSM6295Init(1, 1000000 / 132, 1);
-	MSM6295SetRoute(0, 1.00, BURN_SND_ROUTE_BOTH);
-	MSM6295SetRoute(1, 1.00, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(0, 0.70, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(1, 0.70, BURN_SND_ROUTE_BOTH);
 
 	nSpriteYOffset = 0x0011;
 
@@ -423,8 +423,6 @@ static INT32 DrvInit()
 	nToaPalLen = nColCount;
 	ToaPalSrc = RamPal;
 	ToaPalInit();
-
-	bDrawScreen = true;
 
 	DrvDoReset();			// Reset machine
 	return 0;
@@ -448,18 +446,11 @@ static INT32 DrvDraw()
 {
 	ToaClearScreen(0);
 
-	if (bDrawScreen) {
-		ToaGetBitmap();
-		ToaRenderGP9001();					// Render GP9001 graphics
-	}
+	ToaGetBitmap();
+	ToaRenderGP9001();						// Render GP9001 graphics
 
 	ToaPalUpdate();							// Update the palette
 
-	return 0;
-}
-
-inline static INT32 CheckSleep(INT32)
-{
 	return 0;
 }
 
@@ -493,7 +484,7 @@ static INT32 DrvFrame()
 	SekSetCyclesScanline(nCyclesTotal[0] / 262);
 	nToaCyclesDisplayStart = nCyclesTotal[0] - ((nCyclesTotal[0] * (TOA_VBLANK_LINES + 240)) / 262);
 	nToaCyclesVBlankStart = nCyclesTotal[0] - ((nCyclesTotal[0] * TOA_VBLANK_LINES) / 262);
-	bVBlank = false;
+	bool bVBlank = false;
 
 	for (INT32 i = 0; i < nInterleave; i++) {
     	INT32 nCurrentCPU;
@@ -502,7 +493,6 @@ static INT32 DrvFrame()
 		// Run 68000
 		nCurrentCPU = 0;
 		nNext = (i + 1) * nCyclesTotal[nCurrentCPU] / nInterleave;
-
 
 		// Trigger VBlank interrupt
 		if (!bVBlank && nNext > nToaCyclesVBlankStart) {
@@ -520,16 +510,10 @@ static INT32 DrvFrame()
 		}
 
 		nCyclesSegment = nNext - nCyclesDone[nCurrentCPU];
-		if (bVBlank || (!CheckSleep(nCurrentCPU))) {					// See if this CPU is busywaiting
-			nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
-		} else {
-			nCyclesDone[nCurrentCPU] += SekIdle(nCyclesSegment);
-		}
-
+		nCyclesDone[nCurrentCPU] += SekRun(nCyclesSegment);
 	}
 
 	if (pBurnSoundOut) {
-		memset (pBurnSoundOut, 0, nBurnSoundLen * 2 * sizeof(INT16));
 		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
 	}
 	
@@ -546,7 +530,7 @@ struct BurnDriver BurnDrvKbash2 = {
 	"kbash2", NULL, NULL, NULL, "1999",
 	"Knuckle Bash 2 (bootleg)\0", NULL, "bootleg", "Toaplan GP9001 based",
 	L"Knuckle Bash 2\0Knuckle Bash \u30CA\u30C3\u30AF\u30EB\u30D0\u30C3\u30B7\u30E5 \uFF12 (bootleg)\0", NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_BOOTLEG, 2, HARDWARE_TOAPLAN_68K_ONLY, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_68K_ONLY, GBF_SCRFIGHT, 0,
 	NULL, kbash2RomInfo, kbash2RomName, NULL, NULL, NULL, NULL, Kbash2InputInfo, Kbash2DIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &ToaRecalcPalette, 0x800,
 	320, 240, 4, 3

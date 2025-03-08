@@ -36,6 +36,7 @@ static INT32 scrolly[3];
 static INT32 enable[3];
 static INT32 fbbright1[3];
 static INT32 fbbright2[3];
+static INT32 c1c[3];
 static INT32 regs1_address[4][2];
 static INT32 prio_scrollx;
 static INT32 prio_scrolly;
@@ -124,7 +125,7 @@ static void toybox_mcu_run()
 		break;
 
 		case 0x03:  // DSW
-			kaneko16_mcu_ram[mcu_offset] = (DrvDips[0] << 8) | 0;
+			kaneko16_mcu_ram[mcu_offset] = BURN_ENDIAN_SWAP_INT16((DrvDips[0] << 8) | 0);
 		break;
 
 		case 0x04:  // Protection
@@ -146,7 +147,7 @@ static void toybox_mcu_com_write(UINT16 data, INT32 select)
 	toybox_mcu_run();
 }
 
-static void do_rle(INT32 which)
+static void do_rle(INT32 which, INT32 data)
 {
 	INT32 rle_count = 0;
 	INT32 normal_count = 0;
@@ -155,6 +156,17 @@ static void do_rle(INT32 which)
 	UINT8 thebyte;
 	UINT32 address = regs1_address[which][1] | (regs1_address[which][0]<<16);
 	UINT16 *framebuffer = DrvFrameBuffer[which];
+
+	switch (data & 0xf000) {
+		case 0x2000:
+			return; // not used?
+		case 0x3000:
+			// data = framebuffer destination address "x" offset
+			// c1c  = framebuffer destination address "y" offset  -dink Nov, 2024
+			//bprintf(0, _T("do_rle, data/c1c:  %x  %x\n"), data, c1c[which]);
+			dstaddress += (data & 0x1ff) | ((c1c[which] & 0x1ff) * 0x200);
+			break;
+	}
 
 	while (dstaddress<0x40000)
 	{
@@ -176,7 +188,9 @@ static void do_rle(INT32 which)
 		else if (rle_count)
 		{
 			thebyte = DrvGfxROM[address & 0xffffff];
-			framebuffer[dstaddress] = thebyte;
+			if (dstaddress >= 0) {
+				framebuffer[dstaddress] = BURN_ENDIAN_SWAP_INT16(thebyte);
+			}
 			dstaddress++;
 			rle_count--;
 
@@ -188,7 +202,9 @@ static void do_rle(INT32 which)
 		else if (normal_count)
 		{
 			thebyte = DrvGfxROM[address & 0xffffff];
-			framebuffer[dstaddress] = thebyte;
+			if (dstaddress >= 0) {
+				framebuffer[dstaddress] = BURN_ENDIAN_SWAP_INT16(thebyte);
+			}
 			dstaddress++;
 			normal_count--;
 			address++;
@@ -237,7 +253,7 @@ static void __fastcall galpani3_write_word(UINT32 address, UINT16 data)
 		case 0x800c06:
 		case 0xa00c06:
 		case 0xc00c06:
-			*((UINT16*)(DrvPalRAM + 0x8600 + ((address / 0x200000) & 3) * 2)) = data;
+			*((UINT16*)(DrvPalRAM + 0x8600 + ((address / 0x200000) & 3) * 2)) = BURN_ENDIAN_SWAP_INT16(data);
 		return;
 
 		case 0x800c10:
@@ -261,11 +277,17 @@ static void __fastcall galpani3_write_word(UINT32 address, UINT16 data)
 			regs1_address[(address / 0x200000) & 3][(address / 2) & 1] = data;
 		return;
 
+		case 0x800c1c:
+		case 0xa00c1c:
+		case 0xc00c1c:
+			c1c[(address / 0x200000) & 3] = data;
+		return;
+
 		case 0x800c1e:
 		case 0xa00c1e:
 		case 0xc00c1e:
-			if ((data & 0xefff) == 0x2000) do_rle((address / 0x200000) & 3);
-		return;
+			do_rle((address / 0x200000) & 3, data);
+			return;
 
 		case 0xe80000:
 			prio_scrollx = data;
@@ -369,6 +391,7 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	memset (scrollx,  		0, sizeof(scrollx));
 	memset (scrolly,  		0, sizeof(scrolly));
 	memset (enable,    		0, sizeof(enable));
+	memset (c1c,    		0, sizeof(c1c));
 	memset (fbbright1,		0, sizeof(fbbright1));
 	memset (fbbright2, 		0, sizeof(fbbright2));
 	memset (regs1_address,	0, sizeof(regs1_address));
@@ -536,9 +559,9 @@ static void DrvPaletteUpdate()
 
 	for (INT32 i = 0; i < 0x8608/2; i++)
 	{
-		UINT8 g = pal5bit(p[i] >> 10);
-		UINT8 r = pal5bit(p[i] >> 5);
-		UINT8 b = pal5bit(p[i] >> 0);
+		UINT8 g = pal5bit(BURN_ENDIAN_SWAP_INT16(p[i]) >> 10);
+		UINT8 r = pal5bit(BURN_ENDIAN_SWAP_INT16(p[i]) >> 5);
+		UINT8 b = pal5bit(BURN_ENDIAN_SWAP_INT16(p[i]) >> 0);
 
 		DrvPalette[i] = (r << 16) | (g << 8) | b; // 32-bit!!
 	}
@@ -555,14 +578,14 @@ static inline UINT32 alpha_blend(UINT32 d, UINT32 s, UINT32 p)
 }
 
 #define COPY_SPRITE_PIXEL(prio)		\
-	if ((sprpri == (prio)) && sprdat) dst = DrvPalette[sprline[drawx] & 0x3fff]
+	{ if ((sprpri == (prio)) && sprdat) dst = DrvPalette[sprline[drawx] & 0x3fff]; }
 
 #define DRAW_BLIT_PIXEL(dat,fb)						\
 {													\
 	UINT16 pen = dat;								\
 	UINT32 pal = DrvPalette[pen];					\
 	INT32 alpha = 0xff;								\
-	if (*((UINT16*)(DrvPalRAM + pen * 2)) >> 15) {	\
+	if (BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPalRAM + pen * 2))) >> 15) {	\
 		alpha = fbbright2[fb] & 0xff;				\
 	} else {										\
 		alpha = fbbright1[fb] & 0xff;				\
@@ -577,19 +600,41 @@ static inline UINT32 alpha_blend(UINT32 d, UINT32 s, UINT32 p)
 	}												\
 }
 
-#define DRAW_BLITLAYER1()	DRAW_BLIT_PIXEL(dat1+0x4000,0)
-#define DRAW_BLITLAYER2()	DRAW_BLIT_PIXEL(dat2+0x4100,1)
-#define DRAW_BLITLAYER3()	DRAW_BLIT_PIXEL(dat3+0x4200,2)
+#define DRAW_BLIT_PIXELTRANSPEN(dat,fb)				\
+{													\
+	UINT16 pen = dat;								\
+	UINT32 pal = DrvPalette[pen];					\
+	INT32 alpha = 0xff;								\
+	if (BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPalRAM + pen * 2))) >> 15) {	\
+		alpha = fbbright2[fb] & 0xff;				\
+	} else {										\
+		alpha = fbbright1[fb] & 0xff;				\
+	}												\
+	if (alpha != 0xff)								\
+	{												\
+		if (pal) dst = alpha_blend(dst, pal, alpha);\
+	}												\
+	else											\
+	{												\
+	    if (pal) dst = pal;   						\
+	}												\
+}
+
+#define DRAW_BLITLAYER1()	DRAW_BLIT_PIXEL(dat1+0x4000, 0)
+#define DRAW_BLITLAYER2()	DRAW_BLIT_PIXEL(dat2+0x4100, 1)
+#define DRAW_BLITLAYER3()	DRAW_BLIT_PIXEL(dat3+0x4200, 2)
+#define DRAW_BLITLAYER3TRANSPEN()	DRAW_BLIT_PIXELTRANSPEN(dat3+0x4200, 2)
 
 static INT32 DrvDraw()
 {
 	DrvPaletteUpdate();
-
+	pBurnDrvPalette = DrvPalette;
 	// Clear sknsspr bitmap register (assumed only used by galpani3)
 	UINT32 *sprite_regs = (UINT32*)DrvSprRegs;
-	if (~sprite_regs[0x04/4] & 0x04) {
+	if (~BURN_ENDIAN_SWAP_INT32(sprite_regs[0x04/4]) & 0x04) {
 		BurnBitmapFill(1, 0);
 	}
+
 	skns_draw_sprites(BurnBitmapGetBitmap(1), (UINT32*)DrvSprRAM, 0x4000, DrvSprROM, 0x200000, (UINT32*)DrvSprRegs, 0);
 
 	for (INT32 drawy = 0; drawy < nScreenHeight; drawy++)
@@ -607,56 +652,58 @@ static INT32 DrvDraw()
 		{
 			INT32 prioffs = (drawx+prio_scrollx+66) & 0x1ff;
 
-			UINT8 dat1 = srcline1[(scrollx[0]+drawx+67)&0x1ff];
-			UINT8 dat2 = srcline2[(scrollx[1]+drawx+67)&0x1ff];
-			UINT8 dat3 = srcline3[(scrollx[2]+drawx+67)&0x1ff];
-			UINT8 pridat = priline[prioffs];
+			UINT8 dat1 = BURN_ENDIAN_SWAP_INT16(srcline1[(scrollx[0]+drawx+67)&0x1ff]);
+			UINT8 dat2 = BURN_ENDIAN_SWAP_INT16(srcline2[(scrollx[1]+drawx+67)&0x1ff]);
+			UINT8 dat3 = BURN_ENDIAN_SWAP_INT16(srcline3[(scrollx[2]+drawx+67)&0x1ff]);
+			UINT8 pridat = BURN_ENDIAN_SWAP_INT16(priline[prioffs]);
 			INT32 sprdat = sprline[drawx] & 0xff;
 			INT32 sprpri = sprline[drawx] & 0xc000;
 			UINT32 dst = 0;
 
 			if (pridat==0x0f)
 			{
-				COPY_SPRITE_PIXEL(0x0000);
-				if (enable[2]) DRAW_BLITLAYER3()
-				COPY_SPRITE_PIXEL(0x4000);
-				if (dat1 && enable[0]) DRAW_BLITLAYER1()
-				COPY_SPRITE_PIXEL(0x8000);
-				if (dat2 && enable[1]) DRAW_BLITLAYER2()
-				COPY_SPRITE_PIXEL(0xc000);
+				if (nSpriteEnable & 1) COPY_SPRITE_PIXEL(0x0000);
+				if (nBurnLayer & 1 && enable[2]) DRAW_BLITLAYER3();
+				if (nSpriteEnable & 2) COPY_SPRITE_PIXEL(0x4000);
+				if (nBurnLayer & 2 && dat1 && enable[0]) DRAW_BLITLAYER1();
+				if (nSpriteEnable & 4) COPY_SPRITE_PIXEL(0x8000);
+				if (nBurnLayer & 4 && dat2 && enable[1]) DRAW_BLITLAYER2();
+				if (nSpriteEnable & 8) COPY_SPRITE_PIXEL(0xc000);
 			}
 			else if (pridat==0xcf)
 			{
-				COPY_SPRITE_PIXEL(0x0000);
-				if (nBurnLayer & 1 && enable[0]) DRAW_BLIT_PIXEL(0x4300, 0)
-				COPY_SPRITE_PIXEL(0x4000);
-				if (nBurnLayer & 2 && enable[1]) DRAW_BLIT_PIXEL(0x4301, 1)
-				COPY_SPRITE_PIXEL(0x8000);
-				if (dat3 && enable[2]) DRAW_BLITLAYER3()
-				COPY_SPRITE_PIXEL(0xc000);
+				//   -all-: black lines left-behind (silhouette)   - dec.  23, 2020 (dink)
+				if (nSpriteEnable & 1) COPY_SPRITE_PIXEL(0x0000);
+				if (nBurnLayer & 1 && enable[0]) DRAW_BLIT_PIXEL(0x4300, 0);
+				if (nSpriteEnable & 2) COPY_SPRITE_PIXEL(0x4000);
+				if (nBurnLayer & 2 && enable[1]) DRAW_BLIT_PIXEL(0x4301, 1);
+				if (nSpriteEnable & 4) COPY_SPRITE_PIXEL(0x8000);
+				if (nBurnLayer & 4 && dat3 && enable[2]) DRAW_BLITLAYER3TRANSPEN();
+				if (nSpriteEnable & 8) COPY_SPRITE_PIXEL(0xc000);
 			}
 			else if (pridat==0x30)
 			{
-				COPY_SPRITE_PIXEL(0x0000);
-				if (enable[1]) DRAW_BLITLAYER2()
-				COPY_SPRITE_PIXEL(0x4000);
-				if (dat1 && enable[0]) DRAW_BLITLAYER1()
-				COPY_SPRITE_PIXEL(0x8000);
-				if (dat3 && enable[1]) DRAW_BLITLAYER3()
-				COPY_SPRITE_PIXEL(0xc000);
+				if (nSpriteEnable & 1) COPY_SPRITE_PIXEL(0x0000);
+				if (nBurnLayer & 1 && enable[1]) DRAW_BLITLAYER2();
+				if (nSpriteEnable & 2) COPY_SPRITE_PIXEL(0x4000);
+				if (nBurnLayer & 2 && enable[0]) DRAW_BLITLAYER1();
+				if (nSpriteEnable & 4) COPY_SPRITE_PIXEL(0x8000);
+				if (nBurnLayer & 4 && dat3 && enable[2]) DRAW_BLITLAYER3();
+				if (nSpriteEnable & 8) COPY_SPRITE_PIXEL(0xc000);
 			}
 			else
 			{
 				// Usually pridat = 0x00.  Used @
 				//   Bootup
 				//   Minigame: Girl with ice-cubes infront   - april 16, 2020 (dink)
-				COPY_SPRITE_PIXEL(0x0000);
-				if (enable[0]) DRAW_BLITLAYER1()
-				if (dat2 && enable[1]) DRAW_BLITLAYER2()
-				COPY_SPRITE_PIXEL(0x4000);
-				COPY_SPRITE_PIXEL(0x8000);
-				if (dat3 && enable[2]) DRAW_BLITLAYER3()
-				COPY_SPRITE_PIXEL(0xc000);
+				//   -all-: black lines left-behind (girl)   - dec.  23, 2020 (dink)
+				if (nSpriteEnable & 1) COPY_SPRITE_PIXEL(0x0000);
+				if (nBurnLayer & 1 && enable[0]) DRAW_BLITLAYER1();
+				if (nBurnLayer & 2 && dat2 && enable[1]) DRAW_BLITLAYER2();
+				if (nSpriteEnable & 2) COPY_SPRITE_PIXEL(0x4000);
+				if (nSpriteEnable & 4) COPY_SPRITE_PIXEL(0x8000);
+				if (nBurnLayer & 4 && dat3 && enable[2]) DRAW_BLITLAYER3TRANSPEN();
+				if (nSpriteEnable & 8) COPY_SPRITE_PIXEL(0xc000);
 			}
 
 			PutPix(bmp + drawx * nBurnBpp, BurnHighCol((dst >> 16) & 0xff, (dst >> 8) & 0xff, dst & 0xff, 0));
@@ -739,6 +786,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(fbbright1);
 		SCAN_VAR(fbbright2);
 		SCAN_VAR(regs1_address);
+		SCAN_VAR(c1c);
 		SCAN_VAR(prio_scrollx);
 		SCAN_VAR(prio_scrolly);
 		SCAN_VAR(regs1);

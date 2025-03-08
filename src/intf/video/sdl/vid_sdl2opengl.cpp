@@ -6,6 +6,8 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
+extern char videofiltering[3];
+
 static SDL_GLContext glContext = NULL;
 
 static int nInitedSubsytems = 0;
@@ -13,7 +15,7 @@ static int nInitedSubsytems = 0;
 static int nGamesWidth = 0, nGamesHeight = 0; // screen size
 
 static GLint texture_type = GL_UNSIGNED_BYTE;
-static SDL_Window* screen = NULL;
+extern SDL_Window* sdlWindow;
 static unsigned char* texture = NULL;
 static unsigned char* gamescreen = NULL;
 
@@ -26,12 +28,19 @@ static int nUseBlitter;
 static int nRotateGame = 0;
 static bool bFlipped = false;
 
+static char Windowtitle[512];
+
 static int BlitFXExit()
 {
-	SDL_DestroyWindow(screen);
-	SDL_GL_DeleteContext(glContext);
 	free(texture);
 	free(gamescreen);
+
+	SDL_DestroyWindow(sdlWindow);
+	sdlWindow = NULL;
+	
+	SDL_GL_DeleteContext(glContext);
+	glContext = NULL;
+	
 	nRotateGame = 0;
 
 	return 0;
@@ -74,8 +83,10 @@ static int BlitFXInit()
 
 	nMemLen = nVidImageWidth * nVidImageHeight * nVidImageBPP;
 
+#ifdef FBNEO_DEBUG
 	printf("nVidImageWidth=%d nVidImageHeight=%d nVidImagePitch=%d\n", nVidImageWidth, nVidImageHeight, nVidImagePitch);
 	printf("nTextureWidth=%d nTextureHeight=%d TexturePitch=%d\n", nTextureWidth, nTextureHeight, nTextureWidth * nVidImageBPP);
+#endif
 
 	texture = (unsigned char*)malloc(nTextureWidth * nTextureHeight * nVidImageBPP);
 
@@ -111,8 +122,9 @@ static int Exit()
 
 void init_gl()
 {
+#ifdef FBNEO_DEBUG
 	printf("opengl config\n");
-
+#endif
 	if ((BurnDrvGetFlags() & BDF_16BIT_ONLY) || (nVidImageBPP != 3))
 	{
 		texture_type = GL_UNSIGNED_SHORT_5_6_5;
@@ -131,8 +143,16 @@ void init_gl()
 	glDepthMask(GL_FALSE);
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_TEXTURE_2D);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	if (strcmp(videofiltering, "0") == 0) 
+	{
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	}
+	else
+	{
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	}
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nTextureWidth, nTextureHeight, 0, GL_RGB, texture_type, texture);
 
 	glMatrixMode(GL_PROJECTION);
@@ -140,7 +160,7 @@ void init_gl()
 
 	if (!nRotateGame)
 	{
-		glRotatef(0.0, 0.0, 0.0, 1.0);
+		glRotatef((bFlipped ? 180.0 : 0.0), 0.0, 0.0, 1.0);
 		glOrtho(0, nGamesWidth, nGamesHeight, 0, -1, 1);
 	}
 	else
@@ -151,8 +171,10 @@ void init_gl()
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-
+	
+#ifdef FBNEO_DEBUG
 	printf("opengl config done . . . \n");
+#endif
 }
 
 static int VidSScaleImage(RECT* pRect)
@@ -170,7 +192,7 @@ static int VidSScaleImage(RECT* pRect)
 
 	if (bDrvOkay)
 	{
-		if ((BurnDrvGetFlags() & (BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED)))
+		if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL)
 		{
 			BurnDrvGetAspect(&nGameAspectY, &nGameAspectX);
 		}
@@ -235,13 +257,17 @@ static int Init()
 
 		if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL)
 		{
+#ifdef FBNEO_DEBUG
 			printf("Vertical\n");
+#endif
 			nRotateGame = 1;
 		}
 
 		if (BurnDrvGetFlags() & BDF_ORIENTATION_FLIPPED)
 		{
+#ifdef FBNEO_DEBUG
 			printf("Flipped\n");
+#endif
 			bFlipped = true;
 		}
 	}
@@ -265,15 +291,36 @@ static int Init()
 	test_rect.right = nGamesWidth;
 	test_rect.top = 0;
 	test_rect.bottom = nGamesHeight;
-
+	
+#ifdef FBNEO_DEBUG
 	printf("correctx before %d, %d\n", test_rect.right, test_rect.bottom);
+#endif
 	VidSScaleImage(&test_rect);
+#ifdef FBNEO_DEBUG
 	printf("correctx after %d, %d\n", test_rect.right, test_rect.bottom);
+#endif
 
+	Uint32 screenFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
 
-	screen = SDL_CreateWindow("FBNeo", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, test_rect.right * nSize,
-		test_rect.bottom * nSize, SDL_WINDOW_OPENGL);
-	glContext = SDL_GL_CreateContext(screen);
+	if (bAppFullscreen)
+	{
+		screenFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN;
+	}
+
+	sprintf(Windowtitle, "FBNeo - %s - %s", BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_FULLNAME));
+	
+	sdlWindow = SDL_CreateWindow(Windowtitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, test_rect.right * nSize,
+		test_rect.bottom * nSize, screenFlags);
+	if (sdlWindow == NULL) {
+		printf("OPENGL failed : %s\n", SDL_GetError());
+		return -1;		
+	}
+	glContext = SDL_GL_CreateContext(sdlWindow);
+	if (glContext == NULL) {
+		printf("OPENGL failed : %s\n", SDL_GetError());
+		return -1;		
+	}
+	
 	// Initialize the buffer surfaces
 	BlitFXInit();
 
@@ -291,25 +338,7 @@ static int Frame(bool bRedraw) // bRedraw = 0
 		return 1;
 	}
 
-	if (bDrvOkay)
-	{
-		if (bRedraw)
-		{ // Redraw current frame
-			if (BurnDrvRedraw())
-			{
-				BurnDrvFrame(); // No redraw function provided, advance one frame
-			}
-		}
-		else
-		{
-			BurnDrvFrame(); // Run one frame and draw the screen
-		}
-
-		if ((BurnDrvGetFlags() & BDF_16BIT_ONLY) && pVidTransCallback)
-		{
-			pVidTransCallback();
-		}
-	}
+	VidFrameCallback(bRedraw);
 
 	return 0;
 }
@@ -353,7 +382,13 @@ static int Paint(int bValidate)
 
 	SurfToTex();
 	TexToQuad();
-	SDL_GL_SwapWindow(screen);
+	
+	if (bAppShowFPS && !bAppFullscreen)
+	{
+		sprintf(Windowtitle, "FBNeo - FPS: %s - %s - %s", fpsstring, BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_FULLNAME));
+		SDL_SetWindowTitle(sdlWindow, Windowtitle);
+	}
+	SDL_GL_SwapWindow(sdlWindow);
 
 
 	return 0;
@@ -369,8 +404,8 @@ static int GetSettings(InterfaceInfo* pInfo)
 {
 	TCHAR szString[MAX_PATH] = _T("");
 
-	_sntprintf(szString, MAX_PATH, _T("Prescaling using %s (%i� zoom)"), VidSoftFXGetEffect(nUseBlitter), nSize);
-	IntInfoAddStringModule(pInfo, szString);
+	//_sntprintf(szString, MAX_PATH, _T("Prescaling using %s (%i� zoom)"), VidSoftFXGetEffect(nUseBlitter), nSize);
+	//IntInfoAddStringModule(pInfo, szString);
 
 	if (nRotateGame)
 	{

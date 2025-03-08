@@ -32,10 +32,10 @@ static UINT8 DrvJoy1[8];
 static UINT8 DrvInputs[1];
 static UINT8 DrvDips[2];
 static UINT8 DrvReset;
-static INT32 DrvAnalogPort0 = 0;
-static INT32 DrvAnalogPort1 = 0;
-static INT32 DrvAnalogPort2 = 0;
-static INT32 DrvAnalogPort3 = 0;
+static INT16 DrvAnalogPort0 = 0;
+static INT16 DrvAnalogPort1 = 0;
+static INT16 DrvAnalogPort2 = 0;
+static INT16 DrvAnalogPort3 = 0;
 
 #define A(a, b, c, d) {a, b, (UINT8*)(c), d}
 static struct BurnInputInfo FoodfInputList[] = {
@@ -175,21 +175,15 @@ static INT32 dip_read(INT32 offset)
 
 static UINT16 analog_read()
 {
-	INT32 analog[4] = { DrvAnalogPort0, DrvAnalogPort2, DrvAnalogPort1, DrvAnalogPort3 };
-#if 0
-	switch (analog_select) {
-		case 0: bprintf(0, _T("p1 X: %02X\n"), ProcessAnalog(analog[analog_select], 1, 1, 0x00, 0xff)); break;
-		//case 1: bprintf(0, _T("p2 X: %02X\n"), ProcessAnalog(analog[analog_select], 1, 1, 0x00, 0xff)); break;
-		case 2: bprintf(0, _T("p1 Y: %02X\n"), ProcessAnalog(analog[analog_select], 1, 1, 0x00, 0xff)); break;
-		//case 3: bprintf(0, _T("p2 Y: %02X\n"), ProcessAnalog(analog[analog_select], 1, 1, 0x00, 0xff)); break;
-	}
-#endif
+	INT16 analog[4] = { DrvAnalogPort0, DrvAnalogPort2, DrvAnalogPort1, DrvAnalogPort3 };
+
 	return ProcessAnalog(analog[analog_select], 1, 1, 0x00, 0xff);
 }
 
 static UINT8 __fastcall foodf_read_byte(UINT32 address)
 {
-	bprintf(0, _T("read byte %X\n"), address);
+	bprintf(0, _T("rb %X\n"), address);
+
 	return 0;
 }
 
@@ -266,6 +260,8 @@ static INT32 DrvDoReset(INT32 full_reset)
 
 	BurnWatchdogReset();
 
+	HiscoreReset();
+
 	nExtraCycles = 0;
 
 	return 0;
@@ -326,12 +322,7 @@ static INT32 DrvGfxDecode()
 
 static INT32 DrvInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(Drv68KROM + 0x000000,  0, 2)) return 1;
@@ -368,7 +359,7 @@ static INT32 DrvInit()
 
 	BurnWatchdogInit(DrvDoReset, 180);
 
-	PokeyInit(604800, 3, 1.00, 0);
+	PokeyInit(604800, 3, 0.65, 0);
 
 	PokeyPotCallback(0, 0, dip_read);
 	PokeyPotCallback(0, 1, dip_read);
@@ -398,7 +389,7 @@ static INT32 DrvExit()
 
 	PokeyExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -407,7 +398,7 @@ static void DrvPaletteUpdate()
 {
 	for (INT32 i = 0; i < 0x100; i++)
 	{
-		UINT16 p = *((UINT16*)(DrvPalRAM + i * 2));
+		UINT16 p = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPalRAM + i * 2)));
 
 		INT32 bit0 = (p >> 0) & 1;
 		INT32 bit1 = (p >> 1) & 1;
@@ -433,8 +424,8 @@ static void draw_sprites()
 
 	for (INT32 offs = 0x80-2; offs >= 0x20; offs -= 2)
 	{
-		UINT16 data1 = ram[offs];
-		UINT16 data2 = ram[offs+1];
+		UINT16 data1 = BURN_ENDIAN_SWAP_INT16(ram[offs]);
+		UINT16 data2 = BURN_ENDIAN_SWAP_INT16(ram[offs+1]);
 
 		INT32 code	= (data1 & 0xff);
 		INT32 color	= (data1 >> 8) & 0x1f;
@@ -500,7 +491,7 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += SekRun((nCyclesTotal[0] * (i + 1) / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, Sek);
 
 		if ((i & 0x3f) == 0 && i <= 192) {
 			irq_vector |= 1;
@@ -518,6 +509,7 @@ static INT32 DrvFrame()
 
 	if (pBurnSoundOut) {
 		pokey_update(pBurnSoundOut, nBurnSoundLen);
+		BurnSoundDCFilter();
 	}
 
 	if (pBurnDraw) {
@@ -596,7 +588,7 @@ struct BurnDriver BurnDrvFoodf = {
 	"foodf", NULL, NULL, NULL, "1982",
 	"Food Fight (rev 3)\0", NULL, "General Computer Corporation (Atari license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, foodfRomInfo, foodfRomName, NULL, NULL, NULL, NULL, FoodfInputInfo, FoodfDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	256, 224, 4, 3
@@ -632,7 +624,7 @@ struct BurnDriver BurnDrvFoodf2 = {
 	"foodf2", "foodf", NULL, NULL, "1982",
 	"Food Fight (rev 2)\0", NULL, "General Computer Corporation (Atari license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, foodf2RomInfo, foodf2RomName, NULL, NULL, NULL, NULL, FoodfInputInfo, FoodfDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	256, 224, 4, 3
@@ -668,7 +660,7 @@ struct BurnDriver BurnDrvFoodf1 = {
 	"foodf1", "foodf", NULL, NULL, "1982",
 	"Food Fight (rev 1)\0", NULL, "General Computer Corporation (Atari license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, foodf1RomInfo, foodf1RomName, NULL, NULL, NULL, NULL, FoodfInputInfo, FoodfDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	256, 224, 4, 3
@@ -704,7 +696,7 @@ struct BurnDriver BurnDrvFoodfc = {
 	"foodfc", "foodf", NULL, NULL, "1982",
 	"Food Fight (cocktail)\0", NULL, "General Computer Corporation (Atari license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, foodfcRomInfo, foodfcRomName, NULL, NULL, NULL, NULL, FoodfInputInfo, FoodfDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x100,
 	256, 224, 4, 3

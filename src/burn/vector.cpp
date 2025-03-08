@@ -31,10 +31,6 @@ static float vector_intens      = 1.0;
 static INT32 vector_antialias   = 1;
 static INT32 vector_beam        = 0x0001f65e; // 16.16 beam width
 
-#ifndef __LIBRETRO__
-static UINT8 *pBurnDrawBAD      = NULL;
-#endif
-
 #define CLAMP8(x) do { if (x > 0xff) x = 0xff; if (x < 0) x = 0; } while (0)
 
 static UINT8 gammaLUT[256];
@@ -81,23 +77,26 @@ void vector_set_scale(INT32 x, INT32 y)
 
 void vector_rescale(INT32 x, INT32 y)
 {
-#ifndef __LIBRETRO__
-	pBurnDrawBAD = pBurnDraw; // note invalidated pBurnDraw (see draw_vector() notes)
-#endif
-
-	if(BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL)
+	if(BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL) {
+		GenericTilesSetClipRaw(0, y, 0, x);
+		BurnTransferSetDimensions(y, x);
 		BurnDrvSetVisibleSize(y, x);
-	else
+	} else {
+		GenericTilesSetClipRaw(0, x, 0, y);
+		BurnTransferSetDimensions(x, y);
 		BurnDrvSetVisibleSize(x, y);
+	}
 	Reinitialise();
-	GenericTilesExit();
-	GenericTilesInit(); // create pTransDraw w/ new size
+	BurnTransferRealloc();
 	BurnFree(pBitmap);
 	pBitmap = (UINT32*)BurnMalloc(nScreenWidth * nScreenHeight * sizeof(INT32));
 
 	vector_set_clip(0, nScreenWidth, 0, nScreenHeight);
 
 	vector_set_scale(vector_scaleX_int, vector_scaleY_int);
+
+	// This is bit hacky, but thicker lines are more enjoyable at 1080p -barbudreadmon
+	vector_intens = (y == 1080 ? 2.0 : 1.0);
 }
 
 void vector_add_point(INT32 x, INT32 y, INT32 color, INT32 intensity)
@@ -268,16 +267,20 @@ static void lineSimple(INT32 x0, INT32 y0, INT32 x1, INT32 y1, INT32 color, INT3
 	}
 }
 
+static UINT32 (*pix_cb)(INT32 x, INT32 y, UINT32 color) = NULL;
+
+static UINT32 dummy_pix_cb(INT32 x, INT32 y, UINT32 color)
+{
+	return color;
+}
+
+void vector_set_pix_cb(UINT32 (*cb)(INT32 x, INT32 y, UINT32 color))
+{
+	pix_cb = cb;
+}
+
 void draw_vector(UINT32 *palette)
 {
-#ifndef __LIBRETRO__
-	if (pBurnDrawBAD == pBurnDraw) {
-		// Reinitialise() could take 1-2 frames to complete, during that time
-		// we can't draw since pBurnDraw is invalid.
-		bprintf(0, _T("draw_vector(): ignored this draw (waiting for re-init)!\n"));
-		return;
-	} else pBurnDrawBAD = NULL;
-#endif
 	struct vector_line *ptr = &vector_table[0];
 
 	INT32 prev_x = 0, prev_y = 0;
@@ -317,6 +320,7 @@ void draw_vector(UINT32 *palette)
 				UINT32 p = pBitmap[idx + x];
 
 				if (p) {
+					p = pix_cb(x, y, p);
 					PutPix(pBurnDraw + (idx + x) * nBurnBpp, BurnHighCol((p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff, 0));
 				}
 			}
@@ -346,6 +350,8 @@ void vector_init()
 	vector_set_scale(-1, -1); // default 1x
 	vector_set_offsets(0, 0);
 	vector_set_gamma(vector_gamma_corr);
+
+	vector_set_pix_cb(dummy_pix_cb);
 
 	cosineLUT = (UINT32*)BurnMalloc(2049 * sizeof(UINT32));
 	for (INT32 i = 0; i < 2049; i++) {

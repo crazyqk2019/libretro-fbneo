@@ -1,6 +1,8 @@
 // Run module
 #include "burner.h"
-
+#ifdef BUILD_SDL2
+#include "sdl2_gui_common.h"
+#endif
 #include <sys/time.h>
 
 static unsigned int nDoFPS = 0;
@@ -17,19 +19,24 @@ static bool bAppDoStep = 0;
 bool        bAppDoFast = 0;
 bool        bAppShowFPS = 0;
 static int  nFastSpeed = 6;
+static bool bscreenshot = 0;
+
+// SlowMo T.A. feature
+int nSlowMo = 0;
+static int flippy = 0; // free running RunFrame() counter
 
 UINT32 messageFrames = 0;
 char lastMessage[MESSAGE_MAX_LENGTH];
 
-/// Ingame gui
 #ifdef BUILD_SDL2
+static Uint32 starting_stick;
+/// Ingame gui
 extern SDL_Renderer* sdlRenderer;
 extern void ingame_gui_start(SDL_Renderer* renderer);
-#endif
-
 /// Save States
-#ifdef BUILD_SDL2
-static char* szSDLSavePath = NULL;
+static char Windowtitle[512];
+
+extern void AdjustImageSize();		// vid_sdl2.cpp
 #endif
 
 int bDrvSaveAll = 0;
@@ -40,18 +47,10 @@ int StatedAuto(int bSave)
 	static TCHAR szName[MAX_PATH] = _T("");
 	int nRet;
 
-#if defined(BUILD_SDL2) && !defined(SDL_WINDOWS)	
-	if (szSDLSavePath == NULL)
-	{
-		szSDLSavePath = SDL_GetPrefPath("fbneo", "states");
-	}
-
-	snprintf(szName, MAX_PATH, "%s%s.fs", szSDLSavePath, BurnDrvGetText(DRV_NAME));
-
+#if defined(BUILD_SDL2) && !defined(SDL_WINDOWS)
+	_stprintf(szName, _T("%s%s.fs"), szAppEEPROMPath, BurnDrvGetText(DRV_NAME));
 #else
-
 	_stprintf(szName, _T("config/games/%s.fs"), BurnDrvGetText(DRV_NAME));
-
 #endif
 
 	if (bSave == 0)
@@ -139,6 +138,12 @@ static int RunFrame(int bDraw, int bPause)
 		return 1;
 	}
 
+	// SlowMo stuff
+	flippy++;
+	nSlowMo = macroSystemSlowMo[0] + macroSystemSlowMo[1] * 2 + macroSystemSlowMo[2] * 3 + macroSystemSlowMo[3] * 4 + macroSystemSlowMo[4] * 5;
+	if ((nSlowMo == 1) && ((flippy % 4) == 0)) return 0;		// 75% speed
+	else if ((nSlowMo > 1) && (nSlowMo < 6) && (flippy % ((nSlowMo - 1) * 2)) < (((nSlowMo - 1) * 2) - 1)) return 0;		// 50% and less
+
 	if (bPause)
 	{
 		InputMake(false);
@@ -154,14 +159,41 @@ static int RunFrame(int bDraw, int bPause)
 	if (bDraw)
 	{
 		nFramesRendered++;
-		if (VidFrame())
-		{
-		 	AudBlankSound();
+
+		if (!bRunAhead || (BurnDrvGetFlags() & BDF_RUNAHEAD_DISABLED) || bAppDoFast) {     // Run-Ahead feature 				-dink aug 02, 2021
+			if (VidFrame()) {				// Do one frame w/o RunAhead or if FFWD is pressed.
+				// VidFrame() failed, but we must run a driver frame because we have
+            	// a clocked input.  Possibly from recording or netplay(!)
+            	// Note: VidFrame() calls BurnDrvFrame() on success.
+				pBurnDraw = NULL;			// Make sure no image is drawn
+            	BurnDrvFrame();
+
+				AudBlankSound();
+			}
+		} else {
+				pBurnDraw = (BurnDrvGetFlags() & BDF_RUNAHEAD_DRAWSYNC) ? pVidImage : NULL;
+				BurnDrvFrame();
+				StateRunAheadSave();
+				INT16 *pBurnSoundOut_temp = pBurnSoundOut;
+				pBurnSoundOut = NULL;
+				nCurrentFrame++;
+				bBurnRunAheadFrame = 1;
+
+				if (VidFrame()) {
+					// VidFrame() failed, but we must run a driver frame because we have
+					// an input.  Possibly from recording or netplay(!)
+					pBurnDraw = NULL;			// Make sure no image is drawn, since video failed this time 'round.
+					BurnDrvFrame();
+				}
+
+				bBurnRunAheadFrame = 0;
+				nCurrentFrame--;
+				StateRunAheadLoad();
+				pBurnSoundOut = pBurnSoundOut_temp; // restore pointer, for wav & avi writer
 		}
+
 		VidPaint(0);                                              // paint the screen (no need to validate)
-	}
-	else
-	{                                       // frame skipping
+	} else {                                       // frame skipping
 		pBurnDraw = NULL;                    // Make sure no image is drawn
 		BurnDrvFrame();
 	}
@@ -328,6 +360,73 @@ int RunExit()
 	return 0;
 }
 
+#ifdef BUILD_SDL2
+void pause_game()
+{
+	AudSoundStop();
+
+	if(nVidSelect) {
+		// no Text in OpenGL...
+		SDL_GL_SwapWindow(sdlWindow);
+	}else{
+		inprint_shadowed(sdlRenderer, "PAUSE", 10, 10);
+		SDL_RenderPresent(sdlRenderer);
+	}
+
+    int finished = 0;
+	while (!finished)
+  	{
+		starting_stick = SDL_GetTicks();
+
+ 		SDL_Event e;
+
+		while (SDL_PollEvent(&e))
+		{
+			if (e.type == SDL_QUIT)
+			{
+				finished=1;
+			}
+			if (e.type == SDL_KEYDOWN)
+			{
+			  switch (e.key.keysym.sym)
+			  {
+				  case SDLK_TAB:
+				  case SDLK_p:
+					finished=1;
+					break;
+				  default:
+					break;
+			  }
+			}
+			if (e.type == SDL_WINDOWEVENT)
+			{ // Window Event
+				switch (e.window.event)
+				{
+					//case SDL_WINDOWEVENT_RESTORED: // keep pause when restore window
+					case SDL_WINDOWEVENT_FOCUS_GAINED:
+						finished=1;
+						break;
+					case SDL_WINDOWEVENT_CLOSE:
+						finished=1;
+						RunExit();
+						break;
+					default:
+						break;
+				}
+			}
+		}
+
+		// limit 5 FPS (free CPU usage)
+		if ( ( 1000 / 5 ) > SDL_GetTicks() - starting_stick) {
+			SDL_Delay( 1000 / 5 - ( SDL_GetTicks() - starting_stick ) );
+		}
+
+	}
+
+	AudSoundPlay();
+}
+#endif
+
 #ifndef BUILD_MACOS
 // The main message loop
 int RunMessageLoop()
@@ -339,6 +438,7 @@ int RunMessageLoop()
 
 	while (!quit)
 	{
+
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
 		{
@@ -347,6 +447,18 @@ int RunMessageLoop()
 			case SDL_QUIT:                                        /* Windows was closed */
 				quit = 1;
 				break;
+
+#ifdef BUILD_SDL2
+			case SDL_WINDOWEVENT:  // Window Event
+				switch (event.window.event)
+				{
+					case SDL_WINDOWEVENT_MINIMIZED:
+					case SDL_WINDOWEVENT_FOCUS_LOST:
+						pause_game();
+						break;
+				}
+				break;
+#endif
 
 			case SDL_KEYDOWN:                                                // need to find a nicer way of doing this...
 				switch (event.key.keysym.sym)
@@ -362,12 +474,54 @@ int RunMessageLoop()
 					break;
 				case SDLK_F11:
 					bAppShowFPS = !bAppShowFPS;
+#ifdef BUILD_SDL2
+					if (!bAppShowFPS)
+					{
+						sprintf(Windowtitle, "FBNeo - %s - %s", BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_FULLNAME));
+						SDL_SetWindowTitle(sdlWindow, Windowtitle);
+					}
+#endif
 					break;
 #ifdef BUILD_SDL2
 				case SDLK_TAB:
-					ingame_gui_start(sdlRenderer);
+					if(!nVidSelect) {
+						ingame_gui_start(sdlRenderer);
+					} else {
+						// Pause with SDL2 OpenGL mode
+						pause_game();
+					}
+					break;
+
+				case SDLK_RETURN:
+					if (event.key.keysym.mod & KMOD_ALT)
+					{
+						SetFullscreen(!GetFullscreen());
+						AdjustImageSize();
+					}
 					break;
 #endif
+				case SDLK_F6: // screeenshot
+					if (!bscreenshot) {
+						MakeScreenShot();
+						bscreenshot = 1;
+					}
+					break;
+				case SDLK_KP_MINUS: // volumme -
+					nAudVolume -= 500;
+					if (nAudVolume < 0) {
+						nAudVolume = 0;
+					}
+					if (AudSoundSetVolume() == 0) {
+					}
+					break;
+				case SDLK_KP_PLUS: // volume -+
+					nAudVolume += 500;
+					if (nAudVolume > 10000) {
+						nAudVolume = 10000;
+					}
+					if (AudSoundSetVolume() == 0) {
+					}
+					break;
 				default:
 					break;
 				}
@@ -379,7 +533,9 @@ int RunMessageLoop()
 				case SDLK_F1:
 					bAppDoFast = 0;
 					break;
-
+				case SDLK_F6:
+					bscreenshot = 0;
+					break;
 				case SDLK_F12:
 					quit = 1;
 					break;
@@ -390,7 +546,9 @@ int RunMessageLoop()
 				break;
 			}
 		}
+
 		RunIdle();
+
 	}
 
 	RunExit();

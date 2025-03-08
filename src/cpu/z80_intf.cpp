@@ -27,7 +27,7 @@ struct ZetExt {
  
 static INT32 nZetCyclesDone[MAX_Z80];
 static INT32 nZetCyclesDelayed[MAX_Z80];
-static INT32 nZetCyclesTotal;
+INT32 nZetCyclesTotal;
 
 static INT32 nOpenedCPU = -1;
 static INT32 nCPUCount = 0;
@@ -36,8 +36,8 @@ INT32 nHasZet = -1;
 cpu_core_config ZetConfig =
 {
 	"Z80",
-	ZetOpen,
-	ZetClose,
+	ZetCPUPush, //ZetOpen,
+	ZetCPUPop, //ZetClose,
 	ZetCheatRead,
 	ZetCheatWriteROM,
 	ZetGetActive,
@@ -48,6 +48,8 @@ cpu_core_config ZetConfig =
 	ZetRun,
 	ZetRunEnd,
 	ZetReset,
+	ZetScan,
+	ZetExit,
 	0x10000,
 	0
 };
@@ -56,6 +58,8 @@ UINT8 __fastcall ZetDummyReadHandler(UINT16) { return 0; }
 void __fastcall ZetDummyWriteHandler(UINT16, UINT8) { }
 UINT8 __fastcall ZetDummyInHandler(UINT16) { return 0; }
 void __fastcall ZetDummyOutHandler(UINT16, UINT8) { }
+
+INT32 ZetInFetch = 0; // 1 = fetch op, 2 = arg
 
 UINT8 __fastcall ZetReadIO(UINT32 a)
 {
@@ -109,7 +113,10 @@ UINT8 __fastcall ZetReadOp(UINT32 a)
 	
 	// check read handler
 	if (ZetCPUContext[nOpenedCPU]->ZetRead != NULL) {
-		return ZetCPUContext[nOpenedCPU]->ZetRead(a);
+		ZetInFetch = 1;
+		const UINT8 r = ZetCPUContext[nOpenedCPU]->ZetRead(a);
+		ZetInFetch = 0;
+		return r;
 	}
 	
 	return 0;
@@ -125,7 +132,10 @@ UINT8 __fastcall ZetReadOpArg(UINT32 a)
 	
 	// check read handler
 	if (ZetCPUContext[nOpenedCPU]->ZetRead != NULL) {
-		return ZetCPUContext[nOpenedCPU]->ZetRead(a);
+		ZetInFetch = 2;
+		const UINT8 r = ZetCPUContext[nOpenedCPU]->ZetRead(a);
+		ZetInFetch = 0;
+		return r;
 	}
 	
 	return 0;
@@ -341,7 +351,7 @@ struct z80pstack {
 static z80pstack pstack[MAX_PSTACK];
 static INT32 pstacknum = 0;
 
-static void ZetCPUPush(INT32 nCPU)
+void ZetCPUPush(INT32 nCPU)
 {
 	z80pstack *p = &pstack[pstacknum++];
 
@@ -359,7 +369,7 @@ static void ZetCPUPush(INT32 nCPU)
 	}
 }
 
-static void ZetCPUPop()
+void ZetCPUPop()
 {
 	z80pstack *p = &pstack[--pstacknum];
 
@@ -427,6 +437,20 @@ void ZetRunEnd()
 #endif
 
 	Z80StopExecute();
+}
+
+void ZetRunEnd(INT32 nCPU)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_ZetInitted) bprintf(PRINT_ERROR, _T("ZetRunEnd called without init\n"));
+	if (nOpenedCPU == -1) bprintf(PRINT_ERROR, _T("ZetRunEnd called when no CPU open\n"));
+#endif
+
+	ZetCPUPush(nCPU);
+
+	Z80StopExecute();
+
+	ZetCPUPop();
 }
 
 // This function will make an area callback ZetRead/ZetWrite
@@ -933,8 +957,9 @@ void ZetSetHALT(INT32 nStatus)
 #endif
 
 	if (nOpenedCPU < 0) return;
-	
+
 	ZetCPUContext[nOpenedCPU]->BusReq = nStatus;
+	if (nStatus) ZetRunEnd(); // end current timeslice since we're halted
 }
 
 void ZetSetHALT(INT32 nCPU, INT32 nStatus)

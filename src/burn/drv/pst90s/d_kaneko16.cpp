@@ -1,4 +1,4 @@
-// FB Alpha Kaneko 16-bit driver module
+// FB Neo Kaneko 16-bit driver module
 // Based on MAME driver by Luca Elia
 
 #include "tiles_generic.h"
@@ -111,7 +111,7 @@ static INT32 Kaneko16ParseSpriteType1(INT32 i, struct tempsprite *s);
 static INT32 Kaneko16ParseSpriteType2(INT32 i, struct tempsprite *s);
 
 static INT32 nCyclesDone[2], nCyclesTotal[2];
-static INT32 nSoundBufferPos;
+static INT32 nCyclesExtra;
 
 static INT32 Kaneko16Watchdog;
 
@@ -1033,29 +1033,52 @@ static struct BurnRomInfo BerlwallkRomDesc[] = {
 STD_ROM_PICK(Berlwallk)
 STD_ROM_FN(Berlwallk)
 
-static struct BurnRomInfo PackbangRomDesc[] = {
+/* Final/retail version */
+static struct BurnRomInfo PackbangRomDesc[] = { 
 	/* same PCB as Berlin Wall - BW-002 */
-	{ "bbp0x3.u23",     	0x020000, 0x105e978a, BRF_ESS | BRF_PRG }, //  0 68000 Program Code /* hand written checksum on label - 527B */
-	{ "bbp1x3.u39",     	0x020000, 0x465d36f5, BRF_ESS | BRF_PRG }, //  1 					/* hand written checksum on label - C5C8 */
+	{ "bbp0x3_u23.u23",     	0x020000, 0x8f879c9d, BRF_ESS | BRF_PRG }, //  0 68000 Program Code /* labeled BBP0X3/U23 */
+	{ "bbp1x3_u39.u39",     	0x020000, 0x3a90ad84, BRF_ESS | BRF_PRG }, //  1 					/* labeled BBP1X3/U39 */
 
-   	{ "bb.u84",         		 0x080000, 0x97837aaa, BRF_GRA }, 	   //  2 Sprites
-	{ "pb_spr_ext_9_20_ver.u83", 0x040000, 0x666a1217, BRF_GRA },  	   //  3					/* hand written label plus checksum BA63 */
+	{ "bb-u84-007__w22.u84",    0x080000, 0x97837aaa, BRF_GRA }, 	       //  2 Sprites            /* mask rom */
+	{ "bbs0x1_u83.u83",         0x040000, 0x3d95b1e5, BRF_GRA },  	       //  3					/* labeled BBS0X1/U83 */
 
-	{ "bbbox1.u77",     	0x080000, 0xb2ffd081, BRF_GRA },		   //  4 Titles (scrambled) /* 1ST AND 2ND HALF IDENTICAL */
+	{ "bbb0x1_u77.u77",     	0x080000, 0xb2ffd081, BRF_GRA },		   //  4 Titles (scrambled) /* 1ST AND 2ND HALF IDENTICAL */
 
-	{ "bb.u73",         	0x080000, 0x896d88cb, BRF_GRA },		   //  5 High Color Background
-	{ "bb.u65",         	0x080000, 0xfe17c5b5, BRF_GRA }, 		   //  6 FIXED BITS (xxxxxxx0)
-	{ "bb.u74",         	0x080000, 0xb01e77b9, BRF_GRA },		   //  7
-	{ "bb.u66",         	0x080000, 0xcaec5098, BRF_GRA }, 		   //  8 FIXED BITS (xxxxxxx0)
-	{ "bb.u75",         	0x080000, 0x5cb4669f, BRF_GRA },		   //  9
-	{ "bb.u67",         	0x080000, 0xce5c9417, BRF_GRA }, 		   // 10 FIXED BITS (xxxxxxx0)
+	{ "bb-u73-004__w19.u73",    0x080000, 0x896d88cb, BRF_GRA },		   //  5 High Color Background /* these are all mask roms */
+	{ "bb-u65-001__w16.u65",    0x080000, 0xfe17c5b5, BRF_GRA }, 		   //  6 FIXED BITS (xxxxxxx0)
+	{ "bb-u74-005__w20.u74",    0x080000, 0xb01e77b9, BRF_GRA },		   //  7
+	{ "bb-u66-002__w17.u66",    0x080000, 0xcaec5098, BRF_GRA }, 		   //  8 FIXED BITS (xxxxxxx0)
+	{ "bb-u75-006__w21.u75",    0x080000, 0x5cb4669f, BRF_GRA },		   //  9
+	{ "bb-u67-003__w18.u67",    0x080000, 0xce5c9417, BRF_GRA }, 		   // 10 FIXED BITS (xxxxxxx0)
 
-	{ "bw000.u46",      	0x040000, 0xd8fe869d, BRF_SND }, 		   // 11 Samples
+	{ "bw_u46.u46",      	    0x040000, 0xd8fe869d, BRF_SND }, 		   // 11 Samples
 };
-
 
 STD_ROM_PICK(Packbang)
 STD_ROM_FN(Packbang)
+
+static struct BurnRomInfo PackbangpRomDesc[] = {
+	/* same PCB as Berlin Wall - BW-002 */
+	{ "bbp0x3_527b.u23",              0x020000, 0x105e978a, BRF_ESS | BRF_PRG }, //  0 68000 Program Code /* hand written checksum on label - 527B */
+	{ "bbp1x3_c5c8.u39",              0x020000, 0x465d36f5, BRF_ESS | BRF_PRG }, //  1 					/* hand written checksum on label - C5C8 */
+
+	{ "bb.u84",                       0x080000, 0x97837aaa, BRF_GRA }, 	       //  2 Sprites
+	{ "pb_spr_ext_9_20_ver_ba63.u83", 0x040000, 0x666a1217, BRF_GRA },  	   //  3					/* hand written label plus checksum BA63 */
+
+	{ "bbb0x1.u77",                   0x080000, 0xb2ffd081, BRF_GRA },		   //  4 Titles (scrambled) /* 1ST AND 2ND HALF IDENTICAL */
+
+	{ "bb.u73",                       0x080000, 0x896d88cb, BRF_GRA },		   //  5 High Color Background
+	{ "bb.u65",                       0x080000, 0xfe17c5b5, BRF_GRA }, 		   //  6 FIXED BITS (xxxxxxx0)
+	{ "bb.u74",                       0x080000, 0xb01e77b9, BRF_GRA },		   //  7
+	{ "bb.u66",                       0x080000, 0xcaec5098, BRF_GRA }, 		   //  8 FIXED BITS (xxxxxxx0)
+	{ "bb.u75",                       0x080000, 0x5cb4669f, BRF_GRA },		   //  9
+	{ "bb.u67",                       0x080000, 0xce5c9417, BRF_GRA }, 		   // 10 FIXED BITS (xxxxxxx0)
+
+	{ "bw000.u46",                    0x040000, 0xd8fe869d, BRF_SND }, 		   // 11 Samples
+};
+
+STD_ROM_PICK(Packbangp)
+STD_ROM_FN(Packbangp)
 
 static struct BurnRomInfo BlazeonRomDesc[] = {
 	{ "bz-prg1.u80",       	0x040000, 0x3d79aa70, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
@@ -1167,7 +1190,8 @@ static struct BurnRomInfo BloodwarRomDesc[] = {
 STD_ROM_PICK(Bloodwar)
 STD_ROM_FN(Bloodwar)
 
-static struct BurnRomInfo OedfightRomDesc[] = {
+static struct BurnRomInfo OedfightRomDesc[] = { 					   
+	// Bloodshed version
 	{ "ofp0j3.514",        	0x080000, 0x0c93da15, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
 	{ "ofp1j3.513",        	0x080000, 0xcc59de49, BRF_ESS | BRF_PRG }, //  1
 
@@ -1207,6 +1231,48 @@ static struct BurnRomInfo OedfightRomDesc[] = {
 
 STD_ROM_PICK(Oedfight)
 STD_ROM_FN(Oedfight)
+
+static struct BurnRomInfo OedfightaRomDesc[] = { 					   
+	// original Bloodless version
+	{ "ofp0j3_u514.u514",   0x080000, 0xb5146417, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
+	{ "ofp1j3_u513.u513",   0x080000, 0xafe42a8a, BRF_ESS | BRF_PRG }, //  1
+
+	{ "ofd0x3.124",        	0x020000, 0x399f2005, BRF_PRG | BRF_OPT }, //  2 MCU Code
+
+	{ "of-200-0201.8",     	0x200000, 0xbba63025, BRF_GRA },	   	   //  3 Sprites
+	{ "of-201-0202.9",     	0x200000, 0x4ffd9ddc, BRF_GRA },	   	   //  4
+	{ "of-202-0203.10",    	0x200000, 0xfbcc5363, BRF_GRA },	       //  5
+	{ "of-203-0204.11",    	0x200000, 0x8e818ce9, BRF_GRA },	       //  6
+	{ "of-204-0205.12",    	0x200000, 0x70c4a76b, BRF_GRA },	       //  7
+	{ "of-205-0206.13",    	0x200000, 0x80c667bb, BRF_GRA },	       //  8
+	{ "of-206-0207.14",    	0x200000, 0xc2028c97, BRF_GRA },	       //  9
+	{ "of-207-0208.15",    	0x200000, 0xb1f30c61, BRF_GRA },	       // 10
+	{ "of-208-0209.28",    	0x200000, 0xa8f29545, BRF_GRA },	       // 11
+	{ "of-209e-0210.16",   	0x100000, 0x93018468, BRF_GRA },	       // 12
+	{ "of-2090-2011.17",   	0x100000, 0x3fb226a1, BRF_GRA },	       // 13
+	{ "of-210e-0212.18",   	0x100000, 0x80f3fa1b, BRF_GRA },	       // 14
+	{ "of-2100-0213.19",   	0x100000, 0x8ca3a3d6, BRF_GRA },	       // 15
+	{ "of-211e-0214.20",   	0x100000, 0x8d3d96f7, BRF_GRA },	       // 16
+	{ "of-2110-0215.21",   	0x100000, 0x78268230, BRF_GRA },	       // 17
+	{ "of-212e-0216.22",   	0x100000, 0x5a013d99, BRF_GRA },	       // 18
+	{ "of-2120-0217.23",   	0x100000, 0x84ed25bd, BRF_GRA },	       // 19
+	{ "of-213e-0218.24",   	0x100000, 0x861bc5b1, BRF_GRA },	       // 20
+	{ "of-2130-0219.25",   	0x100000, 0xa79b8119, BRF_GRA },	       // 21
+	{ "of-214e-0220.26",   	0x100000, 0x43c622de, BRF_GRA },	       // 22
+	{ "of-2140-0221.27",   	0x100000, 0xd10bf03c, BRF_GRA },	       // 23
+
+	{ "of-300-0225.51",    	0x100000, 0xfbc3c08a, BRF_GRA },	       // 24 Tiles (scrambled)
+
+	{ "of-301-0226.55",    	0x100000, 0xfcf215de, BRF_GRA },	       // 25 Tiles (scrambled) (Layers 2 & 3)
+
+	{ "of-101-j-0224.101", 	0x100000, 0x83a1f826, BRF_SND },	       // 26 Samples, plus room for expansion
+
+	{ "of-100-0222.99",    	0x100000, 0x42b12269, BRF_SND },	       // 27 Samples
+};
+
+
+STD_ROM_PICK(Oedfighta)
+STD_ROM_FN(Oedfighta)
 
 static struct BurnRomInfo BonkadvRomDesc[] = {
 	{ "prg.8",             	0x080000, 0xaf2e60f8, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
@@ -1486,8 +1552,8 @@ STD_ROM_PICK(Gtmr2a)
 STD_ROM_FN(Gtmr2a)
 
 static struct BurnRomInfo Gtmr2uRomDesc[] = {
-	{ "m2p0a1.u8",         	0x080000, 0x813e1d5e, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
-	{ "m2p1a1.u7",         	0x080000, 0xbee63666, BRF_ESS | BRF_PRG }, //  1
+	{ "m2p0a2.u8",         	0x080000, 0x1a008ea4, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
+	{ "m2p1a2.u7",         	0x080000, 0xbbf8b43e, BRF_ESS | BRF_PRG }, //  1
 
 	{ "m2d0x0.u31",        	0x020000, 0x2e1a06ff, BRF_PRG | BRF_OPT }, //  2 MCU Code
 
@@ -1510,6 +1576,32 @@ static struct BurnRomInfo Gtmr2uRomDesc[] = {
 
 STD_ROM_PICK(Gtmr2u)
 STD_ROM_FN(Gtmr2u)
+
+static struct BurnRomInfo Gtmr2uaRomDesc[] = {
+	{ "m2p0a1.u8",         	0x080000, 0x813e1d5e, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
+	{ "m2p1a1.u7",         	0x080000, 0xbee63666, BRF_ESS | BRF_PRG }, //  1
+
+	{ "m2d0x0.u31",        	0x020000, 0x2e1a06ff, BRF_PRG | BRF_OPT }, //  2 MCU Code
+
+	{ "m2-200-0.u49",      	0x400000, 0x93aafc53, BRF_GRA },		   //  3 Sprites
+	{ "m2-201-0.u50",      	0x200000, 0x39b60a83, BRF_GRA },	 	   //  4
+	{ "m2-202-0.u51",      	0x200000, 0xfd06b339, BRF_GRA },		   //  5
+	{ "m2s0a1.u32",        	0x080000, 0x98977171, BRF_GRA },		   //  6
+	{ "m2s1a1.u33",        	0x080000, 0xc69a732e, BRF_GRA },		   //  7
+
+	{ "m2-300-0.u89",      	0x200000, 0x4dc42fbb, BRF_GRA },		   //  8 Tiles
+	{ "m2-301-0.u90",      	0x200000, 0xf4e894f2, BRF_GRA },		   //  9
+	{ "m2b0x0.u93",        	0x020000, 0xe023d51b, BRF_GRA },		   // 10
+	{ "m2b1x0.u94",        	0x020000, 0x03c48bdb, BRF_GRA },		   // 11
+
+	{ "m2-100-0.u48",      	0x100000, 0x5250fa45, BRF_SND },		   // 12 Samples, plus room for expansion
+
+	{ "m2w1a1.u47",        	0x080000, 0x15f25342, BRF_SND },		   // 13 Samples
+};
+
+
+STD_ROM_PICK(Gtmr2ua)
+STD_ROM_FN(Gtmr2ua)
 
 static struct BurnRomInfo MgcrystlRomDesc[] = {
 	{ "mc100e02.u18",      	0x020000, 0x246a1335, BRF_ESS | BRF_PRG }, //  0 68000 Program Code /* Labeled as MC100E/U18-02 */
@@ -1550,8 +1642,8 @@ STD_ROM_PICK(Mgcrystlo)
 STD_ROM_FN(Mgcrystlo)
 
 static struct BurnRomInfo MgcrystljRomDesc[] = {
-	{ "kaneko__mc100-u18j-02.u18",		0x020000, 0xafe5882d, BRF_ESS | BRF_PRG }, //  0 68000 Program Code /* Labeled as MC100J/U18-02 */
-	{ "kaneko__mc101-u19j-02.u19",		0x040000, 0x60da5492, BRF_ESS | BRF_PRG }, //  1 					/* Labeled as MC101J/U19-02 */
+	{ "kaneko__mc100-u18j-00.u18",		0x020000, 0xafe5882d, BRF_ESS | BRF_PRG }, //  0 68000 Program Code /* Labeled as MC100J/U18-02 */
+	{ "kaneko__mc101-u19j-00.u19",		0x040000, 0x60da5492, BRF_ESS | BRF_PRG }, //  1 					/* Labeled as MC101J/U19-02 */
 
 	{ "kaneko__mc-000_0001.u38",		0x100000, 0x28acf6f4, BRF_GRA },		   //  2 Sprites
 	{ "kaneko__mc-001_0002_r44.u37",	0x080000, 0x005bc43d, BRF_GRA },		   //  3
@@ -1735,6 +1827,38 @@ static struct BurnRomInfo brapboyspRomDesc[] = {
 
 STD_ROM_PICK(brapboysp)
 STD_ROM_FN(brapboysp)
+
+static struct BurnRomInfo brapboysp2RomDesc[] = {
+	{ "rb-30n.u61",			0x020000, 0x632269b0, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
+	{ "rb-31n.u62",			0x020000, 0x99623650, BRF_ESS | BRF_PRG }, //  1
+
+	{ "rb-40n.u33",			0x020000, 0x313b7a6d, BRF_ESS | BRF_PRG }, //  2 MCU Data
+
+	{ "rb-020.c2",			0x100000, 0xce220d38, BRF_GRA },	       //  3 Sprites
+	{ "rb-021.u76",			0x100000, 0x74001407, BRF_GRA },	       //  4
+	{ "rb-022.u77",			0x100000, 0xcb3f42dc, BRF_GRA },	       //  5
+	{ "rb-023.u78",			0x100000, 0x0e6530c5, BRF_GRA },	       //  6
+	{ "rb-024.u79",			0x080000, 0x65fa6447, BRF_GRA },	       //  7
+	{ "rb-25n.c3",			0x040000, 0x065d9bb5, BRF_GRA },	       //  8
+	{ "rb-26n.c4",			0x040000, 0x8fac668b, BRF_GRA },	       //  9
+
+	{ "rb-010.u65",			0x100000, 0xffd73f87, BRF_GRA },	       // 10 Tiles (scrambled)
+	{ "rb-011.u66",			0x100000, 0xd9325f78, BRF_GRA },	       // 11
+	{ "rb-012.u67",			0x100000, 0xbfdbe0d1, BRF_GRA },	       // 12
+	{ "rb-013.u68",			0x100000, 0x28c37fe8, BRF_GRA },	       // 13
+
+	{ "rb-000.u43",			0x080000, 0x58ad1a62, BRF_SND },	       // 14 Samples
+	{ "rb-003.u101",		0x080000, 0x2cac25d7, BRF_SND },	       // 15
+
+	{ "rb-001.u44",			0x100000, 0x7cf774b3, BRF_SND },	       // 16 Samples
+	{ "rb-002.u45",			0x100000, 0xe4b30444, BRF_SND },	       // 17
+
+	{ "rb-27n.c5",			0x040000, 0xfb9ed35f, BRF_GRA },	       // 18 Sprites (Extra)
+	{ "rb-28n.c7",			0x040000, 0x13acdcab, BRF_GRA },	       // 19
+};
+
+STD_ROM_PICK(brapboysp2)
+STD_ROM_FN(brapboysp2)
 
 static struct BurnRomInfo brapboyspjRomDesc[] = {
 	{ "rb-004.u61",			0x020000, 0x5432442c, BRF_ESS | BRF_PRG }, //  0 68000 Program Code
@@ -2088,7 +2212,7 @@ static INT16 calc_compute_x(void)
 	else if ((hit.x1p >= hit.x2p) && (hit.x1p < (hit.x2p + hit.x2s)))	// x1p inside x2
 		x_coll = (hit.x2s - (hit.x1p - hit.x2p));
 	else																// normal/no overlap
-	 	x_coll = ((hit.x1s + hit.x2s)/2) - abs((hit.x1p + hit.x1s/2) - (hit.x2p + hit.x2s/2));
+		x_coll = ((hit.x1s + hit.x2s)/2) - abs((hit.x1p + hit.x1s/2) - (hit.x2p + hit.x2s/2));
 
 	return x_coll;
 }
@@ -2755,7 +2879,7 @@ static void shogwarr_calc3_mcu_run()
 
 	if (calc3.dsw_addr) SekWriteByte((calc3.dsw_addr+0x200000), (~Kaneko16Dip[0])&0xff);
 
-	mcu_command = m_calc3_mcuram[calc3.mcu_command_offset/2 + 0];
+	mcu_command = BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[calc3.mcu_command_offset/2 + 0]);
 
 	if (mcu_command == 0) return;
 
@@ -2766,17 +2890,17 @@ static void shogwarr_calc3_mcu_run()
 			// clear old command (handshake to main cpu)
 			m_calc3_mcuram[(calc3.mcu_command_offset>>1)+0] = 0x0000;
 
-			calc3.dsw_addr =           m_calc3_mcuram[(0>>1) + 1];
-			calc3.eeprom_addr =        m_calc3_mcuram[(0>>1) + 2];
-			calc3.mcu_command_offset = m_calc3_mcuram[(0>>1) + 3];
-			calc3.poll_addr =          m_calc3_mcuram[(0>>1) + 4];
-			calc3.checksumaddress =    m_calc3_mcuram[(0>>1) + 5];
-			calc3.writeaddress =      (m_calc3_mcuram[(0>>1) + 6] << 16) | (m_calc3_mcuram[(0>>1) + 7]);
+			calc3.dsw_addr =           BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 1]);
+			calc3.eeprom_addr =        BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 2]);
+			calc3.mcu_command_offset = BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 3]);
+			calc3.poll_addr =          BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 4]);
+			calc3.checksumaddress =    BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 5]);
+			calc3.writeaddress =      (BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 6]) << 16) | (BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(0>>1) + 7]));
 
 			// set our current write / stack pointer to the address specified
 			calc3.writeaddress_current = calc3.writeaddress;
 
-			m_calc3_mcuram[calc3.checksumaddress / 2] = calc3.mcu_crc;              // MCU Rom Checksum!
+			m_calc3_mcuram[calc3.checksumaddress / 2] = BURN_ENDIAN_SWAP_INT16(calc3.mcu_crc);              // MCU Rom Checksum!
 
 			UINT8 *eeprom = (UINT8*)Kaneko16NVRam;
 
@@ -2794,8 +2918,8 @@ static void shogwarr_calc3_mcu_run()
 
 			for (INT32 i=0;i<num_transfers;i++)
 			{
-				int param1 = m_calc3_mcuram[(calc3.mcu_command_offset>>1) + 1 + (2*i)];
-				int param2 = m_calc3_mcuram[(calc3.mcu_command_offset>>1) + 2 + (2*i)];
+				int param1 = BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(calc3.mcu_command_offset>>1) + 1 + (2*i)]);
+				int param2 = BURN_ENDIAN_SWAP_INT16(m_calc3_mcuram[(calc3.mcu_command_offset>>1) + 2 + (2*i)]);
 				UINT8  commandtabl = (param1&0xff00) >> 8;
 				UINT16 commandaddr =param2;
 				UINT8  commandunk =  (param1&0x00ff);
@@ -2809,7 +2933,7 @@ static void shogwarr_calc3_mcu_run()
 						SekWriteByte((write+0x200000), calc3.data_header[0]);
 						SekWriteByte((write+0x200001), calc3.data_header[1]);
 
-						write=commandaddr+(char)commandunk;
+						write=commandaddr+(INT8)commandunk;
 
 						SekWriteWord(write+0x200000, (calc3.writeaddress_current>>16)&0xffff);
 						SekWriteWord(write+0x200002, (calc3.writeaddress_current&0xffff));
@@ -2856,16 +2980,28 @@ static UINT16 ToyboxMCUStatusRead()
 	return 0;
 }
 
+#ifdef LSB_FIRST
 #define MCU_RESPONSE(d) memcpy(&MCURam[MCUOffset], d, sizeof(d))
+#else
+#define MCU_RESPONSE(d) {						\
+	UINT32 rsize = sizeof(d);					\
+	UINT8 *dest = (UINT8*)&MCURam[MCUOffset];   \
+	UINT8 *src  = (UINT8*)&d;					\
+	for (UINT32 i = 0; i < rsize; i+=2) {		\
+		dest[i] = src[i^1];						\
+		dest[i^1] = src[i];						\
+	}											\
+}
+#endif
 
 static void BloodwarMCURun()
 {
 	UINT16 *MCURam = (UINT16*)Kaneko16MCURam;
 	UINT16 *NVRam = (UINT16*)Kaneko16NVRam;
 
-	UINT16 MCUCommand = MCURam[0x10/2];
-	UINT16 MCUOffset = MCURam[0x12/2] >> 1;
-	UINT16 MCUData = MCURam[0x14/2];
+	UINT16 MCUCommand = BURN_ENDIAN_SWAP_INT16(MCURam[0x10/2]);
+	UINT16 MCUOffset = BURN_ENDIAN_SWAP_INT16(MCURam[0x12/2]) >> 1;
+	UINT16 MCUData = BURN_ENDIAN_SWAP_INT16(MCURam[0x14/2]);
 
 	switch (MCUCommand >> 8) {
 		case 0x02: {
@@ -2874,7 +3010,7 @@ static void BloodwarMCURun()
 		}
 
 		case 0x03: {
-			MCURam[MCUOffset + 0] = 0xff00 - (Kaneko16Dip[0] << 8);
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0xff00 - (Kaneko16Dip[0] << 8));
 			return;
 		}
 
@@ -2948,9 +3084,9 @@ static void BonkadvMCURun()
 	UINT16 *MCURam = (UINT16*)Kaneko16MCURam;
 	UINT16 *NVRam = (UINT16*)Kaneko16NVRam;
 
-	UINT16 MCUCommand = MCURam[0x10/2];
-	UINT16 MCUOffset = MCURam[0x12/2] >> 1;
-	UINT16 MCUData = MCURam[0x14/2];
+	UINT16 MCUCommand = BURN_ENDIAN_SWAP_INT16(MCURam[0x10/2]);
+	UINT16 MCUOffset = BURN_ENDIAN_SWAP_INT16(MCURam[0x12/2]) >> 1;
+	UINT16 MCUData = BURN_ENDIAN_SWAP_INT16(MCURam[0x14/2]);
 
 	switch (MCUCommand >> 8) {
 		case 0x02: {
@@ -2959,7 +3095,7 @@ static void BonkadvMCURun()
 		}
 
 		case 0x03: {
-			MCURam[MCUOffset + 0] = 0xff00 - (Kaneko16Dip[0] << 8);
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0xff00 - (Kaneko16Dip[0] << 8));
 			return;
 		}
 
@@ -3013,7 +3149,17 @@ static void BonkadvMCURun()
 
 		case 0x43: {
 			// Reset defaults
+#ifdef LSB_FIRST
 			memcpy(NVRam, bonkadv_mcu_43, sizeof(bonkadv_mcu_43));
+#else
+			UINT8* dest = (UINT8*)NVRam;
+			UINT8* src = (UINT8*)bonkadv_mcu_43;
+			for (UINT32 i = 0; i < sizeof(bonkadv_mcu_43); i+=2)
+			{
+				dest[i] = src[i ^ 1];
+				dest[i^1] = src[i];
+			}
+#endif
 			return;
 		}
 	}
@@ -3026,8 +3172,8 @@ static void GtmrMCURun()
 	UINT16 *MCURam = (UINT16*)Kaneko16MCURam;
 	UINT16 *NVRam = (UINT16*)Kaneko16NVRam;
 
-	UINT16 MCUCommand = MCURam[0x10/2];
-	UINT16 MCUOffset = MCURam[0x12/2] >> 1;
+	UINT16 MCUCommand = BURN_ENDIAN_SWAP_INT16(MCURam[0x10/2]);
+	UINT16 MCUOffset = BURN_ENDIAN_SWAP_INT16(MCURam[0x12/2]) >> 1;
 
 	switch (MCUCommand >> 8) {
 		case 0x02: {
@@ -3036,20 +3182,20 @@ static void GtmrMCURun()
 		}
 
 		case 0x03: {
-			MCURam[MCUOffset + 0] = 0xff00 - (Kaneko16Dip[0] << 8);
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0xff00 - (Kaneko16Dip[0] << 8));
 			return;
 		}
 
 		case 0x04: {
 			/* MCU writes the string "MM0525-TOYBOX199" to shared ram */
-			MCURam[MCUOffset + 0] = 0x4d4d;
-			MCURam[MCUOffset + 1] = 0x3035;
-			MCURam[MCUOffset + 2] = 0x3235;
-			MCURam[MCUOffset + 3] = 0x2d54;
-			MCURam[MCUOffset + 4] = 0x4f59;
-			MCURam[MCUOffset + 5] = 0x424f;
-			MCURam[MCUOffset + 6] = 0x5831;
-			MCURam[MCUOffset + 7] = 0x3939;
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0x4d4d);
+			MCURam[MCUOffset + 1] = BURN_ENDIAN_SWAP_INT16(0x3035);
+			MCURam[MCUOffset + 2] = BURN_ENDIAN_SWAP_INT16(0x3235);
+			MCURam[MCUOffset + 3] = BURN_ENDIAN_SWAP_INT16(0x2d54);
+			MCURam[MCUOffset + 4] = BURN_ENDIAN_SWAP_INT16(0x4f59);
+			MCURam[MCUOffset + 5] = BURN_ENDIAN_SWAP_INT16(0x424f);
+			MCURam[MCUOffset + 6] = BURN_ENDIAN_SWAP_INT16(0x5831);
+			MCURam[MCUOffset + 7] = BURN_ENDIAN_SWAP_INT16(0x3939);
 			return;
 		}
 
@@ -3065,8 +3211,8 @@ static void GtmrevoMCURun()
 	UINT16 *MCURam = (UINT16*)Kaneko16MCURam;
 	UINT16 *NVRam = (UINT16*)Kaneko16NVRam;
 
-	UINT16 MCUCommand = MCURam[0x10/2];
-	UINT16 MCUOffset = MCURam[0x12/2] >> 1;
+	UINT16 MCUCommand = BURN_ENDIAN_SWAP_INT16(MCURam[0x10/2]);
+	UINT16 MCUOffset = BURN_ENDIAN_SWAP_INT16(MCURam[0x12/2]) >> 1;
 
 	switch (MCUCommand >> 8) {
 		case 0x02: {
@@ -3075,20 +3221,20 @@ static void GtmrevoMCURun()
 		}
 
 		case 0x03: {
-			MCURam[MCUOffset + 0] = 0xff00 - (Kaneko16Dip[0] << 8);
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0xff00 - (Kaneko16Dip[0] << 8));
 			return;
 		}
 
 		case 0x04: {
 			/* MCU writes the string "USMM0713-TB1994 " to shared ram */
-			MCURam[MCUOffset + 0] = 0x5553;
-			MCURam[MCUOffset + 1] = 0x4d4d;
-			MCURam[MCUOffset + 2] = 0x3037;
-			MCURam[MCUOffset + 3] = 0x3133;
-			MCURam[MCUOffset + 4] = 0x2d54;
-			MCURam[MCUOffset + 5] = 0x4231;
-			MCURam[MCUOffset + 6] = 0x3939;
-			MCURam[MCUOffset + 7] = 0x3420;
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0x5553);
+			MCURam[MCUOffset + 1] = BURN_ENDIAN_SWAP_INT16(0x4d4d);
+			MCURam[MCUOffset + 2] = BURN_ENDIAN_SWAP_INT16(0x3037);
+			MCURam[MCUOffset + 3] = BURN_ENDIAN_SWAP_INT16(0x3133);
+			MCURam[MCUOffset + 4] = BURN_ENDIAN_SWAP_INT16(0x2d54);
+			MCURam[MCUOffset + 5] = BURN_ENDIAN_SWAP_INT16(0x4231);
+			MCURam[MCUOffset + 6] = BURN_ENDIAN_SWAP_INT16(0x3939);
+			MCURam[MCUOffset + 7] = BURN_ENDIAN_SWAP_INT16(0x3420);
 			return;
 		}
 
@@ -3104,8 +3250,8 @@ static void GtmroMCURun()
 	UINT16 *MCURam = (UINT16*)Kaneko16MCURam;
 	UINT16 *NVRam = (UINT16*)Kaneko16NVRam;
 
-	UINT16 MCUCommand = MCURam[0x10/2];
-	UINT16 MCUOffset = MCURam[0x12/2] >> 1;
+	UINT16 MCUCommand = BURN_ENDIAN_SWAP_INT16(MCURam[0x10/2]);
+	UINT16 MCUOffset = BURN_ENDIAN_SWAP_INT16(MCURam[0x12/2]) >> 1;
 
 	switch (MCUCommand >> 8) {
 		case 0x02: {
@@ -3114,20 +3260,20 @@ static void GtmroMCURun()
 		}
 
 		case 0x03: {
-			MCURam[MCUOffset + 0] = 0xff00 - (Kaneko16Dip[0] << 8);
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0xff00 - (Kaneko16Dip[0] << 8));
 			return;
 		}
 
 		case 0x04: {
 			/* MCU writes the string 'TOYBOX1994-" ?[GS]?W' to shared ram  - [GS] = ASCII Group Separator */
-			MCURam[MCUOffset + 0] = 0x544f;
-			MCURam[MCUOffset + 1] = 0x5942;
-			MCURam[MCUOffset + 2] = 0x4f58;
-			MCURam[MCUOffset + 3] = 0x3139;
-			MCURam[MCUOffset + 4] = 0x3934;
-			MCURam[MCUOffset + 5] = 0x9300;
-			MCURam[MCUOffset + 6] = 0xfa1d;
-			MCURam[MCUOffset + 7] = 0x9e57;
+			MCURam[MCUOffset + 0] = BURN_ENDIAN_SWAP_INT16(0x544f);
+			MCURam[MCUOffset + 1] = BURN_ENDIAN_SWAP_INT16(0x5942);
+			MCURam[MCUOffset + 2] = BURN_ENDIAN_SWAP_INT16(0x4f58);
+			MCURam[MCUOffset + 3] = BURN_ENDIAN_SWAP_INT16(0x3139);
+			MCURam[MCUOffset + 4] = BURN_ENDIAN_SWAP_INT16(0x3934);
+			MCURam[MCUOffset + 5] = BURN_ENDIAN_SWAP_INT16(0x9300);
+			MCURam[MCUOffset + 6] = BURN_ENDIAN_SWAP_INT16(0xfa1d);
+			MCURam[MCUOffset + 7] = BURN_ENDIAN_SWAP_INT16(0x9e57);
 			return;
 		}
 
@@ -3168,6 +3314,10 @@ static INT32 Kaneko16DoReset()
 	memset(Kaneko16SpriteRegs, 0, 0x20 * sizeof(UINT16));
 	memset(Kaneko16Layer0Regs, 0, 0x10 * sizeof(UINT16));
 	memset(Kaneko16Layer1Regs, 0, 0x10 * sizeof(UINT16));
+
+	nCyclesExtra = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -3291,6 +3441,10 @@ static INT32 ShogwarrDoReset()
 
 	Kaneko16Watchdog = 0;
 
+	nCyclesExtra = 0;
+
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -3298,7 +3452,7 @@ static INT32 ShogwarrDoReset()
 Memory Handlers
 ===============================================================================================*/
 
-UINT8 __fastcall BerlwallReadByte(UINT32 a)
+static UINT8 __fastcall BerlwallReadByte(UINT32 a)
 {
 	switch (a) {
 		case 0x500000:
@@ -3337,7 +3491,7 @@ UINT8 __fastcall BerlwallReadByte(UINT32 a)
 	return 0;
 }
 
-void __fastcall BerlwallWriteByte(UINT32 a, UINT8 d)
+static void __fastcall BerlwallWriteByte(UINT32 a, UINT8 d)
 {
 	switch (a) {
 		case 0x500000:
@@ -3379,7 +3533,7 @@ void __fastcall BerlwallWriteByte(UINT32 a, UINT8 d)
 	}
 }
 
-UINT16 __fastcall BerlwallReadWord(UINT32 a)
+static UINT16 __fastcall BerlwallReadWord(UINT32 a)
 {
 	switch (a) {
 		case 0x500000: {
@@ -3420,7 +3574,7 @@ UINT16 __fastcall BerlwallReadWord(UINT32 a)
 	return 0;
 }
 
-void __fastcall BerlwallWriteWord(UINT32 a, UINT16 d)
+static void __fastcall BerlwallWriteWord(UINT32 a, UINT16 d)
 {
 	switch (a) {
 		case 0x480000: {
@@ -3493,7 +3647,7 @@ void __fastcall BerlwallWriteWord(UINT32 a, UINT16 d)
 	}
 }
 
-UINT8 __fastcall BlazeonReadByte(UINT32 a)
+static UINT8 __fastcall BlazeonReadByte(UINT32 a)
 {
 	switch (a) {
 		case 0xc00000: {
@@ -3533,7 +3687,7 @@ UINT8 __fastcall BlazeonReadByte(UINT32 a)
 	return 0;
 }
 
-void __fastcall BlazeonWriteByte(UINT32 a, UINT8 d)
+static void __fastcall BlazeonWriteByte(UINT32 a, UINT8 d)
 {
 	switch (a) {
 		case 0xd00000: {
@@ -3555,7 +3709,7 @@ void __fastcall BlazeonWriteByte(UINT32 a, UINT8 d)
 	}
 }
 
-UINT16 __fastcall BlazeonReadWord(UINT32 a)
+static UINT16 __fastcall BlazeonReadWord(UINT32 a)
 {
 	switch (a) {
 		case 0xc00000: {
@@ -3585,7 +3739,7 @@ UINT16 __fastcall BlazeonReadWord(UINT32 a)
 	return 0;
 }
 
-void __fastcall BlazeonWriteWord(UINT32 a, UINT16 /*d*/)
+static void __fastcall BlazeonWriteWord(UINT32 a, UINT16 /*d*/)
 {
 	switch (a) {
 		case 0xd00000: {
@@ -3599,7 +3753,7 @@ void __fastcall BlazeonWriteWord(UINT32 a, UINT16 /*d*/)
 	}
 }
 
-UINT8 __fastcall ExplbrkrReadByte(UINT32 a)
+static UINT8 __fastcall ExplbrkrReadByte(UINT32 a)
 {
 	switch (a) {
 		case 0x400001: {
@@ -3644,7 +3798,7 @@ UINT8 __fastcall ExplbrkrReadByte(UINT32 a)
 	return 0;
 }
 
-void __fastcall ExplbrkrWriteByte(UINT32 a, UINT8 d)
+static void __fastcall ExplbrkrWriteByte(UINT32 a, UINT8 d)
 {
 	switch (a) {
 		case 0x40000f:
@@ -3685,7 +3839,7 @@ void __fastcall ExplbrkrWriteByte(UINT32 a, UINT8 d)
 	}
 }
 
-UINT16 __fastcall ExplbrkrReadWord(UINT32 a)
+static UINT16 __fastcall ExplbrkrReadWord(UINT32 a)
 {
 	switch (a) {
 		case 0xa00000: {
@@ -3706,7 +3860,7 @@ UINT16 __fastcall ExplbrkrReadWord(UINT32 a)
 	return 0;
 }
 
-void __fastcall ExplbrkrWriteWord(UINT32 a, UINT16 d)
+static void __fastcall ExplbrkrWriteWord(UINT32 a, UINT16 d)
 {
 	switch (a) {
 		case 0x400000:
@@ -3762,7 +3916,7 @@ void __fastcall ExplbrkrWriteWord(UINT32 a, UINT16 d)
 		}
 
 		case 0x900000: {
-			Kaneko16SpriteRegs[0] = d;
+			Kaneko16SpriteRegs[0] = BURN_ENDIAN_SWAP_INT16(d);
 			if (d & 0xff) {
 				Kaneko16SpriteFlipX = d & 2;
 				Kaneko16SpriteFlipY = d & 1;
@@ -3781,7 +3935,7 @@ void __fastcall ExplbrkrWriteWord(UINT32 a, UINT16 d)
 	}
 }
 
-UINT8 __fastcall MgcrystlReadByte(UINT32 a)
+static UINT8 __fastcall MgcrystlReadByte(UINT32 a)
 {
 	switch (a) {
 		case 0x400001: {
@@ -3822,7 +3976,7 @@ UINT8 __fastcall MgcrystlReadByte(UINT32 a)
 	return 0;
 }
 
-UINT8 __fastcall GtmrReadByte(UINT32 a)
+static UINT8 __fastcall GtmrReadByte(UINT32 a)
 {
 	switch (a) {
 		case 0x900014: {
@@ -3859,7 +4013,7 @@ UINT8 __fastcall GtmrReadByte(UINT32 a)
 	return 0;
 }
 
-void __fastcall GtmrWriteByte(UINT32 a, UINT8 d)
+static void __fastcall GtmrWriteByte(UINT32 a, UINT8 d)
 {
 	switch (a) {
 		case 0x600000:
@@ -3880,7 +4034,11 @@ void __fastcall GtmrWriteByte(UINT32 a, UINT8 d)
 		case 0x60001a:
 		case 0x60001c:
 		case 0x60001e: {
+#ifdef LSB_FIRST
 			Kaneko16Layer0Regs[(a - 0x600000) >> 1] = d;
+#else
+			Kaneko16Layer0Regs[a - 0x600000] = d;
+#endif
 			return;
 		}
 
@@ -3902,7 +4060,11 @@ void __fastcall GtmrWriteByte(UINT32 a, UINT8 d)
 		case 0x68001a:
 		case 0x68001c:
 		case 0x68001e: {
+#ifdef LSB_FIRST
 			Kaneko16Layer1Regs[(a - 0x680000) >> 1] = d;
+#else
+			Kaneko16Layer1Regs[a - 0x680000] = d;
+#endif
 			return;
 		}
 
@@ -3922,7 +4084,11 @@ void __fastcall GtmrWriteByte(UINT32 a, UINT8 d)
 		case 0x70001a:
 		case 0x70001c:
 		case 0x70001e: {
+#ifdef LSB_FIRST
 			UINT32 offset = (a - 0x700000) >> 1;
+#else
+			UINT32 offset = a - 0x700000;
+#endif
 			Kaneko16SpriteRegs[offset] = d;
 			if (offset == 0 && (d & 0xff)) {
 				Kaneko16SpriteFlipX = d & 2;
@@ -3952,7 +4118,7 @@ void __fastcall GtmrWriteByte(UINT32 a, UINT8 d)
 	}
 }
 
-UINT16 __fastcall GtmrReadWord(UINT32 a)
+static UINT16 __fastcall GtmrReadWord(UINT32 a)
 {
 	switch (a) {
 		case 0x800000: {
@@ -4031,7 +4197,7 @@ UINT16 __fastcall GtmrReadWord(UINT32 a)
 	return 0;
 }
 
-void __fastcall GtmrWriteWord(UINT32 a, UINT16 d)
+static void __fastcall GtmrWriteWord(UINT32 a, UINT16 d)
 {
 	switch (a) {
 		case 0x2a0000: {
@@ -4055,7 +4221,7 @@ void __fastcall GtmrWriteWord(UINT32 a, UINT16 d)
 		}
 
 		case 0x700000: {
-			Kaneko16SpriteRegs[0] = d;
+			Kaneko16SpriteRegs[0] = BURN_ENDIAN_SWAP_INT16(d);
 			if (d & 0xff) {
 				Kaneko16SpriteFlipX = d & 2;
 				Kaneko16SpriteFlipY = d & 1;
@@ -4145,7 +4311,7 @@ void __fastcall GtmrWriteWord(UINT32 a, UINT16 d)
 	}
 }
 
-UINT8 __fastcall Kaneko16Z80PortRead(UINT16 a)
+static UINT8 __fastcall Kaneko16Z80PortRead(UINT16 a)
 {
 	a &= 0xff;
 
@@ -4166,7 +4332,7 @@ UINT8 __fastcall Kaneko16Z80PortRead(UINT16 a)
 	return 0;
 }
 
-void __fastcall Kaneko16Z80PortWrite(UINT16 a, UINT8 d)
+static void __fastcall Kaneko16Z80PortWrite(UINT16 a, UINT8 d)
 {
 	a &= 0xff;
 
@@ -4639,8 +4805,8 @@ static INT32 PackbangInit()
 	SekSetWriteWordHandler(0, BerlwallWriteWord);
 	SekClose();
 
-	AY8910Init(0, 2000000, 0);
-	AY8910Init(1, 2000000, 1);
+	AY8910Init(0, 1000000, 0);
+	AY8910Init(1, 1000000, 1);
 	AY8910SetPorts(0, &Kaneko16Dip0Read, &Kaneko16Dip1Read, NULL, NULL);
 	AY8910SetAllRoutes(0, 0.40, BURN_SND_ROUTE_BOTH);
 	AY8910SetAllRoutes(1, 0.40, BURN_SND_ROUTE_BOTH);
@@ -4648,7 +4814,7 @@ static INT32 PackbangInit()
 
 	// Setup the OKIM6295 emulation
 	MSM6295Init(0, (12000000 / 6) / 132, 1);
-	MSM6295SetRoute(0, 0.40, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(0, 0.50, BURN_SND_ROUTE_BOTH);
 
 	// Reset the driver
 	BerlwallDoReset();
@@ -4730,9 +4896,10 @@ static INT32 BlazeonInit()
 	ZetClose();
 
 	// Setup the YM2151 emulation
-	BurnYM2151Init(4000000);
+	BurnYM2151InitBuffered(4000000, 1, NULL, 0);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 1.00, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 1.00, BURN_SND_ROUTE_RIGHT);
+	BurnTimerAttachZet(4000000);
 
 	// Reset the driver
 	BlazeonDoReset();
@@ -4743,9 +4910,9 @@ static INT32 BlazeonInit()
 static INT32 WingforcInit()
 {
 	INT32 nRet = 0, nLen;
-	
-	//BurnSetRefreshRate(59.1854); // hmm, this causes clicks in audio. let's just give it the cycles/per frame it wants instead. (see WingforcFrame())
-	
+
+	BurnSetRefreshRate(59.1854);
+
 	Kaneko16NumSprites = 0x4000;
 	Kaneko16NumTiles = 0x4000;
 	Kaneko16NumTiles2 = 0;
@@ -4838,9 +5005,10 @@ static INT32 WingforcInit()
 	ZetClose();
 
 	// Setup the YM2151 emulation
-	BurnYM2151Init(4000000);
+	BurnYM2151InitBuffered(4000000, 1, NULL, 0);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 0.40, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 0.40, BURN_SND_ROUTE_RIGHT);
+	BurnTimerAttachZet(4000000);
 
 	// Setup the OKIM6295 emulation
 	MSM6295Init(0, (16000000 / 16) / 132, 1);
@@ -5567,7 +5735,7 @@ static INT32 ShogwarrInit()
 	SekOpen(0);
 	SekMapMemory(Kaneko16Rom          , 0x000000, 0x03ffff, MAP_ROM);
 	SekMapMemory(Kaneko16Ram          , 0x100000, 0x10ffff, MAP_RAM);
-	SekMapMemory(Kaneko16MCURam	  , 0x200000, 0x20ffff, MAP_RAM);
+	SekMapMemory(Kaneko16MCURam	      , 0x200000, 0x20ffff, MAP_RAM);
 	SekMapMemory(Kaneko16PaletteRam   , 0x380000, 0x380fff, MAP_RAM);
 	SekMapMemory(Kaneko16SpriteRam    , 0x580000, 0x581fff, MAP_RAM);
 	SekMapMemory(Kaneko16Video1Ram    , 0x600000, 0x600fff, MAP_RAM);
@@ -5801,6 +5969,114 @@ static INT32 BrapboysInit()
 	return 0;
 }
 
+static INT32 Brapboysp2Init()
+{
+	static const UINT16 brapboys_default_eeprom[64] = {
+		0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+		0x0000, 0x0005, 0x0006, 0x2030, 0x0003, 0x6818, 0x0101, 0x0101,
+		0x0101, 0x0001, 0x0004, 0x0008, 0x4B41, 0x4E45, 0x4B4F, 0x2020,
+		0x4265, 0x2052, 0x6170, 0x2042, 0x6F79, 0x7300, 0x3030, 0x302E,
+		0x3038, 0x10FF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+		0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+		0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+		0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x0035, 0xFFFF, 0xFFFF, 0xFFFF
+	};
+
+	INT32 nRet = 0, nLen;
+
+	Kaneko16NumSprites = 0x10000;
+	Kaneko16NumTiles = 0x8000;
+	Kaneko16NumTiles2 = 0;
+
+	Kaneko16VideoInit();
+	Kaneko16SpriteXOffset = 0;
+	Kaneko16SpriteFlipType = 1;
+
+	// Allocate and Blank all required memory
+	Mem = NULL;
+	ShogwarrMemIndex();
+	nLen = MemEnd - (UINT8 *)0;
+	if ((Mem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
+	memset(Mem, 0, nLen);
+	ShogwarrMemIndex();
+
+	Kaneko16TempGfx = (UINT8*)BurnMalloc(0x800000);
+
+	// Load and byte-swap 68000 Program roms
+	nRet = BurnLoadRom(Kaneko16Rom + 0x00001, 0, 2); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16Rom + 0x00000, 1, 2); if (nRet != 0) return 1;
+
+	nRet = BurnLoadRom(Kaneko16McuRom, 2, 1); if (nRet != 0) return 1;
+
+	// Load and Decode Sprite Roms
+	memset (Kaneko16TempGfx, 0xff, 0x800000);
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0000000,  3, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0100000,  4, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0200000,  5, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0300000,  6, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0400000,  7, 1); if (nRet != 0) return 1;
+	memcpy (Kaneko16TempGfx + 0x0480000, Kaneko16TempGfx + 0x0400000, 0x0080000);
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0500000,  8, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0540000,  9, 1); if (nRet != 0) return 1;
+
+	BurnLoadRom(Kaneko16TempGfx + 0x580000, 18, 1); // brapboysp2
+	BurnLoadRom(Kaneko16TempGfx + 0x5c0000, 19, 1); 
+
+	GfxDecode(Kaneko16NumSprites, 4, 16, 16, FourBppPlaneOffsets, FourBppXOffsets, FourBppYOffsets, 0x400, Kaneko16TempGfx, Kaneko16Sprites);
+
+	// Load and Decode Tile Roms
+	memset(Kaneko16TempGfx, 0, 0x400000);
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0000000, 10, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0100000, 11, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0200000, 12, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(Kaneko16TempGfx + 0x0300000, 13, 1); if (nRet != 0) return 1;
+	UnscrambleTiles(0x400000);
+	GfxDecode(Kaneko16NumTiles, 4, 16, 16, FourBppPlaneOffsets, FourBppXOffsets, FourBppYOffsets, 0x400, Kaneko16TempGfx, Kaneko16Tiles);
+
+	BurnFree(Kaneko16TempGfx);
+
+	nRet = BurnLoadRom(MSM6295ROMData + 0x000000, 14, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(MSM6295ROMData + 0x080000, 15, 1); if (nRet != 0) return 1;
+	memcpy (MSM6295ROM + 0x000000, MSM6295ROMData,  0x30000);
+
+	nRet = BurnLoadRom(MSM6295ROMData2 + 0x000000, 16, 1); if (nRet != 0) return 1;
+	nRet = BurnLoadRom(MSM6295ROMData2 + 0x100000, 17, 1); if (nRet != 0) return 1;
+	memcpy (MSM6295ROM + 0x100000, MSM6295ROMData2,  0x20000);
+
+	memcpy (Kaneko16NVRam, brapboys_default_eeprom, 0x80);
+
+	SekInit(0, 0x68000);
+	SekOpen(0);
+	SekMapMemory(Kaneko16Rom          , 0x000000, 0x03ffff, MAP_ROM);
+	SekMapMemory(Kaneko16Ram          , 0x100000, 0x10ffff, MAP_RAM);
+	SekMapMemory(Kaneko16MCURam	  , 0x200000, 0x20ffff, MAP_RAM);
+	SekMapMemory(Kaneko16PaletteRam   , 0x380000, 0x380fff, MAP_RAM);
+	SekMapMemory(Kaneko16SpriteRam    , 0x580000, 0x581fff, MAP_RAM);
+	SekMapMemory(Kaneko16Video1Ram    , 0x600000, 0x600fff, MAP_RAM);
+	SekMapMemory(Kaneko16Video0Ram    , 0x601000, 0x601fff, MAP_RAM);
+	SekMapMemory(Kaneko16VScrl1Ram    , 0x602000, 0x602fff, MAP_RAM);
+	SekMapMemory(Kaneko16VScrl0Ram    , 0x603000, 0x603fff, MAP_RAM);
+	SekMapMemory((UINT8*)Kaneko16Layer0Regs    , 0x800000, 0x80001f, MAP_WRITE);
+	SekMapMemory((UINT8*)Kaneko16SpriteRegs    , 0x900000, 0x90001f, MAP_WRITE);
+	SekSetReadByteHandler(0, ShogwarrReadByte);
+	SekSetReadWordHandler(0, ShogwarrReadWord);
+	SekSetWriteByteHandler(0, ShogwarrWriteByte);
+	SekSetWriteWordHandler(0, ShogwarrWriteWord);
+	SekClose();
+
+	MSM6295Init(0, (16000000 / 8) / 165, 1);
+	MSM6295SetRoute(0, 1.00, BURN_SND_ROUTE_BOTH);
+
+	MSM6295Init(1, (16000000 / 8) / 165, 1);
+	MSM6295SetRoute(1, 1.00, BURN_SND_ROUTE_BOTH);
+
+	Brapboys = 1;
+
+	ShogwarrDoReset();
+
+	return 0;
+}
+
 static INT32 Kaneko16Exit()
 {
 	SekExit();
@@ -5914,10 +6190,10 @@ static INT32 Kaneko16ParseSpriteType0(INT32 i, struct tempsprite *s)
 
 	if (Offset >= (Kaneko16SpriteRamSize >> 1)) return -1;
 
-	Attr = SpriteRam[Offset + 0];
-	s->code = SpriteRam[Offset + 1];
-	s->x = SpriteRam[Offset + 2];
-	s->y = SpriteRam[Offset + 3];
+	Attr = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 0]);
+	s->code = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 1]);
+	s->x = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 2]);
+	s->y = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 3]);
 
 	s->color = (Attr & 0xfc) >> 2;
 	s->priority = (Attr & 0x300) >> 8;
@@ -5925,11 +6201,10 @@ static INT32 Kaneko16ParseSpriteType0(INT32 i, struct tempsprite *s)
 	s->flipx = Attr & 0x002;
 
 	xOffs = (Attr & 0x1800) >> 11;
-	s->yoffs = Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 1];
-	s->xoffs = Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 0];
+	s->yoffs = BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 1]);
+	s->xoffs = BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 0]);
 
-	s->yoffs -= Kaneko16SpriteRegs[0x01];
-
+	s->yoffs -= BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x01]);
 	return ((Attr & 0x2000) ? USE_LATCHED_XY : 0) | ((Attr & 0x4000) ? USE_LATCHED_COLOUR: 0) | ((Attr & 0x8000) ? USE_LATCHED_CODE : 0);
 }
 
@@ -5942,10 +6217,10 @@ static INT32 Kaneko16ParseSpriteType1(INT32 i, struct tempsprite *s)
 
 	if (Offset >= (Kaneko16SpriteRamSize >> 1)) return -1;
 
-	Attr = SpriteRam[Offset + 0];
-	s->code = SpriteRam[Offset + 1];
-	s->x = SpriteRam[Offset + 2];
-	s->y = SpriteRam[Offset + 3];
+	Attr = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 0]);
+	s->code = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 1]);
+	s->x = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 2]);
+	s->y = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 3]);
 
 	s->color = Attr & 0x3f;
 	s->priority = (Attr & 0xc0) >> 6;
@@ -5954,11 +6229,11 @@ static INT32 Kaneko16ParseSpriteType1(INT32 i, struct tempsprite *s)
 	s->code += (s->y & 1) << 16;
 
 	xOffs = (Attr & 0x1800) >> 11;
-	s->yoffs = Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 1];
-	s->xoffs = Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 0];
+	s->yoffs = BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 1]);
+	s->xoffs = BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 0]);
 
-	s->yoffs -= Kaneko16SpriteRegs[0x01];
-
+	s->yoffs -= BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x01]);
+	
 	return ((Attr & 0x2000) ? USE_LATCHED_XY : 0) | ((Attr & 0x4000) ? USE_LATCHED_COLOUR: 0) | ((Attr & 0x8000) ? USE_LATCHED_CODE : 0);
 }
 
@@ -5971,10 +6246,10 @@ static INT32 Kaneko16ParseSpriteType2(INT32 i, struct tempsprite *s)
 
 	if (Offset >= (Kaneko16SpriteRamSize >> 1)) return -1;
 
-	Attr = SpriteRam[Offset + 0];
-	s->code = SpriteRam[Offset + 1];
-	s->x = SpriteRam[Offset + 2];
-	s->y = SpriteRam[Offset + 3];
+	Attr = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 0]);
+	s->code = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 1]);
+	s->x = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 2]);
+	s->y = BURN_ENDIAN_SWAP_INT16(SpriteRam[Offset + 3]);
 
 	s->color = (Attr & 0xfc) >> 2;
 	s->priority = (Attr & 0x300) >> 8;
@@ -5982,11 +6257,11 @@ static INT32 Kaneko16ParseSpriteType2(INT32 i, struct tempsprite *s)
 	s->flipx = Attr & 0x002;
 
 	xOffs = (Attr & 0x1800) >> 11;
-	s->yoffs = Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 1];
-	s->xoffs = Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 0];
+	s->yoffs = BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 1]);
+	s->xoffs = BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x08 + (xOffs * 2) + 0]);
 
-	s->yoffs -= Kaneko16SpriteRegs[0x01];
-
+	s->yoffs -= BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0x01]);
+	
 	return ((Attr & 0x2000) ? USE_LATCHED_XY : 0) | ((Attr & 0x4000) ? USE_LATCHED_COLOUR: 0) | ((Attr & 0x8000) ? USE_LATCHED_CODE : 0);
 }
 
@@ -6218,7 +6493,7 @@ static void Kaneko16RenderSprite_PrioBuffer(UINT32 Code, UINT32 Colour, INT32 Fl
 				UINT8 *Source = SourceBase + ((yIndex >> 16) * 16);
 				UINT16* pPixel = pTransDraw + (y * nScreenWidth);
 
-				if ((~Kaneko16SpriteRegs[0] & 4) && Kaneko16SpriteFbuffer)
+				if ((~(BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0])) & 4) && Kaneko16SpriteFbuffer)
 					pPixel = Kaneko16SpriteFbuffer + (y * nScreenWidth); // mgcrystl overdraw mode
 
 				UINT8 *pri = Kaneko16PrioBitmap + (y * nScreenWidth);
@@ -6228,12 +6503,12 @@ static void Kaneko16RenderSprite_PrioBuffer(UINT32 Code, UINT32 Colour, INT32 Fl
 				INT32 x, xIndex = xIndexBase;
 				for (x = sx; x <ex; x++) {
 					INT32 c = Source[xIndex >> 16];
-					if (c != 0) {
+					if (c != 0 && (x >= 0 && x < nScreenWidth)) {
 						// If we haven't drawn a sprite here yet, do so.
 						if (!(pri[x] & 0x10))
 						{
 							if (pri[x] < priority) {
-								if (x >= 0 && x < nScreenWidth) pPixel[x] = (c | Colour | Kaneko16SpritesColourOffset) & Kaneko16SpritesColourMask;
+								pPixel[x] = (c | Colour | Kaneko16SpritesColourOffset) & Kaneko16SpritesColourMask;
 							}
 							// Mark that we (tried to) draw a sprite.
 							pri[x] |= 0x10;
@@ -6427,15 +6702,15 @@ static void Kaneko16QueueTilesLayer(INT32 Layer)
 		}
 	}
 
-	xScroll = LAYERREGS[xScrollReg];
+	xScroll = BURN_ENDIAN_SWAP_INT16(LAYERREGS[xScrollReg]);
 	xOffs = Kaneko16TilesXOffset + xOffs;
-	yScroll = ((LAYERREGS[yScrollReg] >> 6) & 0x1ff) - Kaneko16TilesYOffset;
+	yScroll = ((BURN_ENDIAN_SWAP_INT16(LAYERREGS[yScrollReg]) >> 6) & 0x1ff) - Kaneko16TilesYOffset;
 
 	mx = my = -1;
 	for (y = 0; y < 512; y++) {
 		if (!(y % 16)) my++;
 
-		LineScroll = VSCROLLRAM[y];
+		LineScroll = BURN_ENDIAN_SWAP_INT16(VSCROLLRAM[y]);
 		py = y - yScroll;
 
 		if (py < -30) py += 512;
@@ -6454,12 +6729,12 @@ static void Kaneko16QueueTilesLayer(INT32 Layer)
 
 			if (numTiles & 0xfff)
 			{ // gtmr2
-				Code = VRAM[TileIndex + 1];
+				Code = BURN_ENDIAN_SWAP_INT16(VRAM[TileIndex + 1]);
 				if (Code >= numTiles) continue;
 			} else {
-				Code = VRAM[TileIndex + 1] & (numTiles - 1);
+				Code = BURN_ENDIAN_SWAP_INT16(VRAM[TileIndex + 1]) & (numTiles - 1);
 			}
-			Attr = VRAM[TileIndex + 0];
+			Attr = BURN_ENDIAN_SWAP_INT16(VRAM[TileIndex + 0]);
 			Priority = (Attr >> 8) & 7;
 			Colour = (Attr >> 2) & 0x3f;
 			Flip = Attr & 3;
@@ -6587,13 +6862,13 @@ static void Kaneko16RenderTileLayer(INT32 Layer, INT32 PriorityDraw, INT32 xScro
 
 			if (numTiles & 0xfff)
 			{ // gtmr2
-				Code = VRAM[TileIndex + 1];
+				Code = BURN_ENDIAN_SWAP_INT16(VRAM[TileIndex + 1]);
 				if (Code >= numTiles) continue;
 			} else {
-				Code = VRAM[TileIndex + 1] & (numTiles - 1);
+				Code = BURN_ENDIAN_SWAP_INT16(VRAM[TileIndex + 1]) & (numTiles - 1);
 			}
 
-			Attr = VRAM[TileIndex + 0];
+			Attr = BURN_ENDIAN_SWAP_INT16(VRAM[TileIndex + 0]);
 			Colour = (Attr >> 2) & 0x3f;
 			Flip = Attr & 3;
 			Priority = (Attr >> 8) & 7;
@@ -6603,7 +6878,7 @@ static void Kaneko16RenderTileLayer(INT32 Layer, INT32 PriorityDraw, INT32 xScro
 				y = 16 * my;
 
 				x -= (xScroll >> 6) & 0x1ff;
-				y -= (LAYERREGS[yScrollReg] >> 6) & 0x1ff;
+				y -= (BURN_ENDIAN_SWAP_INT16(LAYERREGS[yScrollReg]) >> 6) & 0x1ff;
 
 				if (x < -7) x += 512;
 				if (y < -30) y += 512;
@@ -6679,14 +6954,14 @@ inline static UINT32 CalcCol(UINT16 nColour)
 	return BurnHighCol(r, g, b, 0);
 }
 
-INT32 Kaneko16CalcPalette(INT32 num)
+static INT32 Kaneko16CalcPalette(INT32 num)
 {
 	INT32 i;
 	UINT16* ps;
 	UINT32* pd;
 
 	for (i = 0, ps = (UINT16*)Kaneko16PaletteRam, pd = Kaneko16Palette; i < num; i++, ps++, pd++) {
-		*pd = CalcCol(*ps);
+		*pd = CalcCol(BURN_ENDIAN_SWAP_INT16(*ps));
 	}
 
 	return 0;
@@ -6727,11 +7002,11 @@ static INT32 BerlwallFrameRender()
 	INT32 vScroll0Enabled = 0;
 	INT32 vScroll1Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x0800);
@@ -6747,7 +7022,7 @@ static INT32 BerlwallFrameRender()
 				Kaneko16Palette[i + 2048] = 0;
 			}
 		} else {
-		 	for (i = 0; i < 32768; i++) {
+			for (i = 0; i < 32768; i++) {
 				INT32 r = (pal5bit(i >> 5) * nBrightness) / 100;
 				INT32 g = (pal5bit(i >> 10) * nBrightness) / 100;
 				INT32 b = (pal5bit(i >> 0) * nBrightness) / 100;
@@ -6759,11 +7034,11 @@ static INT32 BerlwallFrameRender()
 		Kaneko16RecalcBg15Palette = 0;
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(1)
 	}
 
@@ -6793,21 +7068,21 @@ static INT32 BlazeonFrameRender() // and Wingforc
 	INT32 vScroll0Enabled = 0;
 	INT32 vScroll1Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x0800);
 	memset(Kaneko16PrioBitmap, 0, 320 * 232);
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(1)
 	}
 
@@ -6832,20 +7107,20 @@ static INT32 ShogwarrFrameRender()
 	INT32 vScroll0Enabled = 0;
 	INT32 vScroll1Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x0800);
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4] & 0x008)) {
 		HANDLE_VSCROLL(1)
 	}
 
@@ -6877,34 +7152,34 @@ static INT32 BloodwarFrameRender()
 	INT32 vScroll2Enabled = 0;
 	INT32 vScroll3Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
-	INT32 xScroll2 = Kaneko16Layer1Regs[2];
-	INT32 xScroll3 = Kaneko16Layer1Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
+	INT32 xScroll2 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[2]);
+	INT32 xScroll3 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x1000) Layer2Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x0010) Layer3Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x1000) Layer2Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x0010) Layer3Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x10000);
 
 	if (!Kaneko16DisplayEnable) return 0;
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(1)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(2)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(3)
 	}
 
@@ -6938,32 +7213,32 @@ static INT32 ExplbrkrFrameRender()
 	INT32 vScroll2Enabled = 0;
 	INT32 vScroll3Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
-	INT32 xScroll2 = Kaneko16Layer1Regs[2];
-	INT32 xScroll3 = Kaneko16Layer1Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
+	INT32 xScroll2 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[2]);
+	INT32 xScroll3 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x1000) Layer2Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x0010) Layer3Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x1000) Layer2Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x0010) Layer3Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x1000);
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(1)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(2)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(3)
 	}
 
@@ -6997,15 +7272,15 @@ static INT32 GtmrFrameRender()
 	INT32 vScroll2Enabled = 0;
 	INT32 vScroll3Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
-	INT32 xScroll2 = Kaneko16Layer1Regs[2];
-	INT32 xScroll3 = Kaneko16Layer1Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
+	INT32 xScroll2 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[2]);
+	INT32 xScroll3 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x1000) Layer2Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x0010) Layer3Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x1000) Layer2Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x0010) Layer3Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x10000);
@@ -7013,19 +7288,19 @@ static INT32 GtmrFrameRender()
 
 	if (!Kaneko16DisplayEnable) return 0;
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(1)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(2)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(3)
 	}
 
@@ -7056,36 +7331,36 @@ static INT32 MgcrystlFrameRender()
 	INT32 vScroll2Enabled = 0;
 	INT32 vScroll3Enabled = 0;
 
-	INT32 xScroll0 = Kaneko16Layer0Regs[2];
-	INT32 xScroll1 = Kaneko16Layer0Regs[0];
-	INT32 xScroll2 = Kaneko16Layer1Regs[2];
-	INT32 xScroll3 = Kaneko16Layer1Regs[0];
+	INT32 xScroll0 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[2]);
+	INT32 xScroll1 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[0]);
+	INT32 xScroll2 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[2]);
+	INT32 xScroll3 = BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[0]);
 
-	if (~Kaneko16Layer0Regs[4] & 0x1000) Layer0Enabled = 1;
-	if (~Kaneko16Layer0Regs[4] & 0x0010) Layer1Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x1000) Layer2Enabled = 1;
-	if (~Kaneko16Layer1Regs[4] & 0x0010) Layer3Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x1000) Layer0Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4])) & 0x0010) Layer1Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x1000) Layer2Enabled = 1;
+	if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4])) & 0x0010) Layer3Enabled = 1;
 
 	BurnTransferClear();
 	Kaneko16CalcPalette(0x1000);
 	memset(Kaneko16PrioBitmap, 0, 320 * 240);
 
-	if (Kaneko16Layer0Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(0)
 	}
 
-	if (Kaneko16Layer0Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer0Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(1)
 	}
 
 	UINT8 *tmp = Kaneko16PrioBitmap; // Don't write priority for 2nd tilemap chip (layers 2,3)
 	Kaneko16PrioBitmap = NULL;
 
-	if (Kaneko16Layer1Regs[4] & 0x800) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x800) {
 		HANDLE_VSCROLL(2)
 	}
 
-	if (Kaneko16Layer1Regs[4] & 0x008) {
+	if (BURN_ENDIAN_SWAP_INT16(Kaneko16Layer1Regs[4]) & 0x008) {
 		HANDLE_VSCROLL(3)
 	}
 
@@ -7102,7 +7377,7 @@ static INT32 MgcrystlFrameRender()
 	}
 
 	if (nSpriteEnable & 1) {
-		if (~Kaneko16SpriteRegs[0] & 4) { // sprite framebuffer/overdraw mode
+		if (~(BURN_ENDIAN_SWAP_INT16(Kaneko16SpriteRegs[0])) & 4) { // sprite framebuffer/overdraw mode
 			Kaneko16RenderSprites_PrioBuffer();
 			for (INT32 y = 0; y < nScreenHeight; y++) {
 				UINT16 *pPixel = (UINT16*)Kaneko16SpriteFbuffer + (y * nScreenWidth);
@@ -7138,23 +7413,26 @@ static INT32 ExplbrkrFrame()
 
 	INT32 nInterleave = 256;
 	nCyclesTotal[0] = 12000000 / 60;
-	nCyclesDone[0] = 0;
+	nCyclesDone[0] = nCyclesExtra;
 
 	for (INT32 i = 0; i < nInterleave; i++) {
 		SekOpen(0);
 		CPU_RUN(0, Sek);
 		if (i == 144) SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
 		if (i == 64) SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
-		if (i == 224) SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
+		if (i == 224) {
+			SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
+			if (pBurnDraw) BurnDrvRedraw();
+		}
 		SekClose();
 	}
+
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
 
 	if (pBurnSoundOut) {
 		AY8910Render(pBurnSoundOut, nBurnSoundLen);
 		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
 	}
-
-	if (pBurnDraw) BurnDrvRedraw();
 
 	return 0;
 }
@@ -7163,13 +7441,15 @@ static INT32 BlazeonFrame()
 {
 	if (Kaneko16Reset) BlazeonDoReset();
 
+	ZetNewFrame();
+
 	Kaneko16MakeInputs();
 
 	INT32 nInterleave = 10;
 	nCyclesTotal[0] = 12000000 / 60;
 	nCyclesTotal[1] = 4000000 / 60;
-	nCyclesDone[0] = nCyclesDone[1] = 0;
-	nSoundBufferPos = 0;
+	nCyclesDone[0] = nCyclesExtra;
+	nCyclesDone[1] = 0;
 
 	for (INT32 i = 0; i < nInterleave; i++) {
 		SekOpen(0);
@@ -7180,30 +7460,14 @@ static INT32 BlazeonFrame()
 		SekClose();
 
 		ZetOpen(0);
-		CPU_RUN(1, Zet);
+		CPU_RUN_TIMER(1);
 		ZetClose();
-
-		// Render Sound Segment
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			ZetOpen(0);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			ZetClose();
-			nSoundBufferPos += nSegmentLength;
-		}
 	}
 
-	// Make sure the buffer is entirely filled.
-	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
 
-		if (nSegmentLength) {
-			ZetOpen(0);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			ZetClose();
-		}
+	if (pBurnSoundOut) {
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 	}
 
 	if (pBurnDraw) BurnDrvRedraw();
@@ -7215,48 +7479,34 @@ static INT32 WingforcFrame()
 {
 	if (Kaneko16Reset) WingforcDoReset();
 
+	ZetNewFrame();
+
 	Kaneko16MakeInputs();
 
 	INT32 nInterleave = 256;
 	nCyclesTotal[0] = (INT32)(16000000 / 59.1854);
 	nCyclesTotal[1] = (INT32)(4000000 / 59.1854);
 
-	nCyclesDone[0] = nCyclesDone[1] = 0;
-	nSoundBufferPos = 0;
+	nCyclesDone[0] = nCyclesExtra;
+	nCyclesDone[1] = 0;
 
 	for (INT32 i = 0; i < nInterleave; i++) {
 		SekOpen(0);
 		CPU_RUN(0, Sek);
 		if (i == 144) SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
-		if (i == 64) SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
+		if (i == 64)  SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
 		if (i == 224) SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
 		SekClose();
 
 		ZetOpen(0);
-		CPU_RUN(1, Zet);
+		CPU_RUN_TIMER(1);
 		ZetClose();
-
-		// Render Sound Segment
-		if (pBurnSoundOut) {
-			INT32 nSegmentLength = nBurnSoundLen / nInterleave;
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			ZetOpen(0);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			ZetClose();
-			nSoundBufferPos += nSegmentLength;
-		}
 	}
 
-	// Make sure the buffer is entirely filled.
-	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
 
-		if (nSegmentLength) {
-			ZetOpen(0);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			ZetClose();
-		}
+	if (pBurnSoundOut) {
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
 	}
 
@@ -7271,18 +7521,22 @@ static INT32 GtmrFrame()
 
 	Kaneko16MakeInputs();
 
-	SekOpen(0);
 	SekNewFrame();
 
-	SekRun((16000000 / 60) / 4);
-	SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
-	SekRun((16000000 / 60) / 4);
-	SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
-	SekRun((16000000 / 60) / 4);
-	SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
-	SekRun((16000000 / 60) / 4);
+	INT32 nInterleave = 256;
+	nCyclesTotal[0] = 16000000 / 60;
+	nCyclesDone[0] = nCyclesExtra;
 
+	SekOpen(0);
+	for (INT32 i = 0; i < nInterleave; i++) {
+		CPU_RUN(0, Sek);
+		if (i == 144) SekSetIRQLine(3, CPU_IRQSTATUS_AUTO);
+		if (i == 64)  SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
+		if (i == 224) SekSetIRQLine(5, CPU_IRQSTATUS_AUTO);
+	}
 	SekClose();
+
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
 
 	if (pBurnSoundOut) {
 		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
@@ -7308,7 +7562,8 @@ static INT32 ShogwarrFrame()
 
 	INT32 nInterleave = 256;
 	nCyclesTotal[0] = (12000000 * 100) / 5918;
-	nCyclesDone[0] = 0;
+	nCyclesDone[0] = nCyclesExtra;
+
 	SekOpen(0);
 
 	for (INT32 i = 0; i < nInterleave; i++) {
@@ -7326,6 +7581,8 @@ static INT32 ShogwarrFrame()
 	}
 
 	SekClose();
+
+	nCyclesExtra = nCyclesDone[0] - nCyclesTotal[0];
 
 	if (pBurnSoundOut) {
 		BurnSoundClear();
@@ -7381,6 +7638,8 @@ static INT32 Kaneko16Scan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(Kaneko16Brightness);
 
 		BurnRandomScan(nAction);
+
+		SCAN_VAR(nCyclesExtra);
 
 		if (Kaneko16Bg15) {
 			SCAN_VAR(Kaneko16Bg15Reg);
@@ -7505,7 +7764,7 @@ static INT32 ShogwarrScan(INT32 nAction, INT32 *pnMin)
 		}
 	}
 
-	return Kaneko16Scan(nAction, pnMin);;
+	return Kaneko16Scan(nAction, pnMin);
 }
 
 /*==============================================================================================
@@ -7516,7 +7775,7 @@ struct BurnDriver BurnDrvBerlwall = {
 	"berlwall", NULL, NULL, NULL, "1991",
 	"The Berlin Wall\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
 	NULL, BerlwallRomInfo, BerlwallRomName, NULL, NULL, NULL, NULL, BerlwallInputInfo, BerlwallDIPInfo,
 	BerlwallInit, BerlwallExit, ExplbrkrFrame, BerlwallFrameRender, ExplbrkrScan,
 	&Kaneko16RecalcBg15Palette, 0x9000, 256, 224, 4, 3
@@ -7524,9 +7783,9 @@ struct BurnDriver BurnDrvBerlwall = {
 
 struct BurnDriver BurnDrvBerlwallt = {
 	"berlwallt", "berlwall", NULL, NULL, "1991",
-	"The Berlin Wall (bootleg ?)\0", NULL, "Kaneko", "Kaneko16",
+	"The Berlin Wall (bootleg?)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
 	NULL, BerlwalltRomInfo, BerlwalltRomName, NULL, NULL, NULL, NULL, BerlwallInputInfo, BerlwalltDIPInfo,
 	BerlwallInit, BerlwallExit, ExplbrkrFrame, BerlwallFrameRender, ExplbrkrScan,
 	&Kaneko16RecalcBg15Palette, 0x9000, 256, 224, 4, 3
@@ -7536,7 +7795,7 @@ struct BurnDriver BurnDrvBerlwallk = {
 	"berlwallk", "berlwall", NULL, NULL, "1991",
 	"The Berlin Wall (Korea)\0", NULL, "Kaneko (Inter license)", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
 	NULL, BerlwallkRomInfo, BerlwallkRomName, NULL, NULL, NULL, NULL, BerlwallInputInfo, BerlwalltDIPInfo,
 	BerlwallInit, BerlwallExit, ExplbrkrFrame, BerlwallFrameRender, ExplbrkrScan,
 	&Kaneko16RecalcBg15Palette, 0x9000, 256, 224, 4, 3
@@ -7544,10 +7803,20 @@ struct BurnDriver BurnDrvBerlwallk = {
 
 struct BurnDriver BurnDrvPackbang = {
 	"packbang", NULL, NULL, NULL, "1994",
-	"Pack'n Bang Bang (Prototype)\0", NULL, "Kaneko", "Kaneko16",
+	"Pack'n Bang Bang\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_KANEKO16, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_PUZZLE, 0,
 	NULL, PackbangRomInfo, PackbangRomName, NULL, NULL, NULL, NULL, BerlwallInputInfo, PackbangDIPInfo,
+	PackbangInit, BerlwallExit, ExplbrkrFrame, BerlwallFrameRender, ExplbrkrScan,
+	&Kaneko16RecalcBg15Palette, 0x9000, 225, 256, 3, 4
+};
+
+struct BurnDriver BurnDrvPackbangp = {
+	"packbangp", "packbang", NULL, NULL, "1994",
+	"Pack'n Bang Bang (prototype)\0", NULL, "Kaneko", "Kaneko16",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_PUZZLE, 0,
+	NULL, PackbangpRomInfo, PackbangpRomName, NULL, NULL, NULL, NULL, BerlwallInputInfo, PackbangDIPInfo,
 	PackbangInit, BerlwallExit, ExplbrkrFrame, BerlwallFrameRender, ExplbrkrScan,
 	&Kaneko16RecalcBg15Palette, 0x9000, 225, 256, 3, 4
 };
@@ -7556,7 +7825,7 @@ struct BurnDriver BurnDrvBlazeon = {
 	"blazeon", NULL, NULL, NULL, "1992",
 	"Blaze On (World)\0", NULL, "A.I (Atlus license)", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_HORSHOOT, 0,
 	NULL, BlazeonRomInfo, BlazeonRomName, NULL, NULL, NULL, NULL, BlazeonInputInfo, BlazeonDIPInfo,
 	BlazeonInit, BlazeonExit, BlazeonFrame, BlazeonFrameRender, BlazeonScan,
 	NULL, 0x1000, 320, 232, 4, 3
@@ -7566,7 +7835,7 @@ struct BurnDriver BurnDrvBlazeonj = {
 	"blazeonj", "blazeon", NULL, NULL, "1992",
 	"Blaze On (Japan)\0", NULL, "A.I (Atlus license)", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_HORSHOOT, 0,
 	NULL, BlazeonjRomInfo, BlazeonjRomName, NULL, NULL, NULL, NULL, BlazeonInputInfo, BlazeonDIPInfo,
 	BlazeonInit, BlazeonExit, BlazeonFrame, BlazeonFrameRender, BlazeonScan,
 	NULL, 0x1000, 320, 232, 4, 3
@@ -7576,7 +7845,7 @@ struct BurnDriver BurnDrvWingforc = {
 	"wingforc", NULL, NULL, NULL, "1993",
 	"Wing Force (Japan, prototype)\0", NULL, "A.I (Atlus license)", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_KANEKO16, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_PROTOTYPE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_HORSHOOT, 0,
 	NULL, WingforcRomInfo, WingforcRomName, NULL, NULL, NULL, NULL, BlazeonInputInfo, BlazeonDIPInfo,
 	WingforcInit, WingforcExit, WingforcFrame, BlazeonFrameRender, WingforcScan,
 	NULL, 0x1000, 224, 320, 3, 4
@@ -7586,7 +7855,7 @@ struct BurnDriver BurnDrvBloodwar = {
 	"bloodwar", NULL, NULL, NULL, "1994",
 	"Blood Warrior\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
 	NULL, BloodwarRomInfo, BloodwarRomName, NULL, NULL, NULL, NULL, BloodwarInputInfo, BloodwarDIPInfo,
 	BloodwarInit, GtmrMachineExit, GtmrFrame, BloodwarFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7594,10 +7863,20 @@ struct BurnDriver BurnDrvBloodwar = {
 
 struct BurnDriver BurnDrvOedfight = {
 	"oedfight", "bloodwar", NULL, NULL, "1994",
-	"Oedo Fight (Japan Bloodshed Ver.)\0", NULL, "Kaneko", "Kaneko16",
+	"Oedo Fight (Japan, Bloodshed version)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
 	NULL, OedfightRomInfo, OedfightRomName, NULL, NULL, NULL, NULL, BloodwarInputInfo, BloodwarDIPInfo,
+	BloodwarInit, GtmrMachineExit, GtmrFrame, BloodwarFrameRender, GtmrScan,
+	NULL, 0x10000, 320, 240, 4, 3
+};
+
+struct BurnDriver BurnDrvOedfighta = {
+	"oedfighta", "bloodwar", NULL, NULL, "1994",
+	"Oedo Fight (Japan, Bloodless version)\0", NULL, "Kaneko", "Kaneko16",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	NULL, OedfightaRomInfo, OedfightaRomName, NULL, NULL, NULL, NULL, BloodwarInputInfo, BloodwarDIPInfo,
 	BloodwarInit, GtmrMachineExit, GtmrFrame, BloodwarFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
 };
@@ -7606,7 +7885,7 @@ struct BurnDriver BurnDrvBonkadv = {
 	"bonkadv", NULL, NULL, NULL, "1994",
 	"B.C. Kid / Bonk's Adventure / Kyukyoku!! PC Genjin\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_PLATFORM, 0,
 	NULL, BonkadvRomInfo, BonkadvRomName, NULL, NULL, NULL, NULL, BonkadvInputInfo, BonkadvDIPInfo,
 	BonkadvInit, GtmrMachineExit, GtmrFrame, BloodwarFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7616,7 +7895,7 @@ struct BurnDriver BurnDrvExplbrkr = {
 	"explbrkr", NULL, NULL, NULL, "1992",
 	"Explosive Breaker (World)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_KANEKO16, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VERSHOOT, 0,
 	NULL, ExplbrkrRomInfo, ExplbrkrRomName, NULL, NULL, NULL, NULL, ExplbrkrInputInfo, ExplbrkrDIPInfo,
 	ExplbrkrInit, ExplbrkrExit, ExplbrkrFrame, ExplbrkrFrameRender, ExplbrkrScan,
 	NULL, 0x1000, 224, 256, 3, 4
@@ -7626,7 +7905,7 @@ struct BurnDriver BurnDrvExplbrkrk = {
 	"explbrkrk", "explbrkr", NULL, NULL, "1992",
 	"Explosive Breaker (Korea)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_KANEKO16, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VERSHOOT, 0,
 	NULL, ExplbrkrkRomInfo, ExplbrkrkRomName, NULL, NULL, NULL, NULL, ExplbrkrInputInfo, ExplbrkrDIPInfo,
 	ExplbrkrInit, ExplbrkrExit, ExplbrkrFrame, ExplbrkrFrameRender, ExplbrkrScan,
 	NULL, 0x1000, 224, 256, 3, 4
@@ -7636,7 +7915,7 @@ struct BurnDriver BurnDrvBakubrkr = {
 	"bakubrkr", "explbrkr", NULL, NULL, "1992",
 	"Bakuretsu Breaker (Japan)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_KANEKO16, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VERSHOOT, 0,
 	NULL, BakubrkrRomInfo, BakubrkrRomName, NULL, NULL, NULL, NULL, ExplbrkrInputInfo, ExplbrkrDIPInfo,
 	ExplbrkrInit, ExplbrkrExit, ExplbrkrFrame, ExplbrkrFrameRender, ExplbrkrScan,
 	NULL, 0x1000, 224, 256, 3, 4
@@ -7646,7 +7925,7 @@ struct BurnDriver BurnDrvGtmr = {
 	"gtmr", NULL, NULL, NULL, "1994",
 	"1000 Miglia: Great 1000 Miles Rally (Taiwan 94/07/18)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, GtmrRomInfo, GtmrRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, GtmrDIPInfo,
 	GtmrInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7656,7 +7935,7 @@ struct BurnDriver BurnDrvGtmra = {
 	"gtmra", "gtmr", NULL, NULL, "1994",
 	"1000 Miglia: Great 1000 Miles Rally (94/06/13)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, GtmraRomInfo, GtmraRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, GtmrDIPInfo,
 	GtmrInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7666,7 +7945,7 @@ struct BurnDriver BurnDrvGtmrb = {
 	"gtmrb", "gtmr", NULL, NULL, "1994",
 	"1000 Miglia: Great 1000 Miles Rally (94/05/26)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, GtmrbRomInfo, GtmrbRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, GtmrDIPInfo,
 	GtmrInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7676,7 +7955,7 @@ struct BurnDriver BurnDrvGtmro = {
 	"gtmro", "gtmr", NULL, NULL, "1994",
 	"1000 Miglia: Great 1000 Miles Rally (94/05/10)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, GtmroRomInfo, GtmroRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, GtmrDIPInfo,
 	GtmroInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7686,7 +7965,7 @@ struct BurnDriver BurnDrvGtmre = {
 	"gtmre", "gtmr", NULL, NULL, "1994",
 	"Great 1000 Miles Rally: Evolution Model!!! (94/09/06)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, GtmreRomInfo, GtmreRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, GtmrDIPInfo,
 	GtmrevoInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7696,7 +7975,7 @@ struct BurnDriver BurnDrvGtmrusa = {
 	"gtmrusa", "gtmr", NULL, NULL, "1994",
 	"Great 1000 Miles Rally: U.S.A Version! (94/09/06)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, GtmrusaRomInfo, GtmrusaRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, GtmrDIPInfo,
 	GtmrevoInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7706,7 +7985,7 @@ struct BurnDriver BurnDrvGtmr2 = {
 	"gtmr2", NULL, NULL, NULL, "1995",
 	"Mille Miglia 2: Great 1000 Miles Rally (95/05/24)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, Gtmr2RomInfo, Gtmr2RomName, NULL, NULL, NULL, NULL, GtmrInputInfo, Gtmr2DIPInfo,
 	Gtmr2Init, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7716,7 +7995,7 @@ struct BurnDriver BurnDrvGtmr2a = {
 	"gtmr2a", "gtmr2", NULL, NULL, "1995",
 	"Mille Miglia 2: Great 1000 Miles Rally (95/04/04)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
 	NULL, Gtmr2aRomInfo, Gtmr2aRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, Gtmr2DIPInfo,
 	Gtmr2Init, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
@@ -7724,10 +8003,20 @@ struct BurnDriver BurnDrvGtmr2a = {
 
 struct BurnDriver BurnDrvGtmr2u = {
 	"gtmr2u", "gtmr2", NULL, NULL, "1995",
+	"Great 1000 Miles Rally 2 USA (95/07/11)\0", NULL, "Kaneko", "Kaneko16",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	NULL, Gtmr2uRomInfo, Gtmr2uRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, Gtmr2DIPInfo,
+	Gtmr2uInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
+	NULL, 0x10000, 320, 240, 4, 3
+};
+
+struct BurnDriver BurnDrvGtmr2ua = {
+	"gtmr2ua", "gtmr2", NULL, NULL, "1995",
 	"Great 1000 Miles Rally 2 USA (95/05/18)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
-	NULL, Gtmr2uRomInfo, Gtmr2uRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, Gtmr2DIPInfo,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RACING, 0,
+	NULL, Gtmr2uaRomInfo, Gtmr2uaRomName, NULL, NULL, NULL, NULL, GtmrInputInfo, Gtmr2DIPInfo,
 	Gtmr2uInit, GtmrMachineExit, GtmrFrame, GtmrFrameRender, GtmrScan,
 	NULL, 0x10000, 320, 240, 4, 3
 };
@@ -7736,7 +8025,7 @@ struct BurnDriver BurnDrvMgcrsytl = {
 	"mgcrystl", NULL, NULL, NULL, "1991",
 	"Magical Crystals (World, 92/01/10)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RUNGUN, 0,
 	NULL, MgcrystlRomInfo, MgcrystlRomName, NULL, NULL, NULL, NULL, MgcrystlInputInfo, MgcrystlDIPInfo,
 	MgcrystlInit, ExplbrkrExit, ExplbrkrFrame, MgcrystlFrameRender, ExplbrkrScan,
 	NULL, 0x1000, 256, 224, 4, 3
@@ -7746,7 +8035,7 @@ struct BurnDriver BurnDrvMgcrsytlo = {
 	"mgcrystlo", "mgcrystl", NULL, NULL, "1991",
 	"Magical Crystals (World, 91/12/10)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RUNGUN, 0,
 	NULL, MgcrystloRomInfo, MgcrystloRomName, NULL, NULL, NULL, NULL, MgcrystlInputInfo, MgcrystlDIPInfo,
 	MgcrystlInit, ExplbrkrExit, ExplbrkrFrame, MgcrystlFrameRender, ExplbrkrScan,
 	NULL, 0x1000, 256, 224, 4, 3
@@ -7756,7 +8045,7 @@ struct BurnDriver BurnDrvMgcrsytlj = {
 	"mgcrystlj", "mgcrystl", NULL, NULL, "1991",
 	"Magical Crystals (Japan, 92/01/13)\0", NULL, "Kaneko (Atlus license)", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_RUNGUN, 0,
 	NULL, MgcrystljRomInfo, MgcrystljRomName, NULL, NULL, NULL, NULL, MgcrystlInputInfo, MgcrystlDIPInfo,
 	MgcrystlInit, ExplbrkrExit, ExplbrkrFrame, MgcrystlFrameRender, ExplbrkrScan,
 	NULL, 0x1000, 256, 224, 4, 3
@@ -7766,7 +8055,7 @@ struct BurnDriver BurnDrvShogwarr = {
 	"shogwarr", NULL, NULL, NULL, "1992",
 	"Shogun Warriors (World)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
 	NULL, shogwarrRomInfo, shogwarrRomName, NULL, NULL, NULL, NULL, ShogwarrInputInfo, ShogwarrDIPInfo,
 	ShogwarrInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
@@ -7776,7 +8065,7 @@ struct BurnDriver BurnDrvShogwarrk = {
 	"shogwarrk", "shogwarr", NULL, NULL, "1992",
 	"Shogun Warriors (Korea?)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
 	NULL, shogwarrkRomInfo, shogwarrkRomName, NULL, NULL, NULL, NULL, ShogwarrInputInfo, ShogwarrDIPInfo,
 	ShogwarrkInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
@@ -7786,7 +8075,7 @@ struct BurnDriver BurnDrvShogwarru = {
 	"shogwarru", "shogwarr", NULL, NULL, "1992",
 	"Shogun Warriors (US)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
 	NULL, shogwarruRomInfo, shogwarruRomName, NULL, NULL, NULL, NULL, ShogwarrInputInfo, ShogwarrDIPInfo,
 	ShogwarrInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
@@ -7796,7 +8085,7 @@ struct BurnDriver BurnDrvFjbuster = {
 	"fjbuster", "shogwarr", NULL, NULL, "1992",
 	"Fujiyama Buster (Japan)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_KANEKO16, GBF_VSFIGHT, 0,
 	NULL, fjbusterRomInfo, fjbusterRomName, NULL, NULL, NULL, NULL, ShogwarrInputInfo, ShogwarrDIPInfo,
 	ShogwarrInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
@@ -7806,7 +8095,7 @@ struct BurnDriver BurnDrvBrapboys = {
 	"brapboys", NULL, NULL, NULL, "1992",
 	"B.Rap Boys (World)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
 	NULL, brapboysRomInfo, brapboysRomName, NULL, NULL, NULL, NULL, BrapboysInputInfo, BrapboysDIPInfo,
 	BrapboysInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
@@ -7814,11 +8103,21 @@ struct BurnDriver BurnDrvBrapboys = {
 
 struct BurnDriver BurnDrvBrapboysp = {
 	"brapboysp", "brapboys", NULL, NULL, "1992",
-	"B.Rap Boys Special (World)\0", NULL, "Kaneko", "Kaneko16",
+	"B.Rap Boys Special (World, newer)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
 	NULL, brapboyspRomInfo, brapboyspRomName, NULL, NULL, NULL, NULL, BrapboysInputInfo, BrapboysDIPInfo,
 	BrapboysInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
+	NULL, 0x800, 256, 224, 4, 3
+};
+
+struct BurnDriver BurnDrvBrapboysp2 = {
+	"brapboysp2", "brapboys", NULL, NULL, "1992",
+	"B.Rap Boys Special (World, older)\0", NULL, "Kaneko", "Kaneko16",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
+	NULL, brapboysp2RomInfo, brapboysp2RomName, NULL, NULL, NULL, NULL, BrapboysInputInfo, BrapboysDIPInfo,
+	Brapboysp2Init, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
 };
 
@@ -7826,7 +8125,7 @@ struct BurnDriver BurnDrvBrapboyspj = {
 	"brapboyspj", "brapboys", NULL, NULL, "1992",
 	"B.Rap Boys Special (Japan)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
 	NULL, brapboyspjRomInfo, brapboyspjRomName, NULL, NULL, NULL, NULL, BrapboysInputInfo, BrapboysDIPInfo,
 	BrapboysInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3
@@ -7836,7 +8135,7 @@ struct BurnDriver BurnDrvBrapboyspu = {
 	"brapboyspu", "brapboys", NULL, NULL, "1992",
 	"B.Rap Boys Special (US)\0", NULL, "Kaneko", "Kaneko16",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 3, HARDWARE_KANEKO16, GBF_SCRFIGHT, 0,
 	NULL, brapboyspuRomInfo, brapboyspuRomName, NULL, NULL, NULL, NULL, BrapboysInputInfo, BrapboysDIPInfo,
 	BrapboysInit, GtmrMachineExit, ShogwarrFrame, ShogwarrFrameRender, ShogwarrScan,
 	NULL, 0x800, 256, 224, 4, 3

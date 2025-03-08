@@ -1,4 +1,5 @@
 #include "gal.h"
+#include "biquad.h"
 
 UINT8 GalSoundType;
 UINT8 GalSoundSubType = 0;
@@ -50,7 +51,7 @@ double GalNoiseWavePos;
 double GalLfoWavePos[3];
 INT32 GalPitch;
 INT32 GalVol;
-static double GalCounter;
+static INT32 GalCounter;
 static INT32 GalCountDown;
 INT32 GalLfoVolume[3];
 double GalLfoFreq;
@@ -60,6 +61,9 @@ static double GalGain;
 static INT32 GalOutputDir;
 
 static INT16 GalToneWave[4][TOOTHSAW_LENGTH];
+
+static BIQ biquad_explode;
+static BIQ biquad_explode2;
 
 static const INT16 GalBackgroundWave[32] =
 {
@@ -75,6 +79,23 @@ void GalaxianSoundSetRoute(double nVolume, INT32 nRouteDir)
 	GalOutputDir = nRouteDir;
 }
 
+void harem_digitalker_data_write(UINT32, UINT32 data)
+{
+	digitalker_data_write(data);
+}
+
+void harem_digitalker_control_write(UINT32, UINT32 data)
+{
+	digitalker_cs_write((data & 1) >> 0);
+	digitalker_cms_write((data & 2) >> 1);
+	digitalker_wr_write((data & 4) >> 2);
+}
+
+UINT8 harem_digitalker_intr_read()
+{
+	return digitalker_intr_read();
+}
+
 void GalSoundReset()
 {
 	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_ZIGZAGAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_JUMPBUGAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_CHECKMANAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_CHECKMAJAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_FROGGERAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_MSHUTTLEAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_BONGOAY8910) {
@@ -87,9 +108,12 @@ void GalSoundReset()
 	}
 	
 	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_SCORPIONAY8910) {
-		AY8910Reset(0);	
-		AY8910Reset(1);	
-		AY8910Reset(2);	
+		ZetOpen(1);
+		AY8910Reset(0);
+		AY8910Reset(1);
+		AY8910Reset(2);
+		digitalker_reset();
+		ZetClose();
 	}
 	
 	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_KINGBALLDAC || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SFXAY8910DAC) {
@@ -170,12 +194,12 @@ void GalSoundInit()
 		filter_rc_init(4, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
 		filter_rc_init(5, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
 		
-		filter_rc_set_src_gain(0, 0.50);
-		filter_rc_set_src_gain(1, 0.50);
-		filter_rc_set_src_gain(2, 0.50);
-		filter_rc_set_src_gain(3, 0.50);
-		filter_rc_set_src_gain(4, 0.50);
-		filter_rc_set_src_gain(5, 0.50);
+		filter_rc_set_src_gain(0, 0.25);
+		filter_rc_set_src_gain(1, 0.25);
+		filter_rc_set_src_gain(2, 0.25);
+		filter_rc_set_src_gain(3, 0.25);
+		filter_rc_set_src_gain(4, 0.25);
+		filter_rc_set_src_gain(5, 0.25);
 		
 		filter_rc_set_route(0, 1.00, BURN_SND_ROUTE_BOTH);
 		filter_rc_set_route(1, 1.00, BURN_SND_ROUTE_BOTH);
@@ -199,27 +223,13 @@ void GalSoundInit()
 		AY8910Init(1, 14318000 / 8, 1);
 		AY8910Init(2, 14318000 / 8, 1);
 		AY8910SetPorts(1, &KonamiSoundLatchRead, &KonamiSoundTimerRead, NULL, NULL);
+		AY8910SetPorts(2, NULL, NULL, harem_digitalker_data_write, harem_digitalker_control_write);
+		AY8910SetAllRoutes(0, 0.35, BURN_SND_ROUTE_BOTH);
+		AY8910SetAllRoutes(1, 0.35, BURN_SND_ROUTE_BOTH);
+		AY8910SetAllRoutes(2, 0.35, BURN_SND_ROUTE_BOTH);
 
-		filter_rc_init(0, FLT_RC_LOWPASS, 1, 1, 1, 0, 0);
-		filter_rc_init(1, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
-		filter_rc_init(2, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
-		filter_rc_init(3, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
-		filter_rc_init(4, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
-		filter_rc_init(5, FLT_RC_LOWPASS, 1, 1, 1, 0, 1);
-		
-		filter_rc_set_src_gain(0, 0.50);
-		filter_rc_set_src_gain(1, 0.50);
-		filter_rc_set_src_gain(2, 0.50);
-		filter_rc_set_src_gain(3, 0.50);
-		filter_rc_set_src_gain(4, 0.50);
-		filter_rc_set_src_gain(5, 0.50);
-		
-		filter_rc_set_route(0, 1.00, BURN_SND_ROUTE_BOTH);
-		filter_rc_set_route(1, 1.00, BURN_SND_ROUTE_BOTH);
-		filter_rc_set_route(2, 1.00, BURN_SND_ROUTE_BOTH);
-		filter_rc_set_route(3, 1.00, BURN_SND_ROUTE_BOTH);
-		filter_rc_set_route(4, 1.00, BURN_SND_ROUTE_BOTH);
-		filter_rc_set_route(5, 1.00, BURN_SND_ROUTE_BOTH);
+		digitalker_init(digitalk_rom, GalSndROMSize, 4000000, ZetTotalCycles, 1789750, 1);
+		digitalker_volume(0.30);
 	}
 	
 	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_AD2083AY8910) {
@@ -308,7 +318,7 @@ void GalSoundInit()
 
 		GalShootRate = 22050;
 		GalShootLength = SHOOT_SEC * GalShootRate;
-		GalShootWave = (INT16*)BurnMalloc(GalShootLength * sizeof(INT16));
+		GalShootWave = (INT16*)BurnMalloc((GalShootLength+1) * sizeof(INT16));
 	
 		Generator = 0;
 		CountDown = NOISE_RATE / 2;
@@ -412,6 +422,9 @@ void GalSoundInit()
 		
 		GalGain = 4.00;
 		GalOutputDir = BURN_SND_ROUTE_BOTH;
+
+		biquad_explode.init(FILT_LOWSHELF, nBurnSoundRate, 150.00, 1.00, 10.0);
+		biquad_explode2.init(FILT_LOWPASS, nBurnSoundRate, 550.00, 1.00, 10.0);
 	}
 }
 
@@ -430,6 +443,7 @@ void GalSoundExit()
 		AY8910Exit(0);
 		AY8910Exit(1);
 		AY8910Exit(2);
+		digitalker_exit();
 	}
 	
 	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_KINGBALLDAC || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SFXAY8910DAC) {
@@ -440,10 +454,15 @@ void GalSoundExit()
 		SN76496Exit();
 	}
 	
-	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_KONAMIAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_FROGGERAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SCORPIONAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SFXAY8910DAC) {
+	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_KONAMIAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_FROGGERAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SFXAY8910DAC) {
 		filter_rc_exit();
 	}
-	
+
+	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_GALAXIAN || GalSoundType == GAL_SOUND_HARDWARE_TYPE_KINGBALLDAC) {
+		biquad_explode.exit();
+		biquad_explode2.exit();
+	}
+
 	BurnFree(GalNoiseWave);
 	BurnFree(GalShootWave);
 
@@ -495,6 +514,10 @@ void GalSoundScan(INT32 nAction, INT32 *pnMin)
 		GalSoundType == GAL_SOUND_HARDWARE_TYPE_SCORPIONAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_FROGGERAY8910 ||
 		GalSoundType == GAL_SOUND_HARDWARE_TYPE_HUNCHBACKAY8910) {
 		ppi8255_scan();
+	}
+
+	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_SCORPIONAY8910) {
+		digitalker_scan(nAction, pnMin);
 	}
 
 	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_MSHUTTLEAY8910) {
@@ -748,6 +771,11 @@ void FroggerSoundInit()
 // Konami Sound CPU Memory Map
 UINT8 __fastcall KonamiSoundZ80Read(UINT16 a)
 {
+	if (a < 0x8000) {
+		// unmapped read, returning 0xff here causes calipso soundcpu to hang @ end of level.
+		return 0x00;
+	}
+
 	switch (a) {
 		default: {
 			bprintf(PRINT_NORMAL, _T("Z80 #2 Read => %04X\n"), a);
@@ -759,7 +787,7 @@ UINT8 __fastcall KonamiSoundZ80Read(UINT16 a)
 
 void __fastcall KonamiSoundZ80Write(UINT16 a, UINT8 d)
 {
-	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_KONAMIAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_FROGGERAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SCORPIONAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SFXAY8910DAC) {
+	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_KONAMIAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_FROGGERAY8910 || GalSoundType == GAL_SOUND_HARDWARE_TYPE_SFXAY8910DAC) {
 		if (a >= 0x9000 && a <= 0x9fff) {
 			INT32 Offset = a & 0xfff;
 			filter_w(0, (Offset >>  0) & 3);
@@ -771,7 +799,18 @@ void __fastcall KonamiSoundZ80Write(UINT16 a, UINT8 d)
 			return;
 		}
 	}
-	
+
+	if (GalSoundType == GAL_SOUND_HARDWARE_TYPE_SCORPIONAY8910) {
+		if (a >= 0xa000 && a <= 0xafff) {
+			// no filters? (harem)
+			return;
+		}
+		if (a >= 0x9000 && a <= 0x9fff) {
+			// no filters? (scorpion)
+			return;
+		}
+	}
+
 	switch (a) {
 		default: {
 			bprintf(PRINT_NORMAL, _T("Z80 #2 Write => %04X, %02X\n"), a, d);
@@ -886,8 +925,8 @@ static void GalRenderShootSample(INT16 *pSoundBuf, INT32 nLength)
 		nLeftSample = BURN_SND_CLIP(nLeftSample);
 		nRightSample = BURN_SND_CLIP(nRightSample);
 			
-		pSoundBuf[i + 0] += nLeftSample;
-		pSoundBuf[i + 1] += nRightSample;
+		pSoundBuf[i + 0] = BURN_SND_CLIP(pSoundBuf[i + 0] + nLeftSample);
+		pSoundBuf[i + 1] = BURN_SND_CLIP(pSoundBuf[i + 1] + nRightSample);
 		
 		Addr += Step;
 	}
@@ -906,8 +945,9 @@ static void GalRenderNoiseSample(INT16 *pSoundBuf, INT32 nLength)
 	
 	for (INT32 i = 0; i < nLength; i += 2) {
 		INT16 Sample = (INT16)(GalNoiseWave[(INT32)Addr] * ((double)GalNoiseVolume / 100));
-		Sample >>= 4;
-		
+		Sample /= 10;
+		Sample = biquad_explode2.filter(biquad_explode.filter(Sample) + Sample);
+
 		INT32 nLeftSample = 0, nRightSample = 0;
 			
 		if ((GalOutputDir & BURN_SND_ROUTE_LEFT) == BURN_SND_ROUTE_LEFT) {
@@ -916,16 +956,16 @@ static void GalRenderNoiseSample(INT16 *pSoundBuf, INT32 nLength)
 		if ((GalOutputDir & BURN_SND_ROUTE_RIGHT) == BURN_SND_ROUTE_RIGHT) {
 			nRightSample += (INT32)(Sample * GalGain);
 		}
-			
+
 		nLeftSample = BURN_SND_CLIP(nLeftSample);
 		nRightSample = BURN_SND_CLIP(nRightSample);
-			
-		pSoundBuf[i + 0] += nLeftSample;
-		pSoundBuf[i + 1] += nRightSample;
-		
+
+		pSoundBuf[i + 0] = BURN_SND_CLIP(pSoundBuf[i + 0] + nLeftSample);
+		pSoundBuf[i + 1] = BURN_SND_CLIP(pSoundBuf[i + 1] + nRightSample);
+
 		Addr += Step;
 	}
-	
+
 	GalNoiseWavePos = Addr;
 	if (GalNoiseWavePos > NOISE_LENGTH) {
 		GalNoiseWavePos = 0;
@@ -942,14 +982,13 @@ static void GalRenderToneWave(INT16 *pSoundBuf, INT32 nLength)
 			INT32 mix = 0;
 
 			for (j = 0; j < STEPS; j++) {
-				if (GalCountDown >= 256) {
-					GalCounter = GalCounter + ((double)96000 / nBurnSoundRate);
-					if (GalCounter > TOOTHSAW_LENGTH) GalCounter = 0;
-					GalCountDown = GalPitch;
+				if (GalCountDown >= (256 * nBurnSoundRate / 96000)) {
+					GalCounter = (GalCounter + 1) % TOOTHSAW_LENGTH;
+					GalCountDown = GalPitch * nBurnSoundRate / 96000;
 				}
 				GalCountDown++;
 
-				mix += w[(INT32)GalCounter];
+				mix += w[GalCounter % TOOTHSAW_LENGTH];
 			}
 			
 			INT16 Sample = mix / STEPS;
@@ -1001,8 +1040,8 @@ static void GalRenderLfoWaveSample(INT32 nLfoWave, INT16 *pSoundBuf, INT32 nLeng
 		nLeftSample = BURN_SND_CLIP(nLeftSample);
 		nRightSample = BURN_SND_CLIP(nRightSample);
 			
-		pSoundBuf[i + 0] += nLeftSample;
-		pSoundBuf[i + 1] += nRightSample;
+		pSoundBuf[i + 0] = BURN_SND_CLIP(pSoundBuf[i + 0] + nLeftSample);
+		pSoundBuf[i + 1] = BURN_SND_CLIP(pSoundBuf[i + 1] + nRightSample);
 		
 		Addr += Step;
 	}
@@ -1028,7 +1067,7 @@ void GalRenderSoundSamples(INT16 *pSoundBuf, INT32 nLength)
 void GalaxianSoundWrite(UINT32 Offset, UINT8 d)
 {
 	d &= 0x01;
-	
+
 	switch (Offset & 0x07) {
 		case 0x00:
 		case 0x01:
@@ -1038,7 +1077,7 @@ void GalaxianSoundWrite(UINT32 Offset, UINT8 d)
 		}
 		
 		case 0x03: {
-			if ((d & 1) && GalNoiseEnable) {
+			if ((d & 1) && GalNoiseHold) {
 				GalNoiseHold = 20; // already noise-ing, just extend the hold
 				GalNoiseVolume = 100;
 				return;
@@ -1112,10 +1151,8 @@ void GalaxianLfoFreqWrite(UINT32 Offset, UINT8 d)
 	r1 = 1.0 / r1;
 
 	rx = rx + 2000000.0 * r0 / (r0 + r1);
-	
-	GalLfoFreqFrameVar = (1000000000 / ((MAXFREQ - MINFREQ) * 639 * rx)) * 100;
-	
-	bprintf(PRINT_NORMAL, _T("Offset %x, rx %f, %f\n"), Offset, (MAXFREQ - MINFREQ) * 639 * rx, GalLfoFreqFrameVar);
+
+	GalLfoFreqFrameVar = (1000000 / (639 * rx / (MAXFREQ - MINFREQ))) * STEPS;
 }
 
 void GalaxianSoundUpdateTimers()

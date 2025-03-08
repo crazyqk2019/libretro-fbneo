@@ -415,7 +415,7 @@ void K053936Draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, INT32 flags)
 	INT32 transp_mask = (flags >> 16) & 0xff;
 	INT32 is_16bit_indexed = flags & (1 << 24);
 
-	if ((ctrl[0x07] & 0x0040) && linectrl)
+	if ((BURN_ENDIAN_SWAP_INT16(ctrl[0x07]) & 0x0040) && linectrl)
 	{
 		UINT32 startx, starty;
 		int incxx, incxy;
@@ -431,19 +431,19 @@ void K053936Draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, INT32 flags)
 		// it's difficult to know what the output SHOULD be.  (hold W in Racin' Force
 		// to see the chip output)
 
-		if (((ctrl[0x07] & 0x0002) && ctrl[0x09]) && (glfgreat_mode)) /* wrong, but fixes glfgreat */
+		if (((BURN_ENDIAN_SWAP_INT16(ctrl[0x07]) & 0x0002) && BURN_ENDIAN_SWAP_INT16(ctrl[0x09])) && (glfgreat_mode)) /* wrong, but fixes glfgreat */
 		{
-			clip_minx = ctrl[0x08] + K053936Offset[chip][0] + 2;
-			clip_maxx = ctrl[0x09] + K053936Offset[chip][0] + 2 - 1;
+			clip_minx = BURN_ENDIAN_SWAP_INT16(ctrl[0x08]) + K053936Offset[chip][0] + 2;
+			clip_maxx = BURN_ENDIAN_SWAP_INT16(ctrl[0x09]) + K053936Offset[chip][0] + 2 - 1;
 			if (clip_minx < 0)
 				clip_minx = 0;
 			if (clip_maxx >= nScreenWidth)
 				clip_maxx = nScreenWidth;
 
-			y = ctrl[0x0a] + K053936Offset[chip][1] - 2;
+			y = BURN_ENDIAN_SWAP_INT16(ctrl[0x0a]) + K053936Offset[chip][1] - 2;
 			if (y < 0)
 				y = 0;
-			maxy = ctrl[0x0b] + K053936Offset[chip][1] - 2 - 1;
+			maxy = BURN_ENDIAN_SWAP_INT16(ctrl[0x0b]) + K053936Offset[chip][1] - 2 - 1;
 			if (maxy >= nScreenHeight)
 				maxy = nScreenHeight;
 		}
@@ -460,15 +460,15 @@ void K053936Draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, INT32 flags)
 		{
 			UINT16 *lineaddr = linectrl + 4 * ((y - K053936Offset[chip][1]) & 0x1ff);
 
-			startx = 256 * (INT16)(lineaddr[0] + ctrl[0x00]);
-			starty = 256 * (INT16)(lineaddr[1] + ctrl[0x01]);
-			incxx  =       (INT16)(lineaddr[2]);
-			incxy  =       (INT16)(lineaddr[3]);
+			startx = 256 * (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[0]) + BURN_ENDIAN_SWAP_INT16(ctrl[0x00]));
+			starty = 256 * (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[1]) + BURN_ENDIAN_SWAP_INT16(ctrl[0x01]));
+			incxx  =       (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[2]));
+			incxy  =       (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[3]));
 
-			if (ctrl[0x06] & 0x8000)
+			if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x8000)
 				incxx *= 256;
 
-			if (ctrl[0x06] & 0x0080)
+			if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x0080)
 				incxy *= 256;
 
 			startx -= K053936Offset[chip][0] * incxx;
@@ -487,20 +487,20 @@ void K053936Draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, INT32 flags)
 		UINT32 startx, starty;
 		INT32 incxx, incxy, incyx, incyy;
 
-		startx = 256 * (INT16)(ctrl[0x00]);
-		starty = 256 * (INT16)(ctrl[0x01]);
-		incyx  =       (INT16)(ctrl[0x02]);
-		incyy  =       (INT16)(ctrl[0x03]);
-		incxx  =       (INT16)(ctrl[0x04]);
-		incxy  =       (INT16)(ctrl[0x05]);
+		startx = 256 * (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x00]));
+		starty = 256 * (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x01]));
+		incyx  =       (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x02]));
+		incyy  =       (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x03]));
+		incxx  =       (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x04]));
+		incxy  =       (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x05]));
 
-		if (ctrl[0x06] & 0x4000)
+		if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x4000)
 		{
 			incyx *= 256;
 			incyy *= 256;
 		}
 
-		if (ctrl[0x06] & 0x0040)
+		if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x0040)
 		{
 			incxx *= 256;
 			incxy *= 256;
@@ -688,7 +688,7 @@ static inline void K053936GP_copyroz32clip(INT32 chip, UINT16 *src_bitmap, INT32
 				if (srcx < src_minx || srcx > src_maxx || srcy < src_miny || srcy > src_maxy)
 					continue;
 
-				pixel = src_base[offs]|color_base;
+				pixel = BURN_ENDIAN_SWAP_INT16(src_base[offs])|color_base;
 				if (!(pixel & cmask))
 					continue;
 // this one below is borked.
@@ -732,7 +732,7 @@ static inline void K053936GP_copyroz32clip(INT32 chip, UINT16 *src_bitmap, INT32
 				if (srcx < src_minx || srcx > src_maxx || srcy < src_miny || srcy > src_maxy)
 					continue;
 
-				pixel = src_base[offs]|color_base;
+				pixel = BURN_ENDIAN_SWAP_INT16(src_base[offs])|color_base;
 				if (!(pixel & cmask))
 					continue;
 
@@ -770,7 +770,7 @@ static void K053936GP_zoom_draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, UINT
 	my_clip[2] = 0;
 	my_clip[3] = nScreenHeight - 1;
 
-	if (ctrl[0x07] & 0x0040)    /* "super" mode */
+	if (BURN_ENDIAN_SWAP_INT16(ctrl[0x07]) & 0x0040)    /* "super" mode */
 	{
 		y = 0; //cliprect.min_y;
 		maxy = my_clip[3];
@@ -780,13 +780,13 @@ static void K053936GP_zoom_draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, UINT
 			lineaddr = linectrl + ( ((y - K053936_offset[chip][1]) & 0x1ff) << 2);
 			my_clip[2] = my_clip[3] = y;
 
-			startx = (INT16)(lineaddr[0] + ctrl[0x00]) << 8;
-			starty = (INT16)(lineaddr[1] + ctrl[0x01]) << 8;
-			incxx  = (INT16)(lineaddr[2]);
-			incxy  = (INT16)(lineaddr[3]);
+			startx = (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[0]) + BURN_ENDIAN_SWAP_INT16(ctrl[0x00])) << 8;
+			starty = (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[1]) + BURN_ENDIAN_SWAP_INT16(ctrl[0x01])) << 8;
+			incxx  = (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[2]));
+			incxy  = (INT16)(BURN_ENDIAN_SWAP_INT16(lineaddr[3]));
 
-			if (ctrl[0x06] & 0x8000) incxx <<= 8;
-			if (ctrl[0x06] & 0x0080) incxy <<= 8;
+			if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x8000) incxx <<= 8;
+			if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x0080) incxy <<= 8;
 
 			startx -= K053936_offset[chip][0] * incxx;
 			starty -= K053936_offset[chip][0] * incxy;
@@ -799,15 +799,15 @@ static void K053936GP_zoom_draw(INT32 chip, UINT16 *ctrl, UINT16 *linectrl, UINT
 	}
 	else    /* "simple" mode */
 	{
-		startx = (INT16)(ctrl[0x00]) << 8;
-		starty = (INT16)(ctrl[0x01]) << 8;
-		incyx  = (INT16)(ctrl[0x02]);
-		incyy  = (INT16)(ctrl[0x03]);
-		incxx  = (INT16)(ctrl[0x04]);
-		incxy  = (INT16)(ctrl[0x05]);
+		startx = (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x00])) << 8;
+		starty = (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x01])) << 8;
+		incyx = (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x02]));
+		incyy = (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x03]));
+		incxx = (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x04]));
+		incxy = (INT16)(BURN_ENDIAN_SWAP_INT16(ctrl[0x05]));
 
-		if (ctrl[0x06] & 0x4000) { incyx <<= 8; incyy <<= 8; }
-		if (ctrl[0x06] & 0x0040) { incxx <<= 8; incxy <<= 8; }
+		if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x4000) { incyx <<= 8; incyy <<= 8; }
+		if (BURN_ENDIAN_SWAP_INT16(ctrl[0x06]) & 0x0040) { incxx <<= 8; incxy <<= 8; }
 
 		startx -= K053936_offset[chip][1] * incyx;
 		starty -= K053936_offset[chip][1] * incyy;

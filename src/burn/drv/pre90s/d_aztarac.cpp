@@ -152,7 +152,7 @@ static inline void sync_cpu()
 static void __fastcall aztarac_write_word(UINT32 address, UINT16 data)
 {
 	if ((address & 0xfffff00) == 0x022000) {
-		*((UINT16*)(DrvNVRAM + (address & 0xfe))) = data | 0xfff0;
+		*((UINT16*)(DrvNVRAM + (address & 0xfe))) = BURN_ENDIAN_SWAP_INT16(data | 0xfff0);
 		return;
 	}
 
@@ -649,7 +649,7 @@ struct BurnDriver BurnDrvAztarac = {
 	"aztarac", NULL, NULL, NULL, "1983",
 	"Aztarac\0", "Vector graphics", "Centuri", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT | GBF_VECTOR, 0,
 	NULL, aztaracRomInfo, aztaracRomName, NULL, NULL, NULL, NULL, AztaracInputInfo, AztaracDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40 * 256,
 	1024, 768, 4, 3

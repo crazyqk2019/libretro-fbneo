@@ -1,4 +1,4 @@
-// FB Alpha Pipe Dream & Hatris driver module
+// FB Neo Pipe Dream & Hatris driver module
 // Based on MAME driver by Bryan McPhail and Aaron Giles
 
 #include "tiles_generic.h"
@@ -441,6 +441,8 @@ static INT32 DrvDoReset()
 	crtc_timer = 0;
 	crtc_timer_enable = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -507,12 +509,7 @@ static INT32 DrvGfxDecode()
 
 static INT32 DrvInit(INT32 game_select)
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	if (game_select)
 	{   // pipedrm
@@ -627,7 +624,7 @@ static INT32 DrvExit()
 
 	ZetExit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -638,9 +635,9 @@ static void DrvPaletteUpdate()
 	{
 		UINT16 *p = (UINT16*)DrvPalRAM;
 
-		UINT8 r = (p[i] >> 10) & 0x1f;
-		UINT8 g = (p[i] >>  5) & 0x1f;
-		UINT8 b = (p[i] >>  0) & 0x1f;
+		UINT8 r = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 10) & 0x1f;
+		UINT8 g = (BURN_ENDIAN_SWAP_INT16(p[i]) >>  5) & 0x1f;
+		UINT8 b = (BURN_ENDIAN_SWAP_INT16(p[i]) >>  0) & 0x1f;
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
@@ -654,25 +651,25 @@ static void draw_sprites(INT32 pri_param)
 {
 	UINT16 *ram = (UINT16*)DrvSprRAM;
 
-	INT32 first = (4 * ram[0x1fe]) & 0x1ff;
+	INT32 first = (4 * BURN_ENDIAN_SWAP_INT16(ram[0x1fe])) & 0x1ff;
 	if (first > 0x1fc) first = 0x1fc;
 
 	for (INT32 offs = first; offs != 0x1fc; offs += 4)
 	{
-		if ((ram[offs+2] & 0x0080) == 0)	// sprite disabled
+		if ((BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x0080) == 0)	// sprite disabled
 			continue;
 
-		INT32 oy    =  (ram[offs+0] & 0x01ff) - 6;
-		INT32 zoomy =  (ram[offs+0] & 0xf000) >> 12;
-		INT32 ox =     (ram[offs+1] & 0x01ff) - 13;
-		INT32 zoomx =  (ram[offs+1] & 0xf000) >> 12;
-		INT32 xsize =  (ram[offs+2] & 0x0700) >> 8;
-		INT32 flipx =  (ram[offs+2] & 0x0800);
-		INT32 ysize =  (ram[offs+2] & 0x7000) >> 12;
-		INT32 flipy =  (ram[offs+2] & 0x8000);
-		INT32 color = ((ram[offs+2] & 0x000f) << 4) + 0x400;
-		INT32 pri =    (ram[offs+2] & 0x0010) >> 4;
-		INT32 map =    (ram[offs+3]);
+		INT32 oy    =  (BURN_ENDIAN_SWAP_INT16(ram[offs+0]) & 0x01ff) - 6;
+		INT32 zoomy =  (BURN_ENDIAN_SWAP_INT16(ram[offs+0]) & 0xf000) >> 12;
+		INT32 ox =     (BURN_ENDIAN_SWAP_INT16(ram[offs+1]) & 0x01ff) - 13;
+		INT32 zoomx =  (BURN_ENDIAN_SWAP_INT16(ram[offs+1]) & 0xf000) >> 12;
+		INT32 xsize =  (BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x0700) >> 8;
+		INT32 flipx =  (BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x0800);
+		INT32 ysize =  (BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x7000) >> 12;
+		INT32 flipy =  (BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x8000);
+		INT32 color = ((BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x000f) << 4) + 0x400;
+		INT32 pri =    (BURN_ENDIAN_SWAP_INT16(ram[offs+2]) & 0x0010) >> 4;
+		INT32 map =    (BURN_ENDIAN_SWAP_INT16(ram[offs+3]));
 
 		if (pri != pri_param)
 			continue;
@@ -921,7 +918,7 @@ struct BurnDriver BurnDrvPipedrm = {
 	"pipedrm", NULL, NULL, NULL, "1990",
 	"Pipe Dream (World)\0", NULL, "Video System Co.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, pipedrmRomInfo, pipedrmRomName, NULL, NULL, NULL, NULL, PipedrmInputInfo, PipedrmDIPInfo,
 	pipedrmInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	352, 240, 4, 3
@@ -962,7 +959,7 @@ struct BurnDriver BurnDrvPipedrmu = {
 	"pipedrmu", "pipedrm", NULL, NULL, "1990",
 	"Pipe Dream (US)\0", NULL, "Video System Co.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, pipedrmuRomInfo, pipedrmuRomName, NULL, NULL, NULL, NULL, PipedrmInputInfo, PipedrmDIPInfo,
 	pipedrmInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	352, 240, 4, 3
@@ -1003,7 +1000,7 @@ struct BurnDriver BurnDrvPipedrmj = {
 	"pipedrmj", "pipedrm", NULL, NULL, "1990",
 	"Pipe Dream (Japan)\0", NULL, "Video System Co.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, pipedrmjRomInfo, pipedrmjRomName, NULL, NULL, NULL, NULL, PipedrmInputInfo, PipedrmDIPInfo,
 	pipedrmInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	352, 240, 4, 3
@@ -1044,7 +1041,7 @@ struct BurnDriver BurnDrvPipedrmt = {
 	"pipedrmt", "pipedrm", NULL, NULL, "1990",
 	"Pipe Dream (Taiwan)\0", NULL, "Video System Co.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, pipedrmtRomInfo, pipedrmtRomName, NULL, NULL, NULL, NULL, PipedrmInputInfo, PipedrmDIPInfo,
 	pipedrmInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	352, 240, 4, 3
@@ -1056,15 +1053,15 @@ struct BurnDriver BurnDrvPipedrmt = {
 static struct BurnRomInfo hatrisRomDesc[] = {
 	{ "2.ic79",		0x08000, 0x4ab50b54, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 #0 Code
 
-	{ "1-ic81.bin",		0x08000, 0xdb25e166, 2 | BRF_PRG | BRF_ESS }, //  1 Z80 #1 Code
+	{ "1.ic81",		0x08000, 0xdb25e166, 2 | BRF_PRG | BRF_ESS }, //  1 Z80 #1 Code
 
-	{ "b0-ic56.bin",	0x20000, 0x34f337a4, 3 | BRF_GRA },           //  2 Background tiles
-	{ "b1-ic73.bin",	0x08000, 0x6351d0ba, 3 | BRF_GRA },           //  3
+	{ "b0.ic56",	0x20000, 0x34f337a4, 3 | BRF_GRA },           //  2 Background tiles
+	{ "b1.ic73",	0x08000, 0x6351d0ba, 3 | BRF_GRA },           //  3
 
-	{ "a0-ic55.bin",	0x20000, 0x7b7bc619, 4 | BRF_GRA },           //  4 Foreground tiles
-	{ "a1-ic60.bin",	0x20000, 0xf74d4168, 4 | BRF_GRA },           //  5
+	{ "a0.ic55",	0x20000, 0x7b7bc619, 4 | BRF_GRA },           //  4 Foreground tiles
+	{ "a1.ic60",	0x20000, 0xf74d4168, 4 | BRF_GRA },           //  5
 
-	{ "pc-ic53.bin",	0x20000, 0x07147712, 5 | BRF_SND },           //  6 YM2608 Samples
+	{ "pc.ic53",	0x20000, 0x07147712, 5 | BRF_SND },           //  6 YM2608 Samples
 };
 
 STDROMPICKEXT(hatris, hatris, Ym2608)
@@ -1079,7 +1076,7 @@ struct BurnDriver BurnDrvHatris = {
 	"hatris", NULL, "ym2608", NULL, "1990",
 	"Hatris (US)\0", NULL, "Video System Co.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, hatrisRomInfo, hatrisRomName, NULL, NULL, NULL, NULL, HatrisInputInfo, HatrisDIPInfo,
 	hatrisInit, DrvExit, DrvFrame, FromanceDraw, DrvScan, &DrvRecalc, 0x800,
 	352, 240, 4, 3
@@ -1091,15 +1088,15 @@ struct BurnDriver BurnDrvHatris = {
 static struct BurnRomInfo hatrisjRomDesc[] = {
 	{ "2-ic79.bin",		0x08000, 0xbbcaddbf, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 #0 Code
 
-	{ "1-ic81.bin",		0x08000, 0xdb25e166, 2 | BRF_PRG | BRF_ESS }, //  1 Z80 #1 Code
+	{ "1.ic81",			0x08000, 0xdb25e166, 2 | BRF_PRG | BRF_ESS }, //  1 Z80 #1 Code
 
-	{ "b0-ic56.bin",	0x20000, 0x34f337a4, 3 | BRF_GRA },           //  2 Background tiles
-	{ "b1-ic73.bin",	0x08000, 0x6351d0ba, 3 | BRF_GRA },           //  3
+	{ "b0.ic56",		0x20000, 0x34f337a4, 3 | BRF_GRA },           //  2 Background tiles
+	{ "b1.ic73",		0x08000, 0x6351d0ba, 3 | BRF_GRA },           //  3
 
-	{ "a0-ic55.bin",	0x20000, 0x7b7bc619, 4 | BRF_GRA },           //  4 Foreground tiles
-	{ "a1-ic60.bin",	0x20000, 0xf74d4168, 4 | BRF_GRA },           //  5
+	{ "a0.ic55",		0x20000, 0x7b7bc619, 4 | BRF_GRA },           //  4 Foreground tiles
+	{ "a1.ic60",		0x20000, 0xf74d4168, 4 | BRF_GRA },           //  5
 
-	{ "pc-ic53.bin",	0x20000, 0x07147712, 5 | BRF_SND },           //  6 YM2608 Samples
+	{ "pc.ic53",		0x20000, 0x07147712, 5 | BRF_SND },           //  6 YM2608 Samples
 };
 
 STDROMPICKEXT(hatrisj, hatrisj, Ym2608)
@@ -1109,8 +1106,38 @@ struct BurnDriver BurnDrvHatrisj = {
 	"hatrisj", "hatris", "ym2608", NULL, "1990",
 	"Hatris (Japan)\0", NULL, "Video System Co.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
 	NULL, hatrisjRomInfo, hatrisjRomName, NULL, NULL, NULL, NULL, HatrisInputInfo, HatrisDIPInfo,
+	hatrisInit, DrvExit, DrvFrame, FromanceDraw, DrvScan, &DrvRecalc, 0x800,
+	352, 240, 4, 3
+};
+
+
+// Hatris (show version)
+
+static struct BurnRomInfo hatrispRomDesc[] = {
+	{ "3-6show.ic8",	0x08000, 0xe1cf7403, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 #0 Code
+
+	{ "3-6.ic94",		0x08000, 0xe0b05b71, 2 | BRF_PRG | BRF_ESS }, //  1 Z80 #1 Code
+
+	{ "b0.ic76+",		0x20000, 0x60346041, 3 | BRF_GRA },           //  2 Background tiles
+	{ "b1.ic76",		0x20000, 0xe8e2db07, 3 | BRF_GRA },           //  3
+
+	{ "a0.ic51+",		0x20000, 0x7b7bc619, 4 | BRF_GRA },           //  4 Foreground tiles
+	{ "a1.ic51",		0x20000, 0xf74d4168, 4 | BRF_GRA },           //  5
+
+	{ "pc.ic107",		0x20000, 0x07147712, 5 | BRF_SND },           //  6 YM2608 Samples
+};
+
+STDROMPICKEXT(hatrisp, hatrisp, Ym2608)
+STD_ROM_FN(hatrisp)
+
+struct BurnDriver BurnDrvhatrisp = {
+	"hatrisp", "hatris", "ym2608", NULL, "1990",
+	"Hatris (show version)\0", NULL, "Video System Co.", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_PUZZLE, 0,
+	NULL, hatrispRomInfo, hatrispRomName, NULL, NULL, NULL, NULL, HatrisInputInfo, HatrisDIPInfo,
 	hatrisInit, DrvExit, DrvFrame, FromanceDraw, DrvScan, &DrvRecalc, 0x800,
 	352, 240, 4, 3
 };

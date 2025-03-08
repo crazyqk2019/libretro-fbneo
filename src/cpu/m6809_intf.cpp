@@ -12,8 +12,8 @@ static M6809Ext *m6809CPUContext = NULL;
 cpu_core_config M6809Config =
 {
 	"M6809",
-	M6809Open,
-	M6809Close,
+	M6809CPUPush, //M6809Open,
+	M6809CPUPop, //M6809Close,
 	M6809CheatRead,
 	M6809WriteRom,
 	M6809GetActive,
@@ -24,6 +24,8 @@ cpu_core_config M6809Config =
 	M6809Run,
 	M6809RunEnd,
 	M6809Reset,
+	M6809Scan,
+	M6809Exit,
 	0x10000,
 	0
 };
@@ -37,16 +39,6 @@ static void M6809WriteByteDummyHandler(UINT16, UINT8)
 {
 }
 
-static UINT8 M6809ReadOpDummyHandler(UINT16)
-{
-	return 0;
-}
-
-static UINT8 M6809ReadOpArgDummyHandler(UINT16)
-{
-	return 0;
-}
-
 // ## M6809CPUPush() / M6809CPUPop() ## internal helpers for sending signals to other m6809's
 struct m6809pstack {
 	INT32 nHostCPU;
@@ -57,7 +49,7 @@ struct m6809pstack {
 static m6809pstack pstack[MAX_PSTACK];
 static INT32 pstacknum = 0;
 
-static void M6809CPUPush(INT32 nCPU)
+void M6809CPUPush(INT32 nCPU)
 {
 	m6809pstack *p = &pstack[pstacknum++];
 
@@ -75,7 +67,7 @@ static void M6809CPUPush(INT32 nCPU)
 	}
 }
 
-static void M6809CPUPop()
+void M6809CPUPop()
 {
 	m6809pstack *p = &pstack[--pstacknum];
 
@@ -106,6 +98,60 @@ void M6809Reset(INT32 nCPU)
 	M6809Reset();
 
 	M6809CPUPop();
+}
+
+void M6809SetRESETLine(INT32 nStatus)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809SetRESETLine called without init\n"));
+	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("M6809SetRESETLine called when no CPU open\n"));
+#endif
+
+	if (nActiveCPU < 0) return;
+
+	if (m6809CPUContext[nActiveCPU].bResetLine && nStatus == 0) {
+		M6809Reset();
+	}
+
+	m6809CPUContext[nActiveCPU].bResetLine = nStatus;
+}
+
+void M6809SetRESETLine(INT32 nCPU, INT32 nStatus)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809SetRESETLine called without init\n"));
+#endif
+
+	M6809CPUPush(nCPU);
+
+	M6809SetRESETLine(nStatus);
+
+	M6809CPUPop();
+}
+
+INT32 M6809GetRESETLine()
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809GetRESETLine called without init\n"));
+	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("M6809GetRESETLine called when no CPU open\n"));
+#endif
+
+	return m6809CPUContext[nActiveCPU].bResetLine;
+}
+
+INT32 M6809GetRESETLine(INT32 nCPU)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809GetRESETLine called without init\n"));
+#endif
+
+	M6809CPUPush(nCPU);
+
+	INT32 nRet = M6809GetRESETLine();
+
+	M6809CPUPop();
+
+	return nRet;
 }
 
 UINT16 M6809GetPC()
@@ -224,9 +270,8 @@ INT32 M6809Init(INT32 cpu)
 		for (INT32 i = 0; i < MAX_CPU; i++) {
 			m6809CPUContext[i].ReadByte = M6809ReadByteDummyHandler;
 			m6809CPUContext[i].WriteByte = M6809WriteByteDummyHandler;
-			m6809CPUContext[i].ReadOp = M6809ReadOpDummyHandler;
-			m6809CPUContext[i].ReadOpArg = M6809ReadOpArgDummyHandler;
 			m6809CPUContext[i].nCyclesTotal = 0;
+			m6809CPUContext[i].bResetLine = 0;
 
 			for (INT32 j = 0; j < (0x0100 * 3); j++) {
 				m6809CPUContext[i].pMemMap[j] = NULL;
@@ -238,8 +283,6 @@ INT32 M6809Init(INT32 cpu)
 	
 	m6809CPUContext[cpu].ReadByte = M6809ReadByteDummyHandler;
 	m6809CPUContext[cpu].WriteByte = M6809WriteByteDummyHandler;
-	m6809CPUContext[cpu].ReadOp = M6809ReadOpDummyHandler;
-	m6809CPUContext[cpu].ReadOpArg = M6809ReadOpArgDummyHandler;
 
 	CpuCheatRegister(cpu, &M6809Config);
 
@@ -344,10 +387,12 @@ INT32 M6809Run(INT32 cycles)
 	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("M6809Run called when no CPU open\n"));
 #endif
 
-	cycles = m6809_execute(cycles);
-	
+	if (!m6809CPUContext[nActiveCPU].bResetLine) {
+		cycles = m6809_execute(cycles);
+	}
+
 	m6809CPUContext[nActiveCPU].nCyclesTotal += cycles;
-	
+
 	return cycles;
 }
 
@@ -426,6 +471,16 @@ INT32 M6809UnmapMemory(UINT16 nStart, UINT16 nEnd, INT32 nType)
 
 }
 
+void M6809SetCallback(int (*cb)(int))
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809SetCallback called without init\n"));
+	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("M6809SetCallback called when no CPU open\n"));
+#endif
+
+	m6809_set_callback(cb);
+}
+
 void M6809SetReadHandler(UINT8 (*pHandler)(UINT16))
 {
 #if defined FBNEO_DEBUG
@@ -444,26 +499,6 @@ void M6809SetWriteHandler(void (*pHandler)(UINT16, UINT8))
 #endif
 
 	m6809CPUContext[nActiveCPU].WriteByte = pHandler;
-}
-
-void M6809SetReadOpHandler(UINT8 (*pHandler)(UINT16))
-{
-#if defined FBNEO_DEBUG
-	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809SetReadOpHandler called without init\n"));
-	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("M6809SetReadOpHandler called when no CPU open\n"));
-#endif
-
-	m6809CPUContext[nActiveCPU].ReadOp = pHandler;
-}
-
-void M6809SetReadOpArgHandler(UINT8 (*pHandler)(UINT16))
-{
-#if defined FBNEO_DEBUG
-	if (!DebugCPU_M6809Initted) bprintf(PRINT_ERROR, _T("M6809SetReadOpArgHandler called without init\n"));
-	if (nActiveCPU == -1) bprintf(PRINT_ERROR, _T("M6809SetReadOpArgHandler called when no CPU open\n"));
-#endif
-
-	m6809CPUContext[nActiveCPU].ReadOpArg = pHandler;
 }
 
 UINT8 M6809ReadByte(UINT16 Address)
@@ -507,8 +542,8 @@ UINT8 M6809ReadOp(UINT16 Address)
 	}
 	
 	// check handler
-	if (m6809CPUContext[nActiveCPU].ReadOp != NULL) {
-		return m6809CPUContext[nActiveCPU].ReadOp(Address);
+	if (m6809CPUContext[nActiveCPU].ReadByte != NULL) {
+		return m6809CPUContext[nActiveCPU].ReadByte(Address);
 	}
 	
 	return 0;
@@ -523,8 +558,8 @@ UINT8 M6809ReadOpArg(UINT16 Address)
 	}
 	
 	// check handler
-	if (m6809CPUContext[nActiveCPU].ReadOpArg != NULL) {
-		return m6809CPUContext[nActiveCPU].ReadOpArg(Address);
+	if (m6809CPUContext[nActiveCPU].ReadByte != NULL) {
+		return m6809CPUContext[nActiveCPU].ReadByte(Address);
 	}
 	
 	return 0;
@@ -587,6 +622,7 @@ INT32 M6809Scan(INT32 nAction)
 		BurnAcb(&ba);
 
 		SCAN_VAR(ptr->nCyclesTotal);
+		SCAN_VAR(ptr->bResetLine);
 	}
 	
 	return 0;

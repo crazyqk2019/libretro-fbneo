@@ -17,7 +17,8 @@ INT32 Z180Run(INT32 cycles);
 INT32 Z180Idle(INT32 cycles);
 void Z180BurnCycles(INT32 cycles);
 void Z180SetIRQLine(INT32 irqline, INT32 state);
-void Z180Scan(INT32 nAction);
+void Z180Nmi();
+INT32 Z180Scan(INT32 nAction);
 
 INT32 Z180GetActive();
 void Z180Open(INT32);

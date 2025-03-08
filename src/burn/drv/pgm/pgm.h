@@ -6,6 +6,9 @@
 
 #define HARDWARE_IGS_JAMMAPCB		0x0002
 
+// d_pgm
+extern UINT8 HackCodeDip;
+
 // pgm_run
 extern INT32 nPGM68KROMLen;
 extern INT32 nPGMSPRColMaskLen;
@@ -32,11 +35,18 @@ extern UINT8 *PGMARMShareRAM2;
 extern UINT16 *PGMRowRAM;
 extern UINT16 *PGMPalRAM;
 extern UINT16 *PGMVidReg;
+extern UINT16 *PGMZoomRAM;
 extern UINT16 *PGMSprBuf;
 extern UINT32 *PGMBgRAM;
 extern UINT32 *PGMTxtRAM;
 extern UINT32 *RamCurPal;
 extern UINT8 nPgmPalRecalc;
+
+extern UINT16 pgm_bg_scrollx;
+extern UINT16 pgm_bg_scrolly;
+extern UINT16 pgm_fg_scrollx;
+extern UINT16 pgm_fg_scrolly;
+extern UINT16 pgm_video_control;
 
 extern UINT8 PgmJoy1[];
 extern UINT8 PgmJoy2[];
@@ -51,11 +61,14 @@ extern void (*pPgmInitCallback)();
 extern void (*pPgmResetCallback)();
 extern INT32 (*pPgmScanCallback)(INT32, INT32*);
 extern void (*pPgmProtCallback)();
+extern void (*pPgmTileDecryptCallback)(UINT8 *gfx, INT32 len);
+extern void (*pPgmColorDataDecryptcallback)(UINT8 *gfx, INT32 len);
 
 extern INT32 nPGMDisableIRQ4;
-extern INT32 nPGMArm7Type;
 extern UINT32 nPgmAsicRegionHackAddress;
-extern INT32 pgm_cave_refresh;
+extern INT32 nPGMSpriteBufferHack;
+extern INT32 nPGMMapperHack;
+extern INT32 OldCodeMode;
 
 INT32 pgmInit();
 INT32 pgmExit();
@@ -84,6 +97,7 @@ void install_protection_asic27a_ddp3();
 void install_protection_asic27a_puzzli2();
 void install_protection_asic27a_kovshp();
 void install_protection_asic27a_py2k2();
+void install_protection_asic27a_kovgsyx();
 
 // pgm_crypt
 void pgm_decrypt_kov();
@@ -98,7 +112,7 @@ void pgm_decrypt_killbld();
 void pgm_decrypt_dfront();
 void pgm_decrypt_ddp2();
 void pgm_decrypt_martmast();
-void pgm_decrypt_dwpc110cn();
+void pgm_decrypt_dwpc();
 void pgm_decrypt_kov2();
 void pgm_decrypt_kov2p();
 void pgm_decrypt_theglad();
@@ -113,10 +127,16 @@ void pgm_decrypt_espgaluda();
 void pgm_decrypt_ketsui();
 void pgm_decrypt_pgm3in1();
 
-void pgm_decode_kovqhsgs_gfx_block(UINT8 *src);
-void pgm_decode_kovqhsgs_tile_data(UINT8 *source);
+void pgm_descramble_happy6_data(UINT8 *gfx, INT32 len);
+
+void pgm_decode_kovqhsgs_gfx(UINT8 *gfx, INT32 len);
+void pgm_decode_kovqhsgs_tile_data(UINT8 *gfx, INT32 len);
 void pgm_decrypt_kovqhsgs();
 void pgm_decrypt_kovlsqh2();
-void pgm_decrypt_kovassg();
+void pgm_decrypt_kovassgplus();
+void pgm_decrypt_kovassge();
+void pgm_decrypt_kovassgn();
+void pgm_decrypt_kovlsqho();
+void pgm_decrypt_kovgsyx();
 
-void pgm_descramble_happy6_data(UINT8 *src, INT32 len);
+

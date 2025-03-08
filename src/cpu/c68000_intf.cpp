@@ -15,6 +15,31 @@ INT8* SekM68KContext[SEK_MAX];
 #include "Cyclone.h"
 struct Cyclone c68k[SEK_MAX];
 static bool bCycloneInited = false;
+
+// attempt at implementing an equivalent of virq for cyclone
+static UINT32 c68k_virq_state[SEK_MAX];
+
+static void c68k_set_virq(UINT32 level, UINT32 active)
+{
+	UINT32 state = c68k_virq_state[nSekActive];
+	UINT32 blevel;
+
+	if(active)
+		state |= 1 << level;
+	else
+		state &= ~(1 << level);
+	c68k_virq_state[nSekActive] = state;
+
+	for(blevel = 7; blevel > 0; blevel--)
+		if(state & (1 << blevel))
+			break;
+	c68k[nSekActive].irq = blevel;
+}
+
+static UINT32 c68k_get_virq(UINT32 level)
+{
+	return (c68k_virq_state[nSekActive] & (1 << level)) ? 1 : 0;
+}
 #endif
 
 INT32 nSekCount = -1;							// Number of allocated 68000s
@@ -24,50 +49,29 @@ INT32 nSekActive = -1;								// The cpu which is currently being emulated
 INT32 nSekCyclesTotal, nSekCyclesScanline, nSekCyclesSegment, nSekCyclesDone, nSekCyclesToDo;
 
 INT32 nSekCPUType[SEK_MAX], nSekCycles[SEK_MAX], nSekIRQPending[SEK_MAX], nSekRESETLine[SEK_MAX], nSekHALT[SEK_MAX];
+INT32 nSekVIRQPending[SEK_MAX][8];
 INT32 nSekCyclesToDoCache[SEK_MAX], nSekm68k_ICount[SEK_MAX];
+INT32 nSekCPUOffsetAddress[SEK_MAX];
 
 static UINT32 nSekAddressMask[SEK_MAX], nSekAddressMaskActive;
-
-static INT32 core_idle(INT32 cycles)
-{
-	SekRunAdjust(cycles);
-
-	return cycles;
-}
-
-static void core_set_irq(INT32 cpu, INT32 line, INT32 state)
-{
-	INT32 active = nSekActive;
-	if (active != cpu)
-	{
-		if (active != -1) SekClose();
-		SekOpen(cpu);
-	}
-
-	SekSetIRQLine(line, state);
-
-	if (active != cpu)
-	{
-		SekClose();
-		if (active != -1) SekOpen(active);
-	}
-}
 
 cpu_core_config SekConfig =
 {
 	"68k",
-	SekOpen,
-	SekClose,
+	SekCPUPush,
+	SekCPUPop,
 	SekCheatRead,
 	SekWriteByteROM,
 	SekGetActive,
 	SekTotalCycles,
 	SekNewFrame,
-	core_idle,
-	core_set_irq,
+	SekIdle,
+	SekSetIRQLine,
 	SekRun,
 	SekRunEnd,
 	SekReset,
+	SekScan,
+	SekExit,
 	0x1000000,
 	0
 };
@@ -242,7 +246,14 @@ inline static UINT16 FetchWord(UINT32 a)
 
 	pr = FIND_F(a);
 	if ((uintptr_t)pr >= SEK_MAXHANDLER) {
-		return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(pr + (a & SEK_PAGEM))));
+		if (a & 1)
+		{
+			return (ReadByte(a + 0) * 256) + ReadByte(a + 1);
+		}
+		else
+		{
+			return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(pr + (a & SEK_PAGEM))));
+		}
 	}
 
 	return pSekExt->ReadWord[(uintptr_t)pr](a);
@@ -294,8 +305,9 @@ inline static void WriteWordROM(UINT32 a, UINT16 d)
 	pSekExt->WriteWord[(uintptr_t)pr](a, d);
 }
 
+// [x] byte #
 // be [3210] -> (r >> 16) | (r << 16) -> [1032] -> UINT32(le) = -> [0123]
-// le [0123]
+// mem [0123]
 
 inline static UINT32 ReadLong(UINT32 a)
 {
@@ -310,7 +322,7 @@ inline static UINT32 ReadLong(UINT32 a)
 	{
 		UINT32 r = 0;
 
-		if (a & 1)
+		if (a & nSekCPUOffsetAddress[nSekActive])
 		{
 			r  = ReadByte((a + 0)) * 0x1000000;
 			r += ReadByte((a + 1)) * 0x10000;
@@ -339,11 +351,28 @@ inline static UINT32 FetchLong(UINT32 a)
 
 //	bprintf(PRINT_NORMAL, _T("fetch32 0x%08X\n"), a);
 
+	//if (a&3) bprintf(0, _T("fetchlong offset-read @ %x\n"), a);
+
 	pr = FIND_F(a);
 	if ((uintptr_t)pr >= SEK_MAXHANDLER) {
-		UINT32 r = *((UINT32*)(pr + (a & SEK_PAGEM)));
-		r = (r >> 16) | (r << 16);
-		return BURN_ENDIAN_SWAP_INT32(r);
+		UINT32 r = 0;
+
+		if (a & nSekCPUOffsetAddress[nSekActive])
+		{
+			r  = ReadByte((a + 0)) * 0x1000000;
+			r += ReadByte((a + 1)) * 0x10000;
+			r += ReadByte((a + 2)) * 0x100;
+			r += ReadByte((a + 3));
+
+			return r;
+		}
+		else
+		{
+			r = *((UINT32*)(pr + (a & SEK_PAGEM)));
+			r = (r >> 16) | (r << 16);
+
+			return BURN_ENDIAN_SWAP_INT32(r);
+		}
 	}
 	return pSekExt->ReadLong[(uintptr_t)pr](a);
 }
@@ -359,7 +388,7 @@ inline static void WriteLong(UINT32 a, UINT32 d)
 	pr = FIND_W(a);
 	if ((uintptr_t)pr >= SEK_MAXHANDLER)
 	{
-		if (a & 1)
+		if (a & nSekCPUOffsetAddress[nSekActive])
 		{
 		//	bprintf(PRINT_NORMAL, _T("write32 0x%08X 0x%8.8x\n"), a,d);
 
@@ -471,6 +500,11 @@ extern "C" INT32 C68KIRQAcknowledge(INT32 nIRQ)
 		nSekIRQPending[nSekActive] = 0;
 	}
 
+	if (nSekVIRQPending[nSekActive][nIRQ] & SEK_IRQSTATUS_VAUTO) {
+		c68k_set_virq(nIRQ, 0);
+		nSekVIRQPending[nSekActive][nIRQ] = 0;
+	}
+
 	if (pSekExt->IrqCallback) {
 		return pSekExt->IrqCallback(nIRQ);
 	}
@@ -528,10 +562,9 @@ extern "C" INT32 M68KIRQAcknowledge(INT32 nIRQ)
 		nSekIRQPending[nSekActive] = 0;
 	}
 
-	if (nSekIRQPending[nSekActive] & SEK_IRQSTATUS_VAUTO &&
-		(nSekIRQPending[nSekActive] & 0x0007) == nIRQ) {
+	if (nSekVIRQPending[nSekActive][nIRQ] & SEK_IRQSTATUS_VAUTO) {
 		m68k_set_virq(nIRQ, 0);
-		nSekIRQPending[nSekActive] = 0;
+		nSekVIRQPending[nSekActive][nIRQ] = 0;
 	}
 
 	if (pSekExt->IrqCallback) {
@@ -577,12 +610,17 @@ struct m68kpstack {
 	INT32 nHostCPU;
 	INT32 nPushedCPU;
 };
-#define MAX_PSTACK 10
+#define MAX_PSTACK 20
 
 static m68kpstack pstack[MAX_PSTACK];
 static INT32 pstacknum = 0;
 
-static void SekCPUPush(INT32 nCPU)
+INT32 SekCPUGetStackNum()
+{
+	return pstacknum;
+}
+
+void SekCPUPush(INT32 nCPU)
 {
 	m68kpstack *p = &pstack[pstacknum++];
 
@@ -600,7 +638,7 @@ static void SekCPUPush(INT32 nCPU)
 	}
 }
 
-static void SekCPUPop()
+void SekCPUPop()
 {
 	m68kpstack *p = &pstack[--pstacknum];
 
@@ -624,6 +662,8 @@ static INT32 SekInitCPUC68K(INT32 nCount, INT32 nCPUType)
 	}
 
 	nSekCPUType[nCount] = nCPUType;
+
+	nSekCPUOffsetAddress[nCount] = 1;
 
 	if (!bCycloneInited) {
 #if defined (FBNEO_DEBUG)
@@ -653,6 +693,8 @@ static INT32 SekInitCPUM68K(INT32 nCount, INT32 nCPUType)
 #endif
 	nSekCPUType[nCount] = nCPUType;
 
+	nSekCPUOffsetAddress[nCount] = 1; // 3 for 020!
+
 	switch (nCPUType) {
 		case 0x68000:
 			m68k_set_cpu_type(M68K_CPU_TYPE_68000);
@@ -662,6 +704,7 @@ static INT32 SekInitCPUM68K(INT32 nCount, INT32 nCPUType)
 			break;
 		case 0x68EC020:
 			m68k_set_cpu_type(M68K_CPU_TYPE_68EC020);
+			nSekCPUOffsetAddress[nCount] = 3;
 			break;
 		default:
 			return 1;
@@ -687,6 +730,8 @@ void SekNewFrame()
 
 	for (INT32 i = 0; i <= nSekCount; i++) {
 		nSekCycles[i] = 0;
+		nSekCyclesToDoCache[i] = 0;
+		nSekm68k_ICount[i] = 0;
 	}
 
 #ifdef EMU_C68K
@@ -699,6 +744,23 @@ void SekNewFrame()
 	}
 #endif
 	nSekCyclesTotal = 0;
+}
+
+void SekCyclesBurnRun(INT32 nCycles)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_SekInitted) bprintf(PRINT_ERROR, _T("SekSetCyclesBurnRun called without init\n"));
+	if (nSekActive == -1) bprintf(PRINT_ERROR, _T("SekSetCyclesBurnRun called when no CPU open\n"));
+#endif
+#ifdef EMU_C68K
+		if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
+			c68k[nSekActive].cycles -= nCycles;
+		} else {
+#endif
+			m68k_ICount -= nCycles;
+#ifdef EMU_C68K
+		}
+#endif
 }
 
 void SekSetCyclesScanline(INT32 nCycles)
@@ -859,6 +921,9 @@ INT32 SekInit(INT32 nCount, INT32 nCPUType)
 	nSekm68k_ICount[nCount] = 0;
 
 	nSekIRQPending[nCount] = 0;
+	for (INT32 i = 0; i < 8; i++) {
+		nSekVIRQPending[nCount][i] = 0;
+	}
 	nSekRESETLine[nCount] = 0;
 	nSekHALT[nCount] = 0;
 
@@ -866,6 +931,8 @@ INT32 SekInit(INT32 nCount, INT32 nCPUType)
 	nSekCyclesScanline = 0;
 
 	CpuCheatRegister(nCount, &SekConfig);
+
+	pstacknum = 0;
 
 	return 0;
 }
@@ -880,13 +947,13 @@ static void SekCPUExitM68K(INT32 i)
 }
 #endif
 
-INT32 SekExit()
+void SekExit()
 {
 #if defined FBNEO_DEBUG
 	if (!DebugCPU_SekInitted) bprintf(PRINT_ERROR, _T("SekExit called without init\n"));
 #endif
 
-	if (!DebugCPU_SekInitted) return 1;
+	if (!DebugCPU_SekInitted) return;
 
 	// Deallocate cpu extenal data (memory map etc)
 	for (INT32 i = 0; i <= nSekCount; i++) {
@@ -909,6 +976,8 @@ INT32 SekExit()
 			free(SekExt[i]);
 			SekExt[i] = NULL;
 		}
+
+		nSekCPUOffsetAddress[i] = 0;
 	}
 
 	pSekExt = NULL;
@@ -917,8 +986,6 @@ INT32 SekExit()
 	nSekCount = -1;
 
 	DebugCPU_SekInitted = 0;
-
-	return 0;
 }
 
 void SekReset()
@@ -936,6 +1003,7 @@ void SekReset()
 		c68k[nSekActive].a[7]			= m68k_fetch32(0); // Stack Pointer
 		c68k[nSekActive].membase		= 0;
 		c68k[nSekActive].pc				= c68k[nSekActive].checkpc(m68k_fetch32(4));
+		c68k_virq_state[nSekActive]		= 0;
 	} else {
 #endif
 
@@ -947,6 +1015,9 @@ void SekReset()
 	}
 #endif
 
+	for (INT32 i = 0; i < 8; i++) {
+		nSekVIRQPending[nSekActive][i] = 0;
+	}
 }
 
 void SekReset(INT32 nCPU)
@@ -1182,9 +1253,16 @@ void SekSetHALT(INT32 nStatus)
 
 	if (nSekActive != -1)
 	{
-		if (nSekHALT[nSekActive] && nStatus == 0)
+		if (nSekHALT[nSekActive] == 1 && nStatus == 0)
 		{
 			//bprintf(0, _T("SEK: cleared HALT.\n"));
+		}
+
+		if (nSekHALT[nSekActive] == 0 && nStatus == 1)
+		{
+			//bprintf(0, _T("SEK: entered HALT.\n"));
+			// we must halt in the cpu core too
+			SekRunEnd();
 		}
 
 		nSekHALT[nSekActive] = nStatus;
@@ -1288,11 +1366,11 @@ void SekSetVIRQLine(const INT32 line, INT32 nstatus)
 	INT32 status = nstatus << 12; // needed for compatibility
 
 	if (status) {
-		nSekIRQPending[nSekActive] = line | status;
+		nSekVIRQPending[nSekActive][line] = status;
 
 #ifdef EMU_C68K
 		if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
-			// is there an equivalent to m68k_set_virq in cyclone ?
+			c68k_set_virq(line, 1);
 		} else {
 #endif
 
@@ -1307,11 +1385,11 @@ void SekSetVIRQLine(const INT32 line, INT32 nstatus)
 		return;
 	}
 
-	nSekIRQPending[nSekActive] = 0;
+	nSekVIRQPending[nSekActive][line] = 0;
 
 #ifdef EMU_C68K
 	if ((nSekCpuCore == SEK_CORE_C68K) && nSekCPUType[nSekActive] == 0x68000) {
-		// is there an equivalent to m68k_set_virq in cyclone ?
+		c68k_set_virq(line, 0);
 	} else {
 #endif
 
@@ -1464,6 +1542,21 @@ INT32 SekRun(INT32 nCPU, INT32 nCycles)
 	SekCPUPush(nCPU);
 
 	INT32 nRet = SekRun(nCycles);
+
+	SekCPUPop();
+
+	return nRet;
+}
+
+INT32 SekIdle(INT32 nCPU, INT32 nCycles)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugCPU_SekInitted) bprintf(PRINT_ERROR, _T("SekIdle called without init\n"));
+#endif
+
+	SekCPUPush(nCPU);
+
+	INT32 nRet = SekIdle(nCycles);
 
 	SekCPUPop();
 
@@ -1864,6 +1957,7 @@ INT32 SekScan(INT32 nAction)
 
 		SCAN_VAR(nSekCPUType[i]);
 		SCAN_VAR(nSekIRQPending[i]);
+		SCAN_VAR(nSekVIRQPending[i]);
 		SCAN_VAR(nSekCycles[i]);
 		SCAN_VAR(nSekRESETLine[i]);
 		SCAN_VAR(nSekHALT[i]);
@@ -1888,6 +1982,7 @@ INT32 SekScan(INT32 nAction)
 				CycloneUnpack(&c68k[i], cyclone_buffer);
 				nSekActive = sekActive;
 			}
+			SCAN_VAR(c68k_virq_state[i]);
 		} else {
 #endif
 #ifdef EMU_M68K

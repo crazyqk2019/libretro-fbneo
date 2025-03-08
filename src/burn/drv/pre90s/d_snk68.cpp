@@ -1,4 +1,4 @@
-// FB Alpha SNK 68k-based (pre-Neo-Geo) driver module
+// FB Neo SNK 68k-based (pre-Neo-Geo) driver module
 // Based on MAME driver by Bryan McPhail, Acho A. Tang, Nicola Salmoria
 
 #include "tiles_generic.h"
@@ -8,27 +8,21 @@
 #include "upd7759.h"
 
 // Notes:
-//   March 11, 2016: hooked up rotational code to SAR and Ikari 3, left in old
-//   analogue rotational code (see #if 0's) just incase we need to base
-//   something else off of it in the future.
+//   March 11, 2016: hooked up rotational code to SAR and Ikari 3,
 
 static UINT8 DrvJoy1[8];
 static UINT8 DrvJoy2[8];
 static UINT8 DrvJoy3[8];
 static UINT8 DrvInputs[8];
-static UINT8 DrvDips[2];
+static UINT8 DrvDips[3];
 static UINT8 DrvReset;
-#if 0
-static UINT32 nAnalogAxis[2] = {0,0};
-static UINT16 DrvAxis[2];
-#endif
 
 static INT32 Rotary1 = 0;
 static INT32 Rotary1OldVal = 0;
 static INT32 Rotary2 = 0;
 static INT32 Rotary2OldVal = 0;
 
-static UINT8 *Mem;
+static UINT8 *AllMem;
 static UINT8 *MemEnd;
 static UINT8 *AllRam;
 static UINT8 *RamEnd;
@@ -49,6 +43,7 @@ static UINT32 *DrvPalette;
 static UINT8 DrvRecalc;
 
 static INT32 game_select;
+static INT32 streetsmwbl;
 
 static INT32 invert_controls;
 static INT32 soundlatch;
@@ -57,7 +52,7 @@ static INT32 sprite_flip;
 static INT32 pow_charbase;
 
 // Rotation stuff! -dink
-static UINT8  DrvFakeInput[6]       = {0, 0, 0, 0, 0, 0};
+static UINT8  DrvFakeInput[14]      = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // 0-5 legacy; 6-9 P1, 10-13 P2
 static UINT8  nRotateHoldInput[2]   = {0, 0};
 static INT32  nRotate[2]            = {0, 0};
 static INT32  nRotateTarget[2]      = {0, 0};
@@ -65,6 +60,7 @@ static INT32  nRotateTry[2]         = {0, 0};
 static UINT32 nRotateTime[2]        = {0, 0};
 static UINT8  game_rotates = 0;
 static UINT8  game_rotates_inverted = 0;
+static UINT8  nAutoFireCounter[2] 	= {0, 0};
 
 #define A(a, b, c, d) { a, b, (UINT8*)(c), d }
 
@@ -108,7 +104,13 @@ static struct BurnInputInfo IkariInputList[] = {
 	{"P1 Button 1"  , BIT_DIGITAL  , DrvJoy1 + 4,	"p1 fire 1"},
 	{"P1 Button 2"  , BIT_DIGITAL  , DrvJoy1 + 5,	"p1 fire 2"},
 	{"P1 Button 3"  , BIT_DIGITAL  , DrvJoy1 + 6,	"p1 fire 3"},
+	{"P1 Rotate Left"       , BIT_DIGITAL  , DrvFakeInput + 0, "p1 rotate left" },
+	{"P1 Rotate Right"      , BIT_DIGITAL  , DrvFakeInput + 1, "p1 rotate right" },
 	{"P1 Button 4 (rotate)" , BIT_DIGITAL  , DrvFakeInput + 4,  "p1 fire 4" },
+	{"P1 Shoot Up"       	, BIT_DIGITAL  , DrvFakeInput + 6,  "p1 up 2" }, // 6
+	{"P1 Shoot Down"      	, BIT_DIGITAL  , DrvFakeInput + 7,  "p1 down 2" }, // 7
+	{"P1 Shoot Left"       	, BIT_DIGITAL  , DrvFakeInput + 8,  "p1 left 2" }, // 8
+	{"P1 Shoot Right"      	, BIT_DIGITAL  , DrvFakeInput + 9,  "p1 right 2" }, // 9
 
 	//A("P1 Right / left",	BIT_ANALOG_REL, DrvAxis + 0,	"p1 z-axis"),
 
@@ -121,7 +123,13 @@ static struct BurnInputInfo IkariInputList[] = {
 	{"P2 Button 1"  , BIT_DIGITAL  , DrvJoy2 + 4,	"p2 fire 1"},
 	{"P2 Button 2"  , BIT_DIGITAL  , DrvJoy2 + 5,	"p2 fire 2"},
 	{"P2 Button 3"  , BIT_DIGITAL  , DrvJoy2 + 6,	"p2 fire 3"},
+	{"P2 Rotate Left"  , BIT_DIGITAL  , DrvFakeInput + 2, "p2 rotate left" },
+	{"P2 Rotate Right" , BIT_DIGITAL  , DrvFakeInput + 3, "p2 rotate right" },
 	{"P2 Button 4 (rotate)" , BIT_DIGITAL  , DrvFakeInput + 5,  "p2 fire 4" },
+	{"P2 Shoot Up"       	, BIT_DIGITAL  , DrvFakeInput + 10, "p2 up 2" },
+	{"P2 Shoot Down"      	, BIT_DIGITAL  , DrvFakeInput + 11, "p2 down 2" },
+	{"P2 Shoot Left"       	, BIT_DIGITAL  , DrvFakeInput + 12, "p2 left 2" },
+	{"P2 Shoot Right"      	, BIT_DIGITAL  , DrvFakeInput + 13, "p2 right 2" },
 
 	//A("P2 Right / left",	BIT_ANALOG_REL, DrvAxis + 1,	"p2 z-axis"),
 
@@ -130,6 +138,8 @@ static struct BurnInputInfo IkariInputList[] = {
 	{"Reset",	  BIT_DIGITAL  , &DrvReset,	"reset"    },
 	{"Dip 1",	  BIT_DIPSWITCH, DrvDips + 0,	"dip"	   },
 	{"Dip 2",	  BIT_DIPSWITCH, DrvDips + 1,	"dip"	   },
+	// Auto-fire on right stick
+	{"Dip 3",	  BIT_DIPSWITCH, DrvDips + 2,	"dip"	   },
 };
 
 STDINPUTINFO(Ikari)
@@ -184,9 +194,9 @@ static struct BurnDIPInfo PowDIPList[]=
 
 	{0   , 0xfe, 0   , 4   , "Game Mode"              },
 	{0x15, 0x01, 0x30, 0x00, "Demo Sounds On"         },
-	{0x15, 0x01, 0x30, 0x14, "Demo Sounds Off"        },
+	{0x15, 0x01, 0x30, 0x20, "Demo Sounds Off"        },
 	{0x15, 0x01, 0x30, 0x30, "Freeze"                 },
-	{0x15, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
+	{0x15, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },
 
 	{0   , 0xfe, 0   , 4   , "Difficulty"             },
 	{0x15, 0x01, 0xc0, 0x80, "Easy"                   },
@@ -243,9 +253,9 @@ static struct BurnDIPInfo PowjDIPList[]=
 
 	{0   , 0xfe, 0   , 4   , "Game Mode"              },
 	{0x15, 0x01, 0x30, 0x00, "Demo Sounds On"         },
-	{0x15, 0x01, 0x30, 0x14, "Demo Sounds Off"        },
+	{0x15, 0x01, 0x30, 0x20, "Demo Sounds Off"        },
 	{0x15, 0x01, 0x30, 0x30, "Freeze"                 },
-	{0x15, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
+	{0x15, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },
 
 	{0   , 0xfe, 0   , 4   , "Difficulty"             },
 	{0x15, 0x01, 0xc0, 0x80, "Easy"                   },
@@ -296,7 +306,7 @@ static struct BurnDIPInfo StreetsmDIPList[]=
 	{0x15, 0x01, 0x0c, 0x0c, "None"                   },
 
 	{0   , 0xfe, 0   , 4   , "Game Mode"              },
-	{0x15, 0x01, 0x30, 0x14, "Demo Sounds Off"        },
+	{0x15, 0x01, 0x30, 0x20, "Demo Sounds Off"        },
 	{0x15, 0x01, 0x30, 0x00, "Demo Sounds On"         },
 	{0x15, 0x01, 0x30, 0x30, "Freeze"                 },
 	{0x15, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
@@ -310,7 +320,7 @@ static struct BurnDIPInfo StreetsmDIPList[]=
 
 STDDIPINFO(Streetsm)
 
-static struct BurnDIPInfo StreetsjDIPList[]=
+static struct BurnDIPInfo StreetsmjDIPList[]=
 {
 	{0x14, 0xff, 0xff, 0x00, NULL                     },
 	{0x15, 0xff, 0xff, 0x00, NULL                     },
@@ -350,7 +360,7 @@ static struct BurnDIPInfo StreetsjDIPList[]=
 	{0x15, 0x01, 0x0c, 0x0c, "None"                   },
 
 	{0   , 0xfe, 0   , 4   , "Game Mode"              },
-	{0x15, 0x01, 0x30, 0x14, "Demo Sounds Off"        },
+	{0x15, 0x01, 0x30, 0x20, "Demo Sounds Off"        },
 	{0x15, 0x01, 0x30, 0x00, "Demo Sounds On"         },
 	{0x15, 0x01, 0x30, 0x30, "Freeze"                 },
 	{0x15, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
@@ -362,120 +372,137 @@ static struct BurnDIPInfo StreetsjDIPList[]=
 	{0x15, 0x01, 0xc0, 0xc0, "Hardest"                },
 };
 
-STDDIPINFO(Streetsj)
+STDDIPINFO(Streetsmj)
 
 static struct BurnDIPInfo SarDIPList[]=
 {
-	{0x16, 0xff, 0xff, 0x00, NULL                     },
-	{0x17, 0xff, 0xff, 0x00, NULL                     },
+	DIP_OFFSET(0x22)
+
+	{0x00, 0xff, 0xff, 0x00, NULL                     },
+	{0x01, 0xff, 0xff, 0x00, NULL                     },
+	{0x02, 0xff, 0xff, 0x00, NULL                     },
 
 	{0   , 0xfe, 0   , 2   , "Joystick"               },
-	{0x16, 0x01, 0x01, 0x00, "Rotary"                 },
-	{0x16, 0x01, 0x01, 0x01, "Standard"               },
+	{0x00, 0x01, 0x01, 0x00, "Rotary"                 },
+	{0x00, 0x01, 0x01, 0x01, "Standard"               },
 
 	{0   , 0xfe, 0   , 4   , "Lives"                  },
-	{0x16, 0x01, 0x0c, 0x08, "2"                      },
-	{0x16, 0x01, 0x0c, 0x00, "3"                      },
-	{0x16, 0x01, 0x0c, 0x04, "4"                      },
-	{0x16, 0x01, 0x0c, 0x0c, "5"                      },
+	{0x00, 0x01, 0x0c, 0x08, "2"                      },
+	{0x00, 0x01, 0x0c, 0x00, "3"                      },
+	{0x00, 0x01, 0x0c, 0x04, "4"                      },
+	{0x00, 0x01, 0x0c, 0x0c, "5"                      },
 
 	{0   , 0xfe, 0   , 4   , "Coin A & B"             },
-	{0x16, 0x01, 0x30, 0x16, "2 Coins 1 Credit"       },
-	{0x16, 0x01, 0x30, 0x00, "1 Coin  1 Credit"       },
-	{0x16, 0x01, 0x30, 0x10, "1 Coin  2 Credits"      },
-	{0x16, 0x01, 0x30, 0x30, "Free Play"              },
+	{0x00, 0x01, 0x30, 0x16, "2 Coins 1 Credit"       },
+	{0x00, 0x01, 0x30, 0x00, "1 Coin  1 Credit"       },
+	{0x00, 0x01, 0x30, 0x10, "1 Coin  2 Credits"      },
+	{0x00, 0x01, 0x30, 0x30, "Free Play"              },
 
 	{0   , 0xfe, 0   , 2   , "Bonus Ocurrence"        },
-	{0x16, 0x01, 0x40, 0x00, "1st & 2nd only"         },
-	{0x16, 0x01, 0x40, 0x40, "1st & every 2nd"        },
+	{0x00, 0x01, 0x40, 0x00, "1st & 2nd only"         },
+	{0x00, 0x01, 0x40, 0x40, "1st & every 2nd"        },
 
 	{0   , 0xfe, 0   , 2   , "Flip Screen"            },
-	{0x16, 0x01, 0x80, 0x00, "Off"                    },
-	{0x16, 0x01, 0x80, 0x80, "On"                     },
+	{0x00, 0x01, 0x80, 0x00, "Off"                    },
+	{0x00, 0x01, 0x80, 0x80, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Service Mode"           },
-	{0x17, 0x01, 0x01, 0x00, "Off"                    },
-	{0x17, 0x01, 0x01, 0x01, "On"                     },
+	{0x01, 0x01, 0x01, 0x00, "Off"                    },
+	{0x01, 0x01, 0x01, 0x01, "On"                     },
 
 	{0   , 0xfe, 0   , 2   , "Allow Continue"         },
-	{0x17, 0x01, 0x02, 0x02, "No"                     },
-	{0x17, 0x01, 0x02, 0x00, "Yes"                    },
+	{0x01, 0x01, 0x02, 0x02, "No"                     },
+	{0x01, 0x01, 0x02, 0x00, "Yes"                    },
 
 	{0   , 0xfe, 0   , 4   , "Bonus Life"             },
-	{0x17, 0x01, 0x0c, 0x00, "50k 200k"               },
-	{0x17, 0x01, 0x0c, 0x08, "70k 270k"               },
-	{0x17, 0x01, 0x0c, 0x04, "90k 350k"               },
-	{0x17, 0x01, 0x0c, 0x0c, "None"                   },
+	{0x01, 0x01, 0x0c, 0x00, "50k 200k"               },
+	{0x01, 0x01, 0x0c, 0x08, "70k 270k"               },
+	{0x01, 0x01, 0x0c, 0x04, "90k 350k"               },
+	{0x01, 0x01, 0x0c, 0x0c, "None"                   },
 
 	{0   , 0xfe, 0   , 4   , "Game Mode"              },
-	{0x17, 0x01, 0x30, 0x16, "Demo Sounds Off"        },
-	{0x17, 0x01, 0x30, 0x00, "Demo Sounds On"         },
-	{0x17, 0x01, 0x30, 0x30, "Freeze"                 },
-	{0x17, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
+	{0x01, 0x01, 0x30, 0x20, "Demo Sounds Off"        },
+	{0x01, 0x01, 0x30, 0x00, "Demo Sounds On"         },
+	{0x01, 0x01, 0x30, 0x30, "Freeze"                 },
+	{0x01, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
 
 	{0   , 0xfe, 0   , 4   , "Difficulty"             },
-	{0x17, 0x01, 0xc0, 0x80, "Easy"                   },
-	{0x17, 0x01, 0xc0, 0x00, "Normal"                 },
-	{0x17, 0x01, 0xc0, 0x40, "Hard"                   },
-	{0x17, 0x01, 0xc0, 0xc0, "Hardest"                },
+	{0x01, 0x01, 0xc0, 0x80, "Easy"                   },
+	{0x01, 0x01, 0xc0, 0x00, "Normal"                 },
+	{0x01, 0x01, 0xc0, 0x40, "Hard"                   },
+	{0x01, 0x01, 0xc0, 0xc0, "Hardest"                },
+
+	// Dip 3
+	{0   , 0xfe, 0   , 2   , "Second Stick"           },
+	{0x02, 0x01, 0x01, 0x00, "Moves & Shoots"         },
+	{0x02, 0x01, 0x01, 0x01, "Moves"                  },
 };
 
 STDDIPINFO(Sar)
 
 static struct BurnDIPInfo IkariDIPList[]=
 {
-	{0x16, 0xff, 0xff, 0x00, NULL                     },
-	{0x17, 0xff, 0xff, 0x00, NULL                     },
+
+	DIP_OFFSET(0x22)
+
+	{0x00, 0xff, 0xff, 0x00, NULL                     },
+	{0x01, 0xff, 0xff, 0x00, NULL                     },
+	{0x02, 0xff, 0xff, 0x00, NULL                     },
 
 	{0   , 0xfe, 0   , 4   , "Lives"                  },
-	{0x16, 0x01, 0x03, 0x02, "2"                      },
-	{0x16, 0x01, 0x03, 0x00, "3"                      },
-	{0x16, 0x01, 0x03, 0x01, "4"                      },
-	{0x16, 0x01, 0x03, 0x03, "5"                      },
+	{0x00, 0x01, 0x03, 0x02, "2"                      },
+	{0x00, 0x01, 0x03, 0x00, "3"                      },
+	{0x00, 0x01, 0x03, 0x01, "4"                      },
+	{0x00, 0x01, 0x03, 0x03, "5"                      },
 
 	{0   , 0xfe, 0   , 4   , "Coin A & B"             },
-	{0x16, 0x01, 0x0c, 0x08, "First 2C_1C, then 1C_1C"},
-	{0x16, 0x01, 0x0c, 0x00, "1 Coin 1 Credit"        },
-	{0x16, 0x01, 0x0c, 0x04, "First 1C_2C, then 1C_1C"},
-	{0x16, 0x01, 0x0c, 0x0c, "Free Play"              },
+	{0x00, 0x01, 0x0c, 0x08, "First 2C_1C, then 1C_1C"},
+	{0x00, 0x01, 0x0c, 0x00, "1 Coin 1 Credit"        },
+	{0x00, 0x01, 0x0c, 0x04, "First 1C_2C, then 1C_1C"},
+	{0x00, 0x01, 0x0c, 0x0c, "Free Play"              },
 
 	{0   , 0xfe, 0   , 2   , "Bonus Ocurrence"        },
-	{0x16, 0x01, 0x16, 0x00, "1st & 2nd only"         },
-	{0x16, 0x01, 0x16, 0x16, "1st & every 2nd"        },
+	{0x00, 0x01, 0x16, 0x00, "1st & 2nd only"         },
+	{0x00, 0x01, 0x16, 0x16, "1st & every 2nd"        },
 
 	{0   , 0xfe, 0   , 2   , "Blood"                  },
-	{0x16, 0x01, 0x40, 0x40, "Off"                    },
-	{0x16, 0x01, 0x40, 0x00, "On"                     },
+	{0x00, 0x01, 0x40, 0x40, "Off"                    },
+	{0x00, 0x01, 0x40, 0x00, "On"                     },
 
 	{0   , 0xfe, 0   , 2   , "Flip Screen"            },
-	{0x16, 0x01, 0x80, 0x00, "Off"                    },
-	{0x16, 0x01, 0x80, 0x80, "On"                     },
+	{0x00, 0x01, 0x80, 0x00, "Off"                    },
+	{0x00, 0x01, 0x80, 0x80, "On"                     },
 	
 	{0   , 0xfe, 0   , 2   , "Service Mode"           },
-	{0x17, 0x01, 0x01, 0x00, "Off"                    },
-	{0x17, 0x01, 0x01, 0x01, "On"                     },
+	{0x01, 0x01, 0x01, 0x00, "Off"                    },
+	{0x01, 0x01, 0x01, 0x01, "On"                     },
 
 	{0   , 0xfe, 0   , 2   , "Allow Continue"         },
-	{0x17, 0x01, 0x02, 0x02, "No"                     },
-	{0x17, 0x01, 0x02, 0x00, "Yes"                    },
+	{0x01, 0x01, 0x02, 0x02, "No"                     },
+	{0x01, 0x01, 0x02, 0x00, "Yes"                    },
 
 	{0   , 0xfe, 0   , 4   , "Bonus Life"             },
-	{0x17, 0x01, 0x0c, 0x00, "20k 50k"                },
-	{0x17, 0x01, 0x0c, 0x08, "40k 100k"               },
-	{0x17, 0x01, 0x0c, 0x04, "60k 150k"               },
-	{0x17, 0x01, 0x0c, 0x0c, "None"                   },
+	{0x01, 0x01, 0x0c, 0x00, "20k 50k"                },
+	{0x01, 0x01, 0x0c, 0x08, "40k 100k"               },
+	{0x01, 0x01, 0x0c, 0x04, "60k 150k"               },
+	{0x01, 0x01, 0x0c, 0x0c, "None"                   },
 
 	{0   , 0xfe, 0   , 4   , "Game Mode"              },
-	{0x17, 0x01, 0x30, 0x16, "Demo Sounds Off"        },
-	{0x17, 0x01, 0x30, 0x00, "Demo Sounds On"         },
-	{0x17, 0x01, 0x30, 0x30, "Freeze"                 },
-	{0x17, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
+	{0x01, 0x01, 0x30, 0x20, "Demo Sounds Off"        },
+	{0x01, 0x01, 0x30, 0x00, "Demo Sounds On"         },
+	{0x01, 0x01, 0x30, 0x30, "Freeze"                 },
+	{0x01, 0x01, 0x30, 0x10, "Infinite Lives (Cheat)" },	
 
 	{0   , 0xfe, 0   , 4   , "Difficulty"             },
-	{0x17, 0x01, 0xc0, 0x00, "Easy"                   },
-	{0x17, 0x01, 0xc0, 0x80, "Normal"                 },
-	{0x17, 0x01, 0xc0, 0x40, "Hard"                   },
-	{0x17, 0x01, 0xc0, 0xc0, "Hardest"                },
+	{0x01, 0x01, 0xc0, 0x00, "Easy"                   },
+	{0x01, 0x01, 0xc0, 0x80, "Normal"                 },
+	{0x01, 0x01, 0xc0, 0x40, "Hard"                   },
+	{0x01, 0x01, 0xc0, 0xc0, "Hardest"                },
+
+	// Dip 3
+	{0   , 0xfe, 0   , 2   , "Second Stick"           },
+	{0x02, 0x01, 0x01, 0x00, "Moves & Shoots"         },
+	{0x02, 0x01, 0x01, 0x01, "Moves"                  },
 };
 
 STDDIPINFO(Ikari)
@@ -498,17 +525,17 @@ static void RotateStateload() {
 }
 
 static UINT32 RotationTimer(void) {
-    return nCurrentFrame;
+	return nCurrentFrame;
 }
 
 static void RotateRight(INT32 *v) {
-    (*v)--;
-    if (*v < 0) *v = 11;
+	(*v)--;
+	if (*v < 0) *v = 11;
 }
 
 static void RotateLeft(INT32 *v) {
-    (*v)++;
-    if (*v > 11) *v = 0;
+	(*v)++;
+	if (*v > 11) *v = 0;
 }
 
 static UINT8 Joy2RotateInvert(UINT8 *joy) {
@@ -545,32 +572,32 @@ static UINT8 Joy2Rotate(UINT8 *joy) { // ugly code, but the effect is awesome. -
 }
 
 static int dialRotation(INT32 playernum) {
-    // p1 = 0, p2 = 1
+	// p1 = 0, p2 = 1
 	UINT8 player[2] = { 0, 0 };
 	static UINT8 lastplayer[2][2] = { { 0, 0 }, { 0, 0 } };
 
-    if ((playernum != 0) && (playernum != 1)) {
-        bprintf(PRINT_NORMAL, _T("Strange Rotation address => %06X\n"), playernum);
-        return 0;
-    }
-    if (playernum == 0) {
-        player[0] = DrvFakeInput[0]; player[1] = DrvFakeInput[1];
-    }
-    if (playernum == 1) {
-        player[0] = DrvFakeInput[2]; player[1] = DrvFakeInput[3];
-    }
+	if ((playernum != 0) && (playernum != 1)) {
+		bprintf(PRINT_NORMAL, _T("Strange Rotation address => %06X\n"), playernum);
+		return 0;
+	}
+	if (playernum == 0) {
+		player[0] = DrvFakeInput[0]; player[1] = DrvFakeInput[1];
+	}
+	if (playernum == 1) {
+		player[0] = DrvFakeInput[2]; player[1] = DrvFakeInput[3];
+	}
 
-    if (player[0] && (player[0] != lastplayer[playernum][0] || (RotationTimer() > nRotateTime[playernum]+0xf))) {
+	if (player[0] && (player[0] != lastplayer[playernum][0] || (RotationTimer() > nRotateTime[playernum]+0xf))) {
 		RotateLeft(&nRotate[playernum]);
-        //bprintf(PRINT_NORMAL, _T("Player %d Rotate Left => %06X\n"), playernum+1, nRotate[playernum]);
+		//bprintf(PRINT_NORMAL, _T("Player %d Rotate Left => %06X\n"), playernum+1, nRotate[playernum]);
 		nRotateTime[playernum] = RotationTimer();
 		nRotateTarget[playernum] = -1;
-    }
+	}
 
 	if (player[1] && (player[1] != lastplayer[playernum][1] || (RotationTimer() > nRotateTime[playernum]+0xf))) {
-        RotateRight(&nRotate[playernum]);
-        //bprintf(PRINT_NORMAL, _T("Player %d Rotate Right => %06X\n"), playernum+1, nRotate[playernum]);
-        nRotateTime[playernum] = RotationTimer();
+		RotateRight(&nRotate[playernum]);
+		//bprintf(PRINT_NORMAL, _T("Player %d Rotate Right => %06X\n"), playernum+1, nRotate[playernum]);
+		nRotateTime[playernum] = RotationTimer();
 		nRotateTarget[playernum] = -1;
 	}
 
@@ -651,8 +678,47 @@ static void RotateDoTick() {
 }
 
 static void SuperJoy2Rotate() {
+	UINT8 FakeDrvInputPort0[4] = {0, 0, 0, 0};
+	UINT8 FakeDrvInputPort1[4] = {0, 0, 0, 0};
+	UINT8 NeedsSecondStick[2] = {0, 0};
+
+	// prepare for right-stick rotation
+	// this is not especially readable though
+	for (INT32 i = 0; i < 2; i++) {
+		for (INT32 n = 0; n < 4; n++) {
+			UINT8* RotationInput = (!i) ? &FakeDrvInputPort0[0] : &FakeDrvInputPort1[0];
+			RotationInput[n] = DrvFakeInput[6 + i*4 + n];
+			NeedsSecondStick[i] |= RotationInput[n];
+		}
+	}
+
 	for (INT32 i = 0; i < 2; i++) { // p1 = 0, p2 = 1
-		if (DrvFakeInput[4 + i]) { //  rotate-button had been pressed
+		if (!NeedsSecondStick[i])
+			nAutoFireCounter[i] = 0;
+		if (NeedsSecondStick[i]) { // or using Second Stick
+			UINT8 rot = Joy2Rotate(((!i) ? &FakeDrvInputPort0[0] : &FakeDrvInputPort1[0]));
+			if (rot != 0xff) {
+				nRotateTarget[i] = rot * rotate_gunpos_multiplier;
+			}
+			nRotateTry[i] = 0;
+
+			if (~DrvDips[2] & 1) {
+				// fake auto-fire - there's probably a more elegant solution for this
+				// DrvJoy1 + 4, DrvJoy2 + 4 - SAR
+				// Ikari3 should be Fire3, which uses the weapons they pick up: index 6
+				
+				UINT8 indexmask = ((game_select == 3) ? 0x40 : 0x10); 
+				if (nAutoFireCounter[i]++ & 0x4)
+				{
+					DrvInputs[i] &= ~indexmask; // remove the fire bit &= ~0x10; //
+				}
+				else
+				{
+					DrvInputs[i] |= indexmask; // turn on the fire bit
+				}
+			}
+		}
+		else if (DrvFakeInput[4 + i]) { //  rotate-button had been pressed
 			UINT8 rot = Joy2Rotate(((!i) ? &DrvJoy1[0] : &DrvJoy2[0]));
 			if (rot != 0xff) {
 				nRotateTarget[i] = rot * rotate_gunpos_multiplier;
@@ -697,17 +763,14 @@ static INT32 DrvDoReset()
 	pow_charbase = 0;
 	invert_controls = 0;
 
-#if 0
-	nAnalogAxis[1] = 0;
-	nAnalogAxis[0] = 0;
-#endif
-
 	RotateReset();
+
+	HiscoreReset();
 
 	return 0;
 }
 
-void pow_paletteram16_word_w(UINT32 address)
+static void pow_paletteram16_word_w(UINT32 address)
 {
 	INT32 r,g,b;
 	UINT16 data = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPalRam + (address & 0x0ffe))));
@@ -723,7 +786,7 @@ void pow_paletteram16_word_w(UINT32 address)
 	DrvPalette[(address >> 1) & 0x7ff] = BurnHighCol(r, g, b, 0);
 }
 
-void __fastcall pow_write_word(UINT32 address, UINT16 data)
+static void __fastcall pow_write_word(UINT32 address, UINT16 data)
 {
 	if ((address & 0xffff8000) == 0x100000 && game_select & 1) {
 		if (!(address & 2))
@@ -743,7 +806,7 @@ void __fastcall pow_write_word(UINT32 address, UINT16 data)
 	}
 }
 
-void __fastcall pow_write_byte(UINT32 address, UINT8 data)
+static void __fastcall pow_write_byte(UINT32 address, UINT8 data)
 {
 	if ((address & 0xffff8000) == 0x100000 && game_select == 1) {
 		if ((address & 3) == 3) data = 0xff;
@@ -773,15 +836,15 @@ void __fastcall pow_write_byte(UINT32 address, UINT8 data)
 		return;
 
 		case 0x0c0001:
-	   		flipscreen   = data & 8;
-	    		sprite_flip  = data & 4;
-	    		pow_charbase = (data & 0x70) << 4;
+			flipscreen   = data & 8;
+			sprite_flip  = data & 4;
+			pow_charbase = (data & 0x70) << 4;
 		return;
 	}
 }
 
 
-UINT16 __fastcall pow_read_word(UINT32 address)
+static UINT16 __fastcall pow_read_word(UINT32 address)
 {
 	if (address != 0xe0000)
 		bprintf (PRINT_NORMAL, _T("read %x, w\n"), address);
@@ -789,7 +852,7 @@ UINT16 __fastcall pow_read_word(UINT32 address)
 	return 0;
 }
 
-UINT8 __fastcall pow_read_byte(UINT32 address)
+static UINT8 __fastcall pow_read_byte(UINT32 address)
 {
 	switch (address)
 	{
@@ -821,7 +884,7 @@ UINT8 __fastcall pow_read_byte(UINT32 address)
 	return 0;
 }
 
-UINT8 __fastcall sar_read_byte(UINT32 address)
+static UINT8 __fastcall sar_read_byte(UINT32 address)
 {
 	switch (address)
 	{
@@ -872,11 +935,11 @@ UINT8 __fastcall sar_read_byte(UINT32 address)
 	return 0;
 }
 
-void __fastcall pow_sound_write(UINT16, UINT8)
+static void __fastcall pow_sound_write(UINT16, UINT8)
 {
 }
 
-void __fastcall pow_sound_out(UINT16 address, UINT8 data)
+static void __fastcall pow_sound_out(UINT16 address, UINT8 data)
 {
 	switch (address & 0xff)
 	{
@@ -898,14 +961,14 @@ void __fastcall pow_sound_out(UINT16 address, UINT8 data)
 
 }
 
-UINT8 __fastcall pow_sound_read(UINT16 address)
+static UINT8 __fastcall pow_sound_read(UINT16 address)
 {
 	if (address == 0xf800) return soundlatch;
 
 	return 0;
 }
 
-UINT8 __fastcall pow_sound_in(UINT16 address)
+static UINT8 __fastcall pow_sound_in(UINT16 address)
 {
 	address &= 0xff;
 
@@ -964,9 +1027,9 @@ static INT32 PowGfxDecode()
 {
 	static INT32 spriPlanes[4] = { 0x000000, 0x400000, 0x800000, 0xc00000 };
 	static INT32 spriXOffs[16] = { 0x87, 0x86, 0x85, 0x84, 0x83, 0x82, 0x81, 0x80,
-				     0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
+					 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
 	static INT32 spriYOffs[16] = { 0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38,
-				     0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78 };
+					 0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78 };
 
 	return DrvGfxDecode(spriPlanes, spriXOffs, spriYOffs, 0x100);
 }
@@ -975,9 +1038,9 @@ static INT32 SarGfxDecode()
 {
 	static INT32 spriPlanes[4] = { 0x000000, 0x000008,0xc00000, 0xc00008 };
 	static INT32 spriXOffs[16] = { 0x107, 0x106, 0x105, 0x104, 0x103, 0x102, 0x101, 0x100, 
-				     0x007, 0x006, 0x005, 0x004, 0x003, 0x002, 0x001, 0x000 };
+					 0x007, 0x006, 0x005, 0x004, 0x003, 0x002, 0x001, 0x000 };
 	static INT32 spriYOffs[16] = { 0x000, 0x010, 0x020, 0x030, 0x040, 0x050, 0x060, 0x070,
-				     0x080, 0x090, 0x0a0, 0x0b0, 0x0c0, 0x0d0, 0x0e0, 0x0f0 };
+					 0x080, 0x090, 0x0a0, 0x0b0, 0x0c0, 0x0d0, 0x0e0, 0x0f0 };
 
 	return DrvGfxDecode(spriPlanes, spriXOffs, spriYOffs, 0x200);
 }
@@ -986,16 +1049,16 @@ static INT32 IkariGfxDecode()
 {
 	static INT32 spriPlanes[4] = { 0xa00000, 0x000000, 0x500000, 0xf00000 };
 	static INT32 spriXOffs[16] = { 0x87, 0x86, 0x85, 0x84, 0x83, 0x82, 0x81, 0x80,
-				     0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
+					 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
 	static INT32 spriYOffs[16] = { 0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38,
-				     0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78 };
+					 0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78 };
 
 	return DrvGfxDecode(spriPlanes, spriXOffs, spriYOffs, 0x100);
 }
 
 static INT32 MemIndex()
 {
-	UINT8 *Next; Next = Mem;
+	UINT8 *Next; Next = AllMem;
 
 	Drv68KRom	= Next; Next += 0x040000;
 	Drv68KRomBank	= Next; Next += 0x040000;
@@ -1096,8 +1159,15 @@ static INT32 DrvGetRoms()
 		}
 
 		if ((ri.nType & 7) == 4) {
-			if (BurnLoadRom(LoadG1, i, 1)) return 1;
-			LoadG1 += ri.nLen;
+			if (streetsmwbl) {
+				if (BurnLoadRom(LoadG1 + 0, i + 0, 2)) return 1;
+				if (BurnLoadRom(LoadG1 + 1, i + 1, 2)) return 1;
+				LoadG1 += ri.nLen * 2;
+				i++;
+			} else {
+				if (BurnLoadRom(LoadG1, i, 1)) return 1;
+				LoadG1 += ri.nLen;
+			}
 			continue;
 		}
 
@@ -1115,12 +1185,7 @@ static INT32 DrvInit(INT32 game)
 {
 	game_select = game;
 
-	Mem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((Mem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(Mem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	if (DrvGetRoms()) return 1;
 
@@ -1166,11 +1231,12 @@ static INT32 DrvInit(INT32 game)
 	ZetClose();
 
 	BurnYM3812Init(1, 4000000, &powFMIRQHandler, &powSynchroniseStream, 0);
-	BurnTimerAttachYM3812(&ZetConfig, 4000000);
+	BurnTimerAttach(&ZetConfig, 4000000);
 	BurnYM3812SetRoute(0, BURN_SND_YM3812_ROUTE, 1.00, BURN_SND_ROUTE_BOTH);
 	
 	UPD7759Init(0, UPD7759_STANDARD_CLOCK, DrvSnd0);
 	UPD7759SetRoute(0, ((game_select == 1) ? 1.50 : 0.50), BURN_SND_ROUTE_BOTH);
+	UPD7759SetSyncCallback(0, ZetTotalCycles, 4000000);
 
 	DrvDoReset();
 
@@ -1188,11 +1254,12 @@ static INT32 DrvExit()
 	SekExit();
 	ZetExit();
 
-	BurnFree (Mem);
+	BurnFreeMemIndex();
 
 	game_select = 0;
 	game_rotates = 0;
 	game_rotates_inverted = 0;
+	streetsmwbl = 0;
 
 	return 0;
 }
@@ -1474,42 +1541,8 @@ static INT32 DrvFrame()
 			DrvInputs[1] ^= DrvJoy2[i] << i;
 			DrvInputs[2] ^= DrvJoy3[i] << i;
 		}
-
-#if 0
-		nAnalogAxis[0] -= DrvAxis[0];
-		DrvInputs[6] = (~nAnalogAxis[0] >> 8) & 0xfe;
-
-		nAnalogAxis[1] -= DrvAxis[1];
-		DrvInputs[7] = (~nAnalogAxis[1] >> 8) & 0xfe;
-#endif
 	}
 	
-#if 0
-	if (game_select == 1 || game_select == 3) {
-		if ((DrvInputs[6] >> 4) < Rotary1OldVal) {
-			Rotary1++;
-		}
-
-		if ((DrvInputs[6] >> 4) > Rotary1OldVal) {
-			Rotary1--;
-		}
-		Rotary1OldVal = DrvInputs[6] >> 4;
-		if (Rotary1 > 11) Rotary1 = 0;
-		if (Rotary1 < 0) Rotary1 = 11;
-		
-		if ((DrvInputs[7] >> 4) < Rotary2OldVal) {
-			Rotary2++;
-		}
-
-		if ((DrvInputs[7] >> 4) > Rotary2OldVal) {
-			Rotary2--;
-		}
-		Rotary2OldVal = DrvInputs[7] >> 4;
-		if (Rotary2 > 11) Rotary2 = 0;
-		if (Rotary2 < 0) Rotary2 = 11;
-	}
-#endif
-
 	if (game_rotates) {
 		SuperJoy2Rotate();
 	}
@@ -1525,14 +1558,15 @@ static INT32 DrvFrame()
 	SekRun(nTotalCycles[0]);
 	SekSetIRQLine(1, CPU_IRQSTATUS_AUTO);
 
-	BurnTimerEndFrameYM3812(nTotalCycles[1]);
-	if (pBurnSoundOut) {
-		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
-		UPD7759Update(0, pBurnSoundOut, nBurnSoundLen);
-	}
+	BurnTimerEndFrame(nTotalCycles[1]);
 
 	ZetClose();
 	SekClose();
+
+	if (pBurnSoundOut) {
+		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
+		UPD7759Render(pBurnSoundOut, nBurnSoundLen);
+	}
 
 	if (pBurnDraw) {
 		DrvDraw();
@@ -1542,7 +1576,7 @@ static INT32 DrvFrame()
 }
 
 
-static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
+static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 {
 	struct BurnArea ba;
 
@@ -1550,16 +1584,13 @@ static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
 		*pnMin = 0x029682;
 	}
 
-	if (nAction & ACB_MEMORY_RAM) {	
+	if (nAction & ACB_MEMORY_RAM) {
 		memset(&ba, 0, sizeof(ba));
 
 		ba.Data	  = AllRam;
 		ba.nLen	  = RamEnd - AllRam;
 		ba.szName = "All Ram";
 		BurnAcb(&ba);
-
-		if (nAction & ACB_WRITE)
-			DrvRecalc = 1;
 	}
 
 	if (nAction & ACB_DRIVER_DATA) {
@@ -1574,16 +1605,16 @@ static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
 		SCAN_VAR(flipscreen);
 		SCAN_VAR(sprite_flip);
 		SCAN_VAR(pow_charbase);
-#if 0
-		SCAN_VAR(nAnalogAxis[0]);
-		SCAN_VAR(nAnalogAxis[1]);
-#endif
 		SCAN_VAR(Rotary1);
 		SCAN_VAR(Rotary1OldVal);
 		SCAN_VAR(Rotary2);
 		SCAN_VAR(Rotary2OldVal);
 		SCAN_VAR(nRotate);
+		SCAN_VAR(nRotateTarget);
 		SCAN_VAR(nRotateTry);
+		SCAN_VAR(nRotateTime);
+		SCAN_VAR(nRotateHoldInput);
+		SCAN_VAR(nAutoFireCounter);
 
 		if (nAction & ACB_WRITE) {
 			RotateStateload();
@@ -1597,34 +1628,34 @@ static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
 // P.O.W. - Prisoners of War (US version 1)
 
 static struct BurnRomInfo powRomDesc[] = {
-	{ "dg1ver1.j14", 0x20000, 0x8e71a8af, 1 | BRF_PRG }, //  0 68k Code
-	{ "dg2ver1.l14", 0x20000, 0x4287affc, 1 | BRF_PRG }, //  1
+	{ "dg1ver1.j14", 	0x20000, 0x8e71a8af, 1 | BRF_PRG }, //  0 68k Code
+	{ "dg2ver1.l14", 	0x20000, 0x4287affc, 1 | BRF_PRG }, //  1
 
-	{ "dg8.e25",     0x10000, 0xd1d61da3, 2 | BRF_PRG }, //  2 Z80 Code
+	{ "dg8.e25",     	0x10000, 0xd1d61da3, 2 | BRF_PRG }, //  2 Z80 Code
 
-	{ "dg9.l25",     0x08000, 0xdf864a08, 3 | BRF_GRA }, //  3 Characters
-	{ "dg10.m25",    0x08000, 0x9e470d53, 3 | BRF_GRA }, //  4
+	{ "dg9.l25",     	0x08000, 0xdf864a08, 3 | BRF_GRA }, //  3 Characters
+	{ "dg10.m25",    	0x08000, 0x9e470d53, 3 | BRF_GRA }, //  4
 
-	{ "snk880.11a",  0x20000, 0xe70fd906, 4 | BRF_GRA }, //  5 Sprites
-	{ "snk880.12a",  0x20000, 0x628b1aed, 4 | BRF_GRA }, //  6
-	{ "snk880.13a",  0x20000, 0x19dc8868, 4 | BRF_GRA }, //  7
-	{ "snk880.14a",  0x20000, 0x47cd498b, 4 | BRF_GRA }, //  8
-	{ "snk880.15a",  0x20000, 0x7a90e957, 4 | BRF_GRA }, //  9
-	{ "snk880.16a",  0x20000, 0xe40a6c13, 4 | BRF_GRA }, // 10
-	{ "snk880.17a",  0x20000, 0xc7931cc2, 4 | BRF_GRA }, // 11
-	{ "snk880.18a",  0x20000, 0xeed72232, 4 | BRF_GRA }, // 12
-	{ "snk880.19a",  0x20000, 0x1775b8dd, 4 | BRF_GRA }, // 13
-	{ "snk880.20a",  0x20000, 0xf8e752ec, 4 | BRF_GRA }, // 14
-	{ "snk880.21a",  0x20000, 0x27e9fffe, 4 | BRF_GRA }, // 15
-	{ "snk880.22a",  0x20000, 0xaa9c00d8, 4 | BRF_GRA }, // 16
-	{ "snk880.23a",  0x20000, 0xadb6ad68, 4 | BRF_GRA }, // 17
-	{ "snk880.24a",  0x20000, 0xdd41865a, 4 | BRF_GRA }, // 18
-	{ "snk880.25a",  0x20000, 0x055759ad, 4 | BRF_GRA }, // 19
-	{ "snk880.26a",  0x20000, 0x9bc261c5, 4 | BRF_GRA }, // 20
+	{ "snk88011a.1a",  	0x20000, 0xe70fd906, 4 | BRF_GRA }, //  5 Sprites
+	{ "snk88012a.1b",  	0x20000, 0x628b1aed, 4 | BRF_GRA }, //  6
+	{ "snk88013a.1c",  	0x20000, 0x19dc8868, 4 | BRF_GRA }, //  7
+	{ "snk88014a.1d",  	0x20000, 0x47cd498b, 4 | BRF_GRA }, //  8
+	{ "snk88015a.2a",  	0x20000, 0x7a90e957, 4 | BRF_GRA }, //  9
+	{ "snk88016a.2b",  	0x20000, 0xe40a6c13, 4 | BRF_GRA }, // 10
+	{ "snk88017a.2c",  	0x20000, 0xc7931cc2, 4 | BRF_GRA }, // 11
+	{ "snk88018a.2d",  	0x20000, 0xeed72232, 4 | BRF_GRA }, // 12
+	{ "snk88019a.3a",  	0x20000, 0x1775b8dd, 4 | BRF_GRA }, // 13
+	{ "snk88020a.3b",  	0x20000, 0xf8e752ec, 4 | BRF_GRA }, // 14
+	{ "snk88021a.3c",  	0x20000, 0x27e9fffe, 4 | BRF_GRA }, // 15
+	{ "snk88022a.3d",  	0x20000, 0xaa9c00d8, 4 | BRF_GRA }, // 16
+	{ "snk88023a.4a",  	0x20000, 0xadb6ad68, 4 | BRF_GRA }, // 17
+	{ "snk88024a.4b",  	0x20000, 0xdd41865a, 4 | BRF_GRA }, // 18
+	{ "snk88025a.4c",  	0x20000, 0x055759ad, 4 | BRF_GRA }, // 19
+	{ "snk88026a.4d",  	0x20000, 0x9bc261c5, 4 | BRF_GRA }, // 20
 
-	{ "dg7.d20",     0x10000, 0xaba9a9d3, 5 | BRF_SND }, // 21 upd7759 samples
+	{ "dg7.d20",     	0x10000, 0xaba9a9d3, 5 | BRF_SND }, // 21 upd7759 samples
 
-	{ "pal20l10.a6", 0x000cc, 0xc3d9e729, 0 | BRF_OPT }, // 22 pld
+	{ "pal20l10.a6", 	0x000cc, 0xc3d9e729, 0 | BRF_OPT }, // 22 pld
 };
 
 STD_ROM_PICK(pow)
@@ -1639,8 +1670,43 @@ struct BurnDriver BurnDrvpow = {
 	"pow", NULL, NULL, NULL, "1988",
 	"P.O.W. - Prisoners of War (US version 1)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
 	NULL, powRomInfo, powRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PowDIPInfo,
+	powInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
+	&DrvRecalc, 0x800, 256, 224, 4, 3
+};
+
+
+// P.O.W. - Prisoners of War (US version 1, mask ROM sprites)
+
+static struct BurnRomInfo powaRomDesc[] = {
+	{ "dg1ver1.j14", 	0x20000, 0x8e71a8af, 1 | BRF_PRG }, //  0 68k Code
+	{ "dg2ver1.l14", 	0x20000, 0x4287affc, 1 | BRF_PRG }, //  1
+
+	{ "dg8.e25",     	0x10000, 0xd1d61da3, 2 | BRF_PRG }, //  2 Z80 Code
+
+	{ "dg9.l25",     	0x08000, 0xdf864a08, 3 | BRF_GRA }, //  3 Characters
+	{ "dg10.m25",    	0x08000, 0x9e470d53, 3 | BRF_GRA }, //  4
+
+	{ "pow8804_w50.4",  0x80000, 0x18fd04a3, 4 | BRF_GRA }, //  5 Sprites
+	{ "pow8806_w52.6",  0x80000, 0x09b654e9, 4 | BRF_GRA }, //  6
+	{ "pow8803_w49.3",  0x80000, 0xf68712a3, 4 | BRF_GRA }, //  7
+	{ "pow8805_w51.5",  0x80000, 0x8595cf76, 4 | BRF_GRA }, //  8
+	
+	{ "dg7.d20",     	0x10000, 0xaba9a9d3, 5 | BRF_SND }, //  9 upd7759 samples
+
+	{ "pal20l10.a6", 	0x000cc, 0xc3d9e729, 0 | BRF_OPT }, // 10 pld
+};
+
+STD_ROM_PICK(powa)
+STD_ROM_FN(powa)
+
+struct BurnDriver BurnDrvpowa = {
+	"powa", "pow", NULL, NULL, "1988",
+	"P.O.W. - Prisoners of War (US version 1, mask ROM sprites)\0", NULL, "SNK", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
+	NULL, powaRomInfo, powaRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PowDIPInfo,
 	powInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
 };
@@ -1649,34 +1715,34 @@ struct BurnDriver BurnDrvpow = {
 // Datsugoku - Prisoners of War (Japan)
 
 static struct BurnRomInfo powjRomDesc[] = {
-	{ "1-2",         0x20000, 0x2f17bfb0, 1 | BRF_PRG }, //  0 68k Code
-	{ "2-2",         0x20000, 0xbaa32354, 1 | BRF_PRG }, //  1
+	{ "1-2",         	0x20000, 0x2f17bfb0, 1 | BRF_PRG }, //  0 68k Code
+	{ "2-2",         	0x20000, 0xbaa32354, 1 | BRF_PRG }, //  1
 
-	{ "dg8.e25",     0x10000, 0xd1d61da3, 2 | BRF_PRG }, //  2 Z80 Code
+	{ "dg8.e25",     	0x10000, 0xd1d61da3, 2 | BRF_PRG }, //  2 Z80 Code
 
-	{ "dg9.l25",     0x08000, 0xdf864a08, 3 | BRF_GRA }, //  3 Characters
-	{ "dg10.m25",    0x08000, 0x9e470d53, 3 | BRF_GRA }, //  4
+	{ "dg9.l25",     	0x08000, 0xdf864a08, 3 | BRF_GRA }, //  3 Characters
+	{ "dg10.m25",    	0x08000, 0x9e470d53, 3 | BRF_GRA }, //  4
 
-	{ "snk880.11a",  0x20000, 0xe70fd906, 4 | BRF_GRA }, //  5 Sprites
-	{ "snk880.12a",  0x20000, 0x628b1aed, 4 | BRF_GRA }, //  6
-	{ "snk880.13a",  0x20000, 0x19dc8868, 4 | BRF_GRA }, //  7
-	{ "snk880.14a",  0x20000, 0x47cd498b, 4 | BRF_GRA }, //  8
-	{ "snk880.15a",  0x20000, 0x7a90e957, 4 | BRF_GRA }, //  9
-	{ "snk880.16a",  0x20000, 0xe40a6c13, 4 | BRF_GRA }, // 10
-	{ "snk880.17a",  0x20000, 0xc7931cc2, 4 | BRF_GRA }, // 11
-	{ "snk880.18a",  0x20000, 0xeed72232, 4 | BRF_GRA }, // 12
-	{ "snk880.19a",  0x20000, 0x1775b8dd, 4 | BRF_GRA }, // 13
-	{ "snk880.20a",  0x20000, 0xf8e752ec, 4 | BRF_GRA }, // 14
-	{ "snk880.21a",  0x20000, 0x27e9fffe, 4 | BRF_GRA }, // 15
-	{ "snk880.22a",  0x20000, 0xaa9c00d8, 4 | BRF_GRA }, // 16
-	{ "snk880.23a",  0x20000, 0xadb6ad68, 4 | BRF_GRA }, // 17
-	{ "snk880.24a",  0x20000, 0xdd41865a, 4 | BRF_GRA }, // 18
-	{ "snk880.25a",  0x20000, 0x055759ad, 4 | BRF_GRA }, // 19
-	{ "snk880.26a",  0x20000, 0x9bc261c5, 4 | BRF_GRA }, // 20
+	{ "snk88011a.1a",  	0x20000, 0xe70fd906, 4 | BRF_GRA }, //  5 Sprites
+	{ "snk88012a.1b",  	0x20000, 0x628b1aed, 4 | BRF_GRA }, //  6
+	{ "snk88013a.1c",  	0x20000, 0x19dc8868, 4 | BRF_GRA }, //  7
+	{ "snk88014a.1d",  	0x20000, 0x47cd498b, 4 | BRF_GRA }, //  8
+	{ "snk88015a.2a",  	0x20000, 0x7a90e957, 4 | BRF_GRA }, //  9
+	{ "snk88016a.2b",  	0x20000, 0xe40a6c13, 4 | BRF_GRA }, // 10
+	{ "snk88017a.2c",  	0x20000, 0xc7931cc2, 4 | BRF_GRA }, // 11
+	{ "snk88018a.2d",  	0x20000, 0xeed72232, 4 | BRF_GRA }, // 12
+	{ "snk88019a.3a",  	0x20000, 0x1775b8dd, 4 | BRF_GRA }, // 13
+	{ "snk88020a.3b",  	0x20000, 0xf8e752ec, 4 | BRF_GRA }, // 14
+	{ "snk88021a.3c",  	0x20000, 0x27e9fffe, 4 | BRF_GRA }, // 15
+	{ "snk88022a.3d",  	0x20000, 0xaa9c00d8, 4 | BRF_GRA }, // 16
+	{ "snk88023a.4a",  	0x20000, 0xadb6ad68, 4 | BRF_GRA }, // 17
+	{ "snk88024a.4b",  	0x20000, 0xdd41865a, 4 | BRF_GRA }, // 18
+	{ "snk88025a.4c",  	0x20000, 0x055759ad, 4 | BRF_GRA }, // 19
+	{ "snk88026a.4d",  	0x20000, 0x9bc261c5, 4 | BRF_GRA }, // 20
 
-	{ "dg7.d20",     0x10000, 0xaba9a9d3, 5 | BRF_SND }, // 21 upd7759 samples
+	{ "dg7.d20",     	0x10000, 0xaba9a9d3, 5 | BRF_SND }, // 21 upd7759 samples
 
-	{ "pal20l10.a6", 0x000cc, 0xc3d9e729, 0 | BRF_OPT }, // 22 pld
+	{ "pal20l10.a6", 	0x000cc, 0xc3d9e729, 0 | BRF_OPT }, // 22 pld
 };
 
 STD_ROM_PICK(powj)
@@ -1686,7 +1752,7 @@ struct BurnDriver BurnDrvpowj = {
 	"powj", "pow", NULL, NULL, "1988",
 	"Datsugoku - Prisoners of War (Japan)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_SCRFIGHT, 0,
 	NULL, powjRomInfo, powjRomName, NULL, NULL, NULL, NULL, DrvInputInfo, PowjDIPInfo,
 	powInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
@@ -1728,7 +1794,7 @@ struct BurnDriver BurnDrvsearchar = {
 	"searchar", NULL, NULL, NULL, "1989",
 	"SAR - Search And Rescue (World)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, searcharRomInfo, searcharRomName, NULL, NULL, NULL, NULL, IkariInputInfo, SarDIPInfo,
 	searcharInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 224, 256, 3, 4
@@ -1765,7 +1831,7 @@ struct BurnDriver BurnDrvsercharu = {
 	"searcharu", "searchar", NULL, NULL, "1989",
 	"SAR - Search And Rescue (US)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, sercharuRomInfo, sercharuRomName, NULL, NULL, NULL, NULL, IkariInputInfo, SarDIPInfo,
 	searcharInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 224, 256, 3, 4
@@ -1800,9 +1866,9 @@ STD_ROM_FN(sercharj)
 
 struct BurnDriver BurnDrvsercharj = {
 	"searcharj", "searchar", NULL, NULL, "1989",
-	"SAR - Search And Rescue (Japan)\0", NULL, "SNK", "Miscellaneous",
+	"SAR - Search And Rescue (Japan version 3)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, sercharjRomInfo, sercharjRomName, NULL, NULL, NULL, NULL, IkariInputInfo, SarDIPInfo,
 	searcharInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 224, 256, 3, 4
@@ -1845,7 +1911,7 @@ struct BurnDriver BurnDrvstreetsm = {
 	"streetsm", NULL, NULL, NULL, "1989",
 	"Street Smart (US version 2)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
 	NULL, streetsmRomInfo, streetsmRomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsmDIPInfo,
 	streetsmInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
@@ -1854,34 +1920,38 @@ struct BurnDriver BurnDrvstreetsm = {
 
 // Street Smart (US version 1)
 
-static struct BurnRomInfo streets1RomDesc[] = {
-	{ "s2-1ver1.9c",  0x20000, 0xb59354c5, 1 | BRF_PRG }, //  0 68k Code
-	{ "s2-2ver1.10c", 0x20000, 0xe448b68b, 1 | BRF_PRG }, //  1
+static struct BurnRomInfo streetsm1RomDesc[] = {
+	{ "s2-1ver1.9c",	0x20000, 0xb59354c5, 1 | BRF_PRG }, //  0 68k Code
+	{ "s2-2ver1.10c",	0x20000, 0xe448b68b, 1 | BRF_PRG }, //  1
 
-	{ "s2-5.16c",     0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
+	{ "s2-5.16c",		0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
 
-	{ "s2-7.15l",     0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
-	{ "s2-8.15m",     0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
+	{ "s2-7.15l",		0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
+	{ "s2-8.15m",		0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
 
-	{ "stsmart.900",  0x80000, 0xa8279a7e, 4 | BRF_GRA }, //  5 Sprites
-	{ "stsmart.902",  0x80000, 0x2f021aa1, 4 | BRF_GRA }, //  6
-	{ "stsmart.904",  0x80000, 0x167346f7, 4 | BRF_GRA }, //  7
-	{ "stsmart.901",  0x80000, 0xc305af12, 4 | BRF_GRA }, //  8
-	{ "stsmart.903",  0x80000, 0x73c16d35, 4 | BRF_GRA }, //  9
-	{ "stsmart.905",  0x80000, 0xa5beb4e2, 4 | BRF_GRA }, // 10
+	{ "stsmart.900",	0x80000, 0xa8279a7e, 4 | BRF_GRA }, //  5 Sprites
+	{ "stsmart.902",	0x80000, 0x2f021aa1, 4 | BRF_GRA }, //  6
+	{ "stsmart.904",	0x80000, 0x167346f7, 4 | BRF_GRA }, //  7
+	{ "stsmart.901",	0x80000, 0xc305af12, 4 | BRF_GRA }, //  8
+	{ "stsmart.903",	0x80000, 0x73c16d35, 4 | BRF_GRA }, //  9
+	{ "stsmart.905",	0x80000, 0xa5beb4e2, 4 | BRF_GRA }, // 10
 
-	{ "s2-6.18d",     0x20000, 0x47db1605, 5 | BRF_SND }, // 11 upd7759 samples
+	{ "s2-6.18d",		0x20000, 0x47db1605, 5 | BRF_SND }, // 11 upd7759 samples
+
+	{ "a6.1n",			0x002dd, 0x5869332c, 0 | BRF_OPT }, // 12 PLDs
+	{ "p-a7.11d",		0x002dd, 0xe46f6fcd, 0 | BRF_OPT }, // 13
+	{ "p-a8.20m",		0x00117, 0x6cd7beac, 0 | BRF_OPT }, // 14
 };
 
-STD_ROM_PICK(streets1)
-STD_ROM_FN(streets1)
+STD_ROM_PICK(streetsm1)
+STD_ROM_FN(streetsm1)
 
-struct BurnDriver BurnDrvstreets1 = {
+struct BurnDriver BurnDrvstreetsm1 = {
 	"streetsm1", "streetsm", NULL, NULL, "1989",
 	"Street Smart (US version 1)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
-	NULL, streets1RomInfo, streets1RomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsmDIPInfo,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
+	NULL, streetsm1RomInfo, streetsm1RomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsmDIPInfo,
 	searcharInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
 };
@@ -1889,34 +1959,38 @@ struct BurnDriver BurnDrvstreets1 = {
 
 // Street Smart (World version 1)
 
-static struct BurnRomInfo streetswRomDesc[] = {
-	{ "s-smart1.bin", 0x20000, 0xa1f5ceab, 1 | BRF_PRG }, //  0 68k Code
-	{ "s-smart2.bin", 0x20000, 0x263f615d, 1 | BRF_PRG }, //  1
+static struct BurnRomInfo streetsmwRomDesc[] = {
+	{ "s-smart1.bin",	0x20000, 0xa1f5ceab, 1 | BRF_PRG }, //  0 68k Code
+	{ "s-smart2.bin",	0x20000, 0x263f615d, 1 | BRF_PRG }, //  1
 
-	{ "s2-5.16c",     0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
+	{ "s2-5.16c",		0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
 
-	{ "s2-7.15l",     0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
-	{ "s2-8.15m",     0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
+	{ "s2-7.15l",		0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
+	{ "s2-8.15m",		0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
 
-	{ "stsmart.900",  0x80000, 0xa8279a7e, 4 | BRF_GRA }, //  5 Sprites
-	{ "stsmart.902",  0x80000, 0x2f021aa1, 4 | BRF_GRA }, //  6
-	{ "stsmart.904",  0x80000, 0x167346f7, 4 | BRF_GRA }, //  7
-	{ "stsmart.901",  0x80000, 0xc305af12, 4 | BRF_GRA }, //  8
-	{ "stsmart.903",  0x80000, 0x73c16d35, 4 | BRF_GRA }, //  9
-	{ "stsmart.905",  0x80000, 0xa5beb4e2, 4 | BRF_GRA }, // 10
+	{ "stsmart.900",	0x80000, 0xa8279a7e, 4 | BRF_GRA }, //  5 Sprites
+	{ "stsmart.902",	0x80000, 0x2f021aa1, 4 | BRF_GRA }, //  6
+	{ "stsmart.904",	0x80000, 0x167346f7, 4 | BRF_GRA }, //  7
+	{ "stsmart.901",	0x80000, 0xc305af12, 4 | BRF_GRA }, //  8
+	{ "stsmart.903",	0x80000, 0x73c16d35, 4 | BRF_GRA }, //  9
+	{ "stsmart.905",	0x80000, 0xa5beb4e2, 4 | BRF_GRA }, // 10
 
-	{ "s2-6.18d",     0x20000, 0x47db1605, 5 | BRF_SND }, // 11 upd7759 samples
+	{ "s2-6.18d",		0x20000, 0x47db1605, 5 | BRF_SND }, // 11 upd7759 samples
+
+	{ "a6.1n",			0x002dd, 0x5869332c, 0 | BRF_OPT }, // 12 PLDs
+	{ "p-a7.11d",		0x002dd, 0xe46f6fcd, 0 | BRF_OPT }, // 13
+	{ "p-a8.20m",		0x00117, 0x6cd7beac, 0 | BRF_OPT }, // 14
 };
 
-STD_ROM_PICK(streetsw)
-STD_ROM_FN(streetsw)
+STD_ROM_PICK(streetsmw)
+STD_ROM_FN(streetsmw)
 
-struct BurnDriver BurnDrvstreetsw = {
+struct BurnDriver BurnDrvstreetsmw = {
 	"streetsmw", "streetsm", NULL, NULL, "1989",
 	"Street Smart (World version 1)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
-	NULL, streetswRomInfo, streetswRomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsjDIPInfo,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
+	NULL, streetsmwRomInfo, streetsmwRomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsmjDIPInfo,
 	searcharInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
 };
@@ -1924,39 +1998,133 @@ struct BurnDriver BurnDrvstreetsw = {
 
 // Street Smart (Japan version 1)
 
-static struct BurnRomInfo streetsjRomDesc[] = {
-	{ "s2v1j_01.bin", 0x20000, 0xf031413c, 1 | BRF_PRG }, //  0 68k Code
-	{ "s2v1j_02.bin", 0x20000, 0xe403a40b, 1 | BRF_PRG }, //  1
+static struct BurnRomInfo streetsmjRomDesc[] = {
+	{ "s2v1j_01.bin",	0x20000, 0xf031413c, 1 | BRF_PRG }, //  0 68k Code
+	{ "s2v1j_02.bin",	0x20000, 0xe403a40b, 1 | BRF_PRG }, //  1
 
-	{ "s2-5.16c",     0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
+	{ "s2-5.16c",		0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
 
-	{ "s2-7.15l",     0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
-	{ "s2-8.15m",     0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
+	{ "s2-7.15l",		0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
+	{ "s2-8.15m",		0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
 
-	{ "stsmart.900",  0x80000, 0xa8279a7e, 4 | BRF_GRA }, //  5 Sprites
-	{ "stsmart.902",  0x80000, 0x2f021aa1, 4 | BRF_GRA }, //  6
-	{ "stsmart.904",  0x80000, 0x167346f7, 4 | BRF_GRA }, //  7
-	{ "stsmart.901",  0x80000, 0xc305af12, 4 | BRF_GRA }, //  8
-	{ "stsmart.903",  0x80000, 0x73c16d35, 4 | BRF_GRA }, //  9
-	{ "stsmart.905",  0x80000, 0xa5beb4e2, 4 | BRF_GRA }, // 10
+	{ "stsmart.900",	0x80000, 0xa8279a7e, 4 | BRF_GRA }, //  5 Sprites
+	{ "stsmart.902",	0x80000, 0x2f021aa1, 4 | BRF_GRA }, //  6
+	{ "stsmart.904",	0x80000, 0x167346f7, 4 | BRF_GRA }, //  7
+	{ "stsmart.901",	0x80000, 0xc305af12, 4 | BRF_GRA }, //  8
+	{ "stsmart.903",	0x80000, 0x73c16d35, 4 | BRF_GRA }, //  9
+	{ "stsmart.905",	0x80000, 0xa5beb4e2, 4 | BRF_GRA }, // 10
 
-	{ "s2-6.18d",     0x20000, 0x47db1605, 5 | BRF_SND }, // 11 upd7759 samples
+	{ "s2-6.18d",		0x20000, 0x47db1605, 5 | BRF_SND }, // 11 upd7759 samples
+
+	{ "a6.1n",			0x002dd, 0x5869332c, 0 | BRF_OPT }, // 12 PLDs
+	{ "p-a7.11d",		0x002dd, 0xe46f6fcd, 0 | BRF_OPT }, // 13
+	{ "p-a8.20m",		0x00117, 0x6cd7beac, 0 | BRF_OPT }, // 14
 };
 
-STD_ROM_PICK(streetsj)
-STD_ROM_FN(streetsj)
+STD_ROM_PICK(streetsmj)
+STD_ROM_FN(streetsmj)
 
-struct BurnDriver BurnDrvstreetsj = {
+struct BurnDriver BurnDrvstreetsmj = {
 	"streetsmj", "streetsm", NULL, NULL, "1989",
 	"Street Smart (Japan version 1)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
-	NULL, streetsjRomInfo, streetsjRomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsjDIPInfo,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
+	NULL, streetsmjRomInfo, streetsmjRomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsmjDIPInfo,
 	searcharInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
 };
 
-// Ikari III - The Rescue (8-Way Joystick)
+
+// Street Smart (bootleg of World version 1)
+
+static struct BurnRomInfo streetsmwblRomDesc[] = {
+	{ "1p.1",				0x20000, 0xa1f5ceab, 1 | BRF_PRG }, //  0 68k Code
+	{ "2p.2",				0x20000, 0x263f615d, 1 | BRF_PRG }, //  1
+
+	{ "3s.3",				0x10000, 0xca4b171e, 2 | BRF_PRG }, //  2 Z80 Code
+
+	{ "5c.5",				0x08000, 0x22bedfe5, 3 | BRF_GRA }, //  3 Characters
+	{ "6c.6",				0x08000, 0x6a1c70ab, 3 | BRF_GRA }, //  4
+
+	{ "24l.24",				0x10000, 0x01cd7ae0, 4 | BRF_GRA }, //  5 Sprites
+	{ "15l.15",				0x10000, 0x9c81fcbe, 4 | BRF_GRA }, //  6
+	{ "23l.23",				0x10000, 0x441cd7a2, 4 | BRF_GRA }, //  7
+	{ "14l.14",				0x10000, 0x4741c5ad, 4 | BRF_GRA }, //  8
+	{ "22l.22",				0x10000, 0xe1da555c, 4 | BRF_GRA }, //  9
+	{ "13l.13",				0x10000, 0x00861423, 4 | BRF_GRA }, // 10
+	{ "21l.21",				0x10000, 0xf36b4997, 4 | BRF_GRA }, // 11
+	{ "12l.12",				0x10000, 0xccaed9aa, 4 | BRF_GRA }, // 12
+	{ "20l.20",				0x10000, 0x12bc66ee, 4 | BRF_GRA }, // 13
+	{ "11l.11",				0x10000, 0x49e545a2, 4 | BRF_GRA }, // 14
+	{ "19l.19",				0x10000, 0x8f2f601d, 4 | BRF_GRA }, // 15
+	{ "10l.10",				0x10000, 0xfe486cbf, 4 | BRF_GRA }, // 16
+	{ "18l.18",				0x10000, 0x6ac354cb, 4 | BRF_GRA }, // 17
+	{ "9l.9",				0x10000, 0xcf6f140d, 4 | BRF_GRA }, // 18
+	{ "17l.17",				0x10000, 0x34aa51b1, 4 | BRF_GRA }, // 19
+	{ "8l.8",				0x10000, 0x28f1bdc4, 4 | BRF_GRA }, // 20
+	{ "6l.6",				0x10000, 0x56ebc520, 4 | BRF_GRA }, // 21
+	{ "4l.4",				0x10000, 0x54dc8dae, 4 | BRF_GRA }, // 22
+	{ "5l.5",				0x10000, 0x9943ce65, 4 | BRF_GRA }, // 23
+	{ "3l.3",				0x10000, 0x596e388e, 4 | BRF_GRA }, // 24
+	{ "16l.16",				0x10000, 0x7599dbb5, 4 | BRF_GRA }, // 25
+	{ "24r.24",				0x10000, 0x58099ef5, 4 | BRF_GRA }, // 26
+	{ "7l.7",				0x10000, 0xb36db591, 4 | BRF_GRA }, // 27
+	{ "15r.15",				0x10000, 0x2e9b47c5, 4 | BRF_GRA }, // 28
+	{ "32r.32",				0x10000, 0x376f0976, 4 | BRF_GRA }, // 29
+	{ "23r.23",				0x10000, 0xf5edc139, 4 | BRF_GRA }, // 30
+	{ "31r.31",				0x10000, 0x72901ea3, 4 | BRF_GRA }, // 31
+	{ "22r.22",				0x10000, 0xf1cda176, 4 | BRF_GRA }, // 32
+	{ "30r.30",				0x10000, 0x7084e2e2, 4 | BRF_GRA }, // 33
+	{ "21r.21",				0x10000, 0x19a6ad20, 4 | BRF_GRA }, // 34
+	{ "29r.29",				0x10000, 0x9a498dab, 4 | BRF_GRA }, // 35
+	{ "20r.20",				0x10000, 0xea28d8e5, 4 | BRF_GRA }, // 36
+	{ "28r.28",				0x10000, 0x3ca47063, 4 | BRF_GRA }, // 37
+	{ "19r.19",				0x10000, 0xc108820f, 4 | BRF_GRA }, // 38
+	{ "27r.27",				0x10000, 0x6986db59, 4 | BRF_GRA }, // 39
+	{ "18r.18",				0x10000, 0xa078895c, 4 | BRF_GRA }, // 40
+	{ "26r.26",				0x10000, 0x886a57ee, 4 | BRF_GRA }, // 41
+	{ "17r.17",				0x10000, 0xaf1e58e4, 4 | BRF_GRA }, // 42
+	{ "25r.25",				0x10000, 0x9fe6e970, 4 | BRF_GRA }, // 43
+	{ "16r.16",				0x10000, 0x466b39b7, 4 | BRF_GRA }, // 44
+	{ "14r.14",				0x10000, 0xe9697bd1, 4 | BRF_GRA }, // 45
+	{ "12r.12",				0x10000, 0x8307f243, 4 | BRF_GRA }, // 46
+	{ "13r.13",				0x10000, 0x3255af03, 4 | BRF_GRA }, // 47
+	{ "11r.11",				0x10000, 0x5bad15c1, 4 | BRF_GRA }, // 48
+	{ "8r.8",				0x10000, 0x9c52f1ea, 4 | BRF_GRA }, // 49
+	{ "9r.9",				0x10000, 0x380dcee5, 4 | BRF_GRA }, // 50
+	{ "7r.7",				0x10000, 0x0c474722, 4 | BRF_GRA }, // 51
+	{ "10r.10",				0x10000, 0x9d617689, 4 | BRF_GRA }, // 52
+
+	{ "4s.4",				0x20000, 0x47db1605, 5 | BRF_SND }, // 53 upd7759 samples
+
+	{ "pal20l8acns.pal1",	0x00144, 0xf31415c9, 0 | BRF_OPT }, // 54 PLDs
+	{ "pal20l10acns.pal2",	0x000cc, 0x1cadf26d, 0 | BRF_OPT }, // 55
+	{ "pal20l10acns.pal3",	0x000cc, 0xc3d9e729, 0 | BRF_OPT }, // 56
+	{ "pal16p8acn.pal4",	0x00104, 0xe258b8d6, 0 | BRF_OPT }, // 57
+};
+
+STD_ROM_PICK(streetsmwbl)
+STD_ROM_FN(streetsmwbl)
+
+static INT32 streetsmwblInit()
+{
+	streetsmwbl = 1;
+
+	return searcharInit();
+}
+
+struct BurnDriver BurnDrvStreetsmwbl = {
+	"streetsmwbl", "streetsm", NULL, NULL, "1989",
+	"Street Smart (bootleg of World version 1)\0", NULL, "bootleg", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VSFIGHT, 0,
+	NULL, streetsmwblRomInfo, streetsmwblRomName, NULL, NULL, NULL, NULL, DrvInputInfo, StreetsmjDIPInfo,
+	streetsmwblInit, DrvExit, DrvFrame, DrvDraw, DrvScan,
+	&DrvRecalc, 0x800, 256, 224, 4, 3
+};
+
+
+// Ikari III - The Rescue (World version 1, 8-Way Joystick)
 
 static struct BurnRomInfo ikari3RomDesc[] = {
 	{ "ik3-2-ver1.c10", 0x20000, 0x1bae8023, 1 | BRF_PRG }, //  0 68k Code
@@ -2003,9 +2171,9 @@ static INT32 ikari3Init()
 
 struct BurnDriver BurnDrvikari3 = {
 	"ikari3", NULL, NULL, NULL, "1989",
-	"Ikari III - The Rescue (8-Way Joystick)\0", NULL, "SNK", "Miscellaneous",
+	"Ikari III - The Rescue (World version 1, 8-Way Joystick)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, ikari3RomInfo, ikari3RomName, NULL, NULL, NULL, NULL, IkariInputInfo, IkariDIPInfo,
 	ikari3Init, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
@@ -2055,13 +2223,13 @@ struct BurnDriver BurnDrvikari3u = {
 	"ikari3u", "ikari3", NULL, NULL, "1989",
 	"Ikari III - The Rescue (US, Rotary Joystick)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, ikari3uRomInfo, ikari3uRomName, NULL, NULL, NULL, NULL, IkariInputInfo, IkariDIPInfo,
 	ikari3Init, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
 };
 
-// Ikari Three - The Rescue (Japan, Rotary Joystick)
+// Ikari Three (Japan, Rotary Joystick)
 
 static struct BurnRomInfo ikari3jRomDesc[] = {
 	{ "ik3-2-j.c10",  0x20000, 0x7b1b4be4, 1 | BRF_PRG }, //  0 68k Code
@@ -2103,15 +2271,15 @@ STD_ROM_FN(ikari3j)
 
 struct BurnDriver BurnDrvikari3j = {
 	"ikari3j", "ikari3", NULL, NULL, "1989",
-	"Ikari Three - The Rescue (Japan, Rotary Joystick)\0", NULL, "SNK", "Miscellaneous",
+	"Ikari Three (Japan, Rotary Joystick)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, ikari3jRomInfo, ikari3jRomName, NULL, NULL, NULL, NULL, IkariInputInfo, IkariDIPInfo,
 	ikari3Init, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
 };
 
-// Ikari III - The Rescue (Korea, 8-Way Joystick)
+// Ikari Three (Korea, 8-Way Joystick)
 
 static struct BurnRomInfo ikari3kRomDesc[] = {
 	{ "ik3-2k.c10", 		0x20000, 0xa15d2222, 1 | BRF_PRG }, //  0 68k Code
@@ -2141,9 +2309,9 @@ STD_ROM_FN(ikari3k)
 
 struct BurnDriver BurnDrvikari3k = {
 	"ikari3k", "ikari3", NULL, NULL, "1989",
-	"Ikari III - The Rescue (Korea, 8-Way Joystick)\0", NULL, "SNK", "Miscellaneous",
+	"Ikari Three (Korea, 8-Way Joystick)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, ikari3kRomInfo, ikari3kRomName, NULL, NULL, NULL, NULL, IkariInputInfo, IkariDIPInfo,
 	ikari3Init, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3
@@ -2186,7 +2354,7 @@ struct BurnDriver BurnDrvikari3w = {
 	"ikari3w", "ikari3", NULL, NULL, "1989",
 	"Ikari III - The Rescue (World, Rotary Joystick)\0", NULL, "SNK", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_RUNGUN, 0,
 	NULL, ikari3wRomInfo, ikari3wRomName, NULL, NULL, NULL, NULL, IkariInputInfo, IkariDIPInfo,
 	ikari3Init, DrvExit, DrvFrame, DrvDraw, DrvScan,
 	&DrvRecalc, 0x800, 256, 224, 4, 3

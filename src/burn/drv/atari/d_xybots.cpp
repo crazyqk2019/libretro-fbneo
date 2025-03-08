@@ -96,7 +96,7 @@ static void __fastcall xybots_main_write_word(UINT32 address, UINT16 data)
 {
 	if ((address & 0xfffc00) == 0xffac00) {
 		address = 0x1c00 + (address & 0x3fe);
-		*((UINT16*)(Drv68KRAM + address)) = data;
+		*((UINT16*)(Drv68KRAM + address)) = BURN_ENDIAN_SWAP_INT16(data);
 		if (address >= 0x1e00) {
 			AtariMoWrite(0, (address / 2) & 0xff, data);
 		}
@@ -134,7 +134,7 @@ static void __fastcall xybots_main_write_byte(UINT32 address, UINT8 data)
 		address = 0x1c00 + (address & 0x3ff);
 		Drv68KRAM[address^1] = data;
 		if (address >= 0x1e00) {
-			AtariMoWrite(0, (address / 2) & 0xff, *((UINT16*)(Drv68KRAM + (address & ~1))));
+			AtariMoWrite(0, (address / 2) & 0xff, BURN_ENDIAN_SWAP_INT16(*((UINT16*)(Drv68KRAM + (address & ~1)))));
 		}
 		return;
 	}
@@ -212,14 +212,14 @@ static UINT8 __fastcall xybots_main_read_byte(UINT32 address)
 
 static tilemap_callback( alpha )
 {
-	INT32 data = *((UINT16*)(DrvAlphaRAM + offs * 2));
+	INT32 data = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvAlphaRAM + offs * 2)));
 
 	TILE_SET_INFO(2, data, data >> 12, (data & 0x8000) ? TILE_OPAQUE : 0);
 }
 
 static tilemap_callback( bg )
 {
-	INT32 data = *((UINT16*)(DrvPfRAM + offs * 2));
+	INT32 data = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPfRAM + offs * 2)));
 
 	TILE_SET_INFO(0, data, data >> 11, TILE_FLIPYX(data >> 15));
 }
@@ -242,6 +242,8 @@ static INT32 DrvDoReset(INT32 clear_mem)
 
 	video_int_state = 0;
 	h256_flip = 0x400;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -537,8 +539,8 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-		nCyclesDone[0] += SekRun(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
-		nCyclesDone[1] += M6502Run(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+		CPU_RUN(0, Sek);
+		CPU_RUN(1, M6502);
 
 		if (i == 239) {
 			vblank = 1;
@@ -638,7 +640,7 @@ struct BurnDriver BurnDrvXybots = {
 	"xybots", NULL, NULL, NULL, "1987",
 	"Xybots (rev 2)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_SHOOT, 0,
 	NULL, xybotsRomInfo, xybotsRomName, NULL, NULL, NULL, NULL, XybotsInputInfo, XybotsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	336, 240, 4, 3
@@ -677,7 +679,7 @@ struct BurnDriver BurnDrvXybotsg = {
 	"xybotsg", "xybots", NULL, NULL, "1987",
 	"Xybots (German, rev 3)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_SHOOT, 0,
 	NULL, xybotsgRomInfo, xybotsgRomName, NULL, NULL, NULL, NULL, XybotsInputInfo, XybotsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	336, 240, 4, 3
@@ -716,7 +718,7 @@ struct BurnDriver BurnDrvXybotsf = {
 	"xybotsf", "xybots", NULL, NULL, "1987",
 	"Xybots (French, rev 3)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_SHOOT, 0,
 	NULL, xybotsfRomInfo, xybotsfRomName, NULL, NULL, NULL, NULL, XybotsInputInfo, XybotsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	336, 240, 4, 3
@@ -755,7 +757,7 @@ struct BurnDriver BurnDrvXybots1 = {
 	"xybots1", "xybots", NULL, NULL, "1987",
 	"Xybots (rev 1)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_SHOOT, 0,
 	NULL, xybots1RomInfo, xybots1RomName, NULL, NULL, NULL, NULL, XybotsInputInfo, XybotsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	336, 240, 4, 3
@@ -794,7 +796,7 @@ struct BurnDriver BurnDrvXybots0 = {
 	"xybots0", "xybots", NULL, NULL, "1987",
 	"Xybots (rev 0)\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE | GBF_SHOOT, 0,
 	NULL, xybots0RomInfo, xybots0RomName, NULL, NULL, NULL, NULL, XybotsInputInfo, XybotsDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x400,
 	336, 240, 4, 3

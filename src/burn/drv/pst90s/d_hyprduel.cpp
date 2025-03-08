@@ -216,6 +216,9 @@ static void __fastcall hyperduel_main_sync_write_word(UINT32 address, UINT16 dat
 	SEK_DEF_WRITE_WORD(1, address, data)
 }
 
+// saving just in-case -dink
+// #define DEBUG_SYNC
+
 static void __fastcall hyperduel_main_sync_write_byte(UINT32 address, UINT8 data)
 {
 	if ((address & 0xff8000) == 0xc00000) {
@@ -225,11 +228,13 @@ static void __fastcall hyperduel_main_sync_write_byte(UINT32 address, UINT8 data
 
 		if (address >= 0x040e && address <= 0x0411)
 		{
-			if (ram[0x40e/2] + ram[0x410/2])
+			if (BURN_ENDIAN_SWAP_INT16(ram[0x40e/2]) + BURN_ENDIAN_SWAP_INT16(ram[0x410/2]))
 			{
 				if (cpu_trigger == 0 && SekGetRESETLine(1) == 0)
 				{
+#ifdef DEBUG_SYNC
 					bprintf(0, _T("SP1. "));
+#endif
 					SekSetHALT(0, 1);
 					cpu_trigger = 1;
 				}
@@ -241,7 +246,9 @@ static void __fastcall hyperduel_main_sync_write_byte(UINT32 address, UINT8 data
 		{
 			if (cpu_trigger == 0 && SekGetRESETLine(1) == 0)
 			{
+#ifdef DEBUG_SYNC
 				bprintf(0, _T("SP2. "));
+#endif
 				SekSetHALT(0, 1);
 				cpu_trigger = 2;
 			}
@@ -264,7 +271,9 @@ static UINT8 __fastcall hyperduel_sub_sync_read_byte(UINT32 address)
 		{
 			if (cpu_trigger == 1)
 			{
+#ifdef DEBUG_SYNC
 				bprintf(0, _T("sp1. "));
+#endif
 				SekSetHALT(0, 0);
 				cpu_trigger = 0;
 			}
@@ -280,7 +289,9 @@ static UINT8 __fastcall hyperduel_sub_sync_read_byte(UINT32 address)
 		{
 			if (cpu_trigger == 2)
 			{
+#ifdef DEBUG_SYNC
 				bprintf(0, _T("sp2. "));
+#endif
 				SekSetHALT(0, 0);
 				cpu_trigger = 0;
 			}
@@ -438,6 +449,8 @@ static INT32 DrvDoReset()
 
 	nExtraCycles[0] = nExtraCycles[1] = 0;
 
+	HiscoreReset();
+	
 	return 0;
 }
 
@@ -503,8 +516,8 @@ static INT32 HyprduelInit()
 	SekMapHandler(1, 						0xc00400, 0xc007ff, MAP_WRITE);
 	SekSetWriteWordHandler(1,				hyperduel_main_sync_write_word);
 	SekSetWriteByteHandler(1,				hyperduel_main_sync_write_byte);
-	
-	i4x00_init(0x400000, DrvGfxROM[0], DrvGfxROM[1], 0x400000, irq_cause_write, irq_cause_read, NULL, 1, 0);
+
+	i4x00_init(10000000, 0x400000, DrvGfxROM[0], DrvGfxROM[1], 0x400000, irq_cause_write, irq_cause_read, NULL, 1, 0);
 
 	SekClose();
 
@@ -529,14 +542,14 @@ static INT32 HyprduelInit()
 
 	int_num = 0x02;
 
-	BurnYM2151Init(4000000, 1);
+	BurnYM2151InitBuffered(4000000, 1, NULL, 0);
 	BurnTimerAttachSek(10000000);
 	BurnYM2151SetIrqHandler(&DrvYM2151IrqHandler);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 0.45, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 0.45, BURN_SND_ROUTE_RIGHT);
 
 	MSM6295Init(0, 2062500 / MSM6295_PIN7_HIGH, 1);
-	MSM6295SetRoute(0, 0.47, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(0, 0.37, BURN_SND_ROUTE_BOTH);
 
 	GenericTilesInit();
 
@@ -579,9 +592,9 @@ static INT32 MagerrorInit()
 	SekSetWriteByteHandler(0,				hyperduel_main_write_byte);
 	SekSetReadWordHandler(0,				hyperduel_main_read_word);
 	SekSetReadByteHandler(0,				hyperduel_main_read_byte);
-	
-	i4x00_init(0x800000, DrvGfxROM[0], DrvGfxROM[1], 0x400000, irq_cause_write, irq_cause_read, NULL, 1, 0);
-	
+
+	i4x00_init(10000000, 0x800000, DrvGfxROM[0], DrvGfxROM[1], 0x400000, irq_cause_write, irq_cause_read, NULL, 1, 0);
+
 	SekClose();
 
 	SekInit(1, 0x68000);
@@ -668,9 +681,7 @@ static INT32 DrvFrame()
 		}
 	}
 
-	INT32 nSegment;
 	INT32 nInterleave = 256 * 2;
-	INT32 nSoundBufferPos = 0;
 	INT32 nCyclesTotal[2] = { 10000000 / 60, 10000000 / 60 };
 	INT32 nCyclesDone[2] = { nExtraCycles[0], nExtraCycles[1] };
 
@@ -702,17 +713,10 @@ static INT32 DrvFrame()
 
 		SekOpen(1);
 		if (game_select == 0) {
-			BurnTimerUpdate((nCyclesTotal[1] * (i + 1)) / nInterleave);
+			CPU_RUN_TIMER(1);
 		} else {
 			CPU_RUN(1, Sek);
 			if ((i & 0x1f) == 0x1f) SekSetIRQLine(1, CPU_IRQSTATUS_AUTO);
-		}
-
-		if (pBurnSoundOut && (i & 3) == 3 && game_select == 0) {
-			nSegment = nBurnSoundLen / (nInterleave / 4);
-			BurnYM2151Render(pBurnSoundOut + (nSoundBufferPos << 1), nSegment);
-			MSM6295Render(0, pBurnSoundOut + (nSoundBufferPos << 1), nSegment);
-			nSoundBufferPos += nSegment;
 		}
 		SekClose();
 
@@ -725,21 +729,15 @@ static INT32 DrvFrame()
 	i4x00_draw_end();
 
 	SekOpen(1);
-	if (game_select == 0) {
-		BurnTimerEndFrame(nCyclesTotal[1]);
-		if (pBurnSoundOut) {
-			nSegment = nBurnSoundLen - nSoundBufferPos;
-			if (nSegment > 0) {
-				BurnYM2151Render(pBurnSoundOut + (nSoundBufferPos << 1), nSegment);
-				MSM6295Render(0, pBurnSoundOut + (nSoundBufferPos << 1), nSegment);
-			}
+	if (pBurnSoundOut) {
+		if (game_select == 0) {
+			BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
 		}
-	}
-	if (pBurnSoundOut && game_select == 1) {
-		BurnYM2413Render(pBurnSoundOut, nBurnSoundLen);
+		if (game_select == 1) {
+			BurnYM2413Render(pBurnSoundOut, nBurnSoundLen);
+		}
 		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
 	}
-	
 	SekClose();
 
 	nExtraCycles[0] = nCyclesDone[0] - nCyclesTotal[0];
@@ -751,7 +749,7 @@ static INT32 DrvFrame()
 static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 {
 	struct BurnArea ba;
-	
+
 	if (pnMin != NULL) {
 		*pnMin = 0x029698;
 	}
@@ -766,7 +764,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 	if (nAction & ACB_DRIVER_DATA) {
 		SekScan(nAction);
-		
+
 		i4x00_scan(nAction, pnMin);
 
 		if (game_select == 1) {
@@ -779,6 +777,8 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 		SCAN_VAR(cpu_trigger);
 		SCAN_VAR(requested_int);
 		SCAN_VAR(vblank_end_timer);
+
+		SCAN_VAR(nExtraCycles);
 	}
 
 	return 0;
@@ -806,7 +806,7 @@ struct BurnDriver BurnDrvHyprduel = {
 	"hyprduel", NULL, NULL, NULL, "1993",
 	"Hyper Duel (Japan set 1)\0", NULL, "Technosoft", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_HORSHOOT, 0,
 	NULL, hyprduelRomInfo, hyprduelRomName, NULL, NULL, NULL, NULL, HyprduelInputInfo, HyprduelDIPInfo,
 	HyprduelInit, DrvExit, DrvFrame, i4x00_draw, DrvScan, &DrvRecalc, 0x1000,
 	320, 224, 4, 3
@@ -834,7 +834,7 @@ struct BurnDriver BurnDrvHyprduel2 = {
 	"hyprduel2", "hyprduel", NULL, NULL, "1993",
 	"Hyper Duel (Japan set 2)\0", NULL, "Technosoft", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_HORSHOOT, 0,
 	NULL, hyprduel2RomInfo, hyprduel2RomName, NULL, NULL, NULL, NULL, HyprduelInputInfo, HyprduelDIPInfo,
 	HyprduelInit, DrvExit, DrvFrame, i4x00_draw, DrvScan, &DrvRecalc, 0x1000,
 	320, 224, 4, 3

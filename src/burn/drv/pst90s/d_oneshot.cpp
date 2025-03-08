@@ -349,21 +349,21 @@ static tilemap_callback( background )
 {
 	UINT16 *ram = (UINT16*)DrvBgRAM;
 
-	TILE_SET_INFO(0, ram[offs * 2 + 1], 0, 0);
+	TILE_SET_INFO(0, BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 1]), 0, 0);
 }
 
 static tilemap_callback( midground )
 {
 	UINT16 *ram = (UINT16*)DrvMgRAM;
 
-	TILE_SET_INFO(1, ram[offs * 2 + 1], 0, 0);
+	TILE_SET_INFO(1, BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 1]), 0, 0);
 }
 
 static tilemap_callback( foreground )
 {
 	UINT16 *ram = (UINT16*)DrvFgRAM;
 
-	TILE_SET_INFO(2, ram[offs * 2 + 1], 0, 0);
+	TILE_SET_INFO(2, BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 1]), 0, 0);
 }
 
 static void DrvYM3812IrqHandler(INT32, INT32 nStatus)
@@ -385,6 +385,8 @@ static INT32 DrvDoReset()
 	MSM6295Reset(0);
 	BurnYM3812Reset();
 	ZetClose();
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -502,7 +504,7 @@ static INT32 DrvInit(INT32 game_select)
 	ZetClose();
 
 	BurnYM3812Init(1, 3500000, &DrvYM3812IrqHandler, 0);
-	BurnTimerAttachYM3812(&ZetConfig, 5000000);
+	BurnTimerAttach(&ZetConfig, 5000000);
 	BurnYM3812SetRoute(0, BURN_SND_YM3812_ROUTE, 1.00, BURN_SND_ROUTE_BOTH);
 
 	MSM6295Init(0, 1056000 / 132, 1);
@@ -553,9 +555,9 @@ static void DrvPaletteUpdate()
 
 	for (INT32 i = 0; i < 0x800/2; i++)
 	{
-		INT32 r = (p[i] >>  0) & 0x1f;
-		INT32 g = (p[i] >>  5) & 0x1f;
-		INT32 b = (p[i] >> 10) & 0x1f;
+		INT32 r = (BURN_ENDIAN_SWAP_INT16(p[i]) >>  0) & 0x1f;
+		INT32 g = (BURN_ENDIAN_SWAP_INT16(p[i]) >>  5) & 0x1f;
+		INT32 b = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 10) & 0x1f;
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
@@ -571,15 +573,15 @@ static void draw_sprites()
 
 	for (INT32 i = 0; i < 0x1000 / 2; i+=4)
 	{
-		if (source[i + 0] == 0x0001)
+		if (source[i + 0] == BURN_ENDIAN_SWAP_INT16(0x0001))
 			break;
 
-		INT32 num   = (source[i + 1]);
-		INT32 xsize = (source[i + 2] & 0x000f) + 1;
-		INT32 ysize = (source[i + 3] & 0x000f) + 1;
+		INT32 num   = (BURN_ENDIAN_SWAP_INT16(source[i + 1]));
+		INT32 xsize = (BURN_ENDIAN_SWAP_INT16(source[i + 2]) & 0x000f) + 1;
+		INT32 ysize = (BURN_ENDIAN_SWAP_INT16(source[i + 3]) & 0x000f) + 1;
 
-		INT32 xpos  = (source[i + 2] >> 7) - 8;
-		INT32 ypos  = (source[i + 3] >> 7) - 6;
+		INT32 xpos  = (BURN_ENDIAN_SWAP_INT16(source[i + 2]) >> 7) - 8;
+		INT32 ypos  = (BURN_ENDIAN_SWAP_INT16(source[i + 3]) >> 7) - 6;
 
 		for (INT32 blockx = 0; blockx < xsize; blockx++)
 		{
@@ -603,8 +605,8 @@ static INT32 OneshotDraw()
 
 	UINT16 *scroll = (UINT16*)DrvScroll;
 
-	GenericTilemapSetScrollX(1, scroll[0] - 0x1f5);
-	GenericTilemapSetScrollY(1, scroll[1]);
+	GenericTilemapSetScrollX(1, BURN_ENDIAN_SWAP_INT16(scroll[0]) - 0x1f5);
+	GenericTilemapSetScrollY(1, BURN_ENDIAN_SWAP_INT16(scroll[1]));
 
 	BurnTransferClear();
 	
@@ -633,7 +635,7 @@ static INT32 MaddonnaDraw()
 
 	UINT16 *scroll = (UINT16*)DrvScroll;
 
-	GenericTilemapSetScrollY(1, scroll[1]);
+	GenericTilemapSetScrollY(1, BURN_ENDIAN_SWAP_INT16(scroll[1]));
 
 	GenericTilemapDraw(1, pTransDraw, 0);
 	GenericTilemapDraw(2, pTransDraw, 0);
@@ -684,21 +686,19 @@ static INT32 DrvFrame()
 	ZetOpen(0);
 
 	for (INT32 i = 0; i < nInterleave; i++) {
-		nCyclesDone[0] += SekRun(nCyclesTotal[0] / nInterleave);
+		CPU_RUN(0, Sek);
 		if (i == (nInterleave - 1)) SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
 
-		BurnTimerUpdateYM3812((1 + i) * nCyclesTotal[1] / nInterleave);
+		CPU_RUN_TIMER(1);
 	}
 
-	BurnTimerEndFrameYM3812(nCyclesTotal[1]);
+	ZetClose();
+	SekClose();
 
 	if (pBurnSoundOut) {
 		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
 		MSM6295Render(0, pBurnSoundOut, nBurnSoundLen);
 	}
-
-	ZetClose();
-	SekClose();
 
 	if (pBurnDraw) {
 		BurnDrvRedraw();
@@ -788,22 +788,22 @@ struct BurnDriver BurnDrvOneshot = {
 };
 
 
-// Mad Donna (set 1)
+// Mad Donna (Tuning, set 1)
 
 static struct BurnRomInfo maddonnaRomDesc[] = {
-	{ "maddonna.b16",	0x20000, 0x643f9054, 1 | BRF_PRG | BRF_ESS }, //  0 68K code
-	{ "maddonna.b15",	0x20000, 0xe36c0e26, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "maddonna_tmad_b16_160595.ua24",	0x20000, 0x643f9054, 1 | BRF_PRG | BRF_ESS }, //  0 68K code
+	{ "maddonna_tmad_b15_160595.ua22",	0x20000, 0xe36c0e26, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "x13.ua2",		0x10000, 0xf2080071, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 code
+	{ "maddonna_tmad_b13_160595.ua2",	0x10000, 0xf2080071, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 code
 
-	{ "maddonna.b5",	0x80000, 0x838d3244, 3 | BRF_GRA },           //  3 Graphics
-	{ "maddonna.b7",	0x80000, 0x4920d2ec, 3 | BRF_GRA },           //  4
-	{ "maddonna.b9",	0x80000, 0x3a8a3feb, 3 | BRF_GRA },           //  5
-	{ "maddonna.b11",	0x80000, 0x6f9b7fdf, 3 | BRF_GRA },           //  6
-	{ "maddonna.b6",	0x80000, 0xb02e9e0e, 3 | BRF_GRA },           //  7
-	{ "maddonna.b8",	0x80000, 0x03f1de40, 3 | BRF_GRA },           //  8
-	{ "maddonna.b10",	0x80000, 0x87936423, 3 | BRF_GRA },           //  9
-	{ "maddonna.b12",	0x80000, 0x879ab23c, 3 | BRF_GRA },           // 10
+	{ "maddonna_tmad_b5_160595.ui16a",	0x80000, 0x838d3244, 3 | BRF_GRA },           //  3 Graphics
+	{ "maddonna_tmad_b7_160595.ui13a",	0x80000, 0x4920d2ec, 3 | BRF_GRA },           //  4
+	{ "maddonna_tmad_b9_160595.ui11a",	0x80000, 0x3a8a3feb, 3 | BRF_GRA },           //  5
+	{ "maddonna_tmad_b11_160595.ui8a",	0x80000, 0x6f9b7fdf, 3 | BRF_GRA },           //  6
+	{ "maddonna_tmad_b6_160595.ui16",	0x80000, 0xb02e9e0e, 3 | BRF_GRA },           //  7
+	{ "maddonna_tmad_b8_160595.ui13",	0x80000, 0x03f1de40, 3 | BRF_GRA },           //  8
+	{ "maddonna_tmad_b10_160595.ui11",	0x80000, 0x87936423, 3 | BRF_GRA },           //  9
+	{ "maddonna_tmad_b12_160595.ui8",	0x80000, 0x879ab23c, 3 | BRF_GRA },           // 10
 
 	{ "x1",				0x10000, 0x6b213183, 0 | BRF_OPT },           // 11 Unknown
 };
@@ -818,18 +818,18 @@ static INT32 MaddonnaInit()
 
 struct BurnDriver BurnDrvMaddonna = {
 	"maddonna", NULL, NULL, NULL, "1995",
-	"Mad Donna (set 1)\0", NULL, "Tuning", "Miscellaneous",
+	"Mad Donna (Tuning, set 1)\0", NULL, "Promat (Tuning license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
 	NULL, maddonnaRomInfo, maddonnaRomName, NULL, NULL, NULL, NULL, MaddonnaInputInfo, MaddonnaDIPInfo,
 	MaddonnaInit, DrvExit, DrvFrame, MaddonnaDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 240, 4, 3
 };
 
 
-// Mad Donna (set 2)
+// Mad Donna (Tuning, set 2)
 
-static struct BurnRomInfo maddonnbRomDesc[] = {
+static struct BurnRomInfo maddonnabRomDesc[] = {
 	{ "maddonnb.b16",	0x20000, 0x00000000, 1 | BRF_NODUMP | BRF_PRG | BRF_ESS }, //  0 68K code
 	{ "maddonnb.b15",	0x20000, 0x00000000, 1 | BRF_NODUMP | BRF_PRG | BRF_ESS }, //  1
 
@@ -847,15 +847,15 @@ static struct BurnRomInfo maddonnbRomDesc[] = {
 	{ "x1",				0x10000, 0x6b213183, 0 | BRF_OPT },           // 11 Unknown
 };
 
-STD_ROM_PICK(maddonnb)
-STD_ROM_FN(maddonnb)
+STD_ROM_PICK(maddonnab)
+STD_ROM_FN(maddonnab)
 
-struct BurnDriverD BurnDrvMaddonnb = {
-	"maddonnb", "maddonna", NULL, NULL, "1995",
-	"Mad Donna (set 2)\0", NULL, "Tuning", "Miscellaneous",
+struct BurnDriverD BurnDrvMaddonnab = {
+	"maddonnab", "maddonna", NULL, NULL, "1995",
+	"Mad Donna (Tuning, set 2)\0", NULL, "Promat (Tuning license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
 	BDF_CLONE, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
-	NULL, maddonnbRomInfo, maddonnbRomName, NULL, NULL, NULL, NULL, MaddonnaInputInfo, MaddonnaDIPInfo,
+	NULL, maddonnabRomInfo, maddonnabRomName, NULL, NULL, NULL, NULL, MaddonnaInputInfo, MaddonnaDIPInfo,
 	MaddonnaInit, DrvExit, DrvFrame, MaddonnaDraw, DrvScan, &DrvRecalc, 0x400,
 	320, 240, 4, 3
 };

@@ -395,6 +395,8 @@ static INT32 DrvDoReset(INT32 clear_ram)
 
 	watchdog = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -403,7 +405,7 @@ static INT32 MemIndex()
 	UINT8 *Next; Next = AllMem;
 
 	DrvM6809ROM		= Next; Next += 0x010000;
-	DrvM6809DecROM		= Next; Next += 0x010000;
+	DrvM6809DecROM	= Next; Next += 0x010000;
 
 	DrvZ80ROM		= Next; Next += 0x002000;
 
@@ -469,12 +471,7 @@ static INT32 DrvGfxDecode() // 0, 100
 
 static INT32 DrvInit()
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		if (BurnLoadRom(DrvM6809ROM + 0x06000,  0, 1)) return 1;
@@ -570,7 +567,7 @@ static INT32 DrvExit()
 	DACExit();
 	filter_rc_exit();
 
-	BurnFree (AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -634,35 +631,11 @@ static void draw_layer(UINT8 *cram, UINT8 *vram, INT32 xscroll, UINT8 yscroll, I
 		INT32 flipx = attr & 0x40;
 		INT32 flipy = attr & 0x20;
 
-		if (flipy) {
-			if (flipx) {
-				Render8x8Tile_FlipXY_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			} else {
-				Render8x8Tile_FlipY_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			}
-		} else {
-			if (flipx) {
-				Render8x8Tile_FlipX_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			} else {
-				Render8x8Tile_Clip(pTransDraw, code, sx, sy, color, 4, 0x100, DrvGfxROM1);
-			}
-		}
+		Draw8x8Tile(pTransDraw, code, sx, sy, flipx, flipy, color, 4, 0x100, DrvGfxROM1);
 
 		if (sx >= 32 || limit) continue;
 
-		if (flipy) {
-			if (flipx) {
-				Render8x8Tile_FlipXY_Clip(pTransDraw, code, sx+256, sy, color, 4, 0x100, DrvGfxROM1);
-			} else {
-				Render8x8Tile_FlipY_Clip(pTransDraw, code, sx+256, sy, color, 4, 0x100, DrvGfxROM1);
-			}
-		} else {
-			if (flipx) {
-				Render8x8Tile_FlipX_Clip(pTransDraw, code, sx+256, sy, color, 4, 0x100, DrvGfxROM1);
-			} else {
-				Render8x8Tile_Clip(pTransDraw, code, sx+256, sy, color, 4, 0x100, DrvGfxROM1);
-			}
-		}
+		Draw8x8Tile(pTransDraw, code, sx+256, sy, flipx, flipy, color, 4, 0x100, DrvGfxROM1);
 	}
 }
 
@@ -748,7 +721,7 @@ static INT32 DrvFrame()
 		filter_rc_update(0, pAY8910Buffer[0], pBurnSoundOut, nBurnSoundLen);
 		filter_rc_update(1, pAY8910Buffer[1], pBurnSoundOut, nBurnSoundLen);
 		filter_rc_update(2, pAY8910Buffer[2], pBurnSoundOut, nBurnSoundLen);
-
+		BurnSoundDCFilter();
 		DACUpdate(pBurnSoundOut, nBurnSoundLen);
 	}
 
@@ -795,13 +768,14 @@ static INT32 DrvScan(INT32 nAction,INT32 *pnMin)
 		SCAN_VAR(irq_enable);
 		SCAN_VAR(soundlatch);
 		SCAN_VAR(i8039_status);
+		SCAN_VAR(watchdog);
 	}
 
 	return 0;
 }
 
 
-// Mega Zone (program code L)
+// Mega Zone (version L)
 
 static struct BurnRomInfo megazoneRomDesc[] = {
 	{ "319_l07.11h",	0x2000, 0x73b616ca, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -834,16 +808,16 @@ STD_ROM_FN(megazone)
 
 struct BurnDriver BurnDrvMegazone = {
 	"megazone", NULL, NULL, NULL, "1983",
-	"Mega Zone (program code L)\0", NULL, "Konami", "GX319",
+	"Mega Zone (version L)\0", NULL, "Konami", "GX319",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
 	NULL, megazoneRomInfo, megazoneRomName, NULL, NULL, NULL, NULL, MegazoneInputInfo, MegazoneDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
 };
 
 
-// Mega Zone (program code J)
+// Mega Zone (version J)
 // Interlogic + Kosuka license set
 
 static struct BurnRomInfo megazonejRomDesc[] = {
@@ -877,16 +851,16 @@ STD_ROM_FN(megazonej)
 
 struct BurnDriver BurnDrvMegazonej = {
 	"megazonej", "megazone", NULL, NULL, "1983",
-	"Mega Zone (program code J)\0", NULL, "Konami (Interlogic / Kosuka license)", "GX319",
+	"Mega Zone (version J)\0", NULL, "Konami (Interlogic / Kosuka license)", "GX319",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
 	NULL, megazonejRomInfo, megazonejRomName, NULL, NULL, NULL, NULL, MegazoneInputInfo, MegazoneDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
 };
 
 
-// Mega Zone (program code I)
+// Mega Zone (version I)
 
 static struct BurnRomInfo megazoneiRomDesc[] = {
 	{ "319_i07.11h",	0x2000, 0x94b22ea8, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -919,16 +893,16 @@ STD_ROM_FN(megazonei)
 
 struct BurnDriver BurnDrvMegazonei = {
 	"megazonei", "megazone", NULL, NULL, "1983",
-	"Mega Zone (program code I)\0", NULL, "Konami", "GX319",
+	"Mega Zone (version I)\0", NULL, "Konami", "GX319",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
 	NULL, megazoneiRomInfo, megazoneiRomName, NULL, NULL, NULL, NULL, MegazoneInputInfo, MegazoneDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
 };
 
 
-// Mega Zone (program code H)
+// Mega Zone (version H)
 // Kosuka license set
 
 static struct BurnRomInfo megazonehRomDesc[] = {
@@ -962,16 +936,16 @@ STD_ROM_FN(megazoneh)
 
 struct BurnDriver BurnDrvMegazoneh = {
 	"megazoneh", "megazone", NULL, NULL, "1983",
-	"Mega Zone (program code H)\0", NULL, "Konami (Kosuka license)", "GX319",
+	"Mega Zone (version H)\0", NULL, "Konami (Kosuka license)", "GX319",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
 	NULL, megazonehRomInfo, megazonehRomName, NULL, NULL, NULL, NULL, MegazoneInputInfo, MegazoneDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
 };
 
 
-// Mega Zone (unknown program code 1)
+// Mega Zone (unknown version 1)
 
 static struct BurnRomInfo megazoneaRomDesc[] = {
 	{ "ic59_cpu.bin",	0x2000, 0xf41922a0, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -1004,16 +978,16 @@ STD_ROM_FN(megazonea)
 
 struct BurnDriver BurnDrvMegazonea = {
 	"megazonea", "megazone", NULL, NULL, "1983",
-	"Mega Zone (unknown program code 1)\0", NULL, "Konami (Interlogic / Kosuka license)", "GX319",
+	"Mega Zone (unknown version 1)\0", NULL, "Konami (Interlogic / Kosuka license)", "GX319",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
 	NULL, megazoneaRomInfo, megazoneaRomName, NULL, NULL, NULL, NULL, MegazoneInputInfo, MegazoneDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4
 };
 
 
-// Mega Zone (unknown program code 2)
+// Mega Zone (unknown version 2)
 
 static struct BurnRomInfo megazonebRomDesc[] = {
 	{ "7.11h",			0x2000, 0xd42d67bf, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -1046,9 +1020,9 @@ STD_ROM_FN(megazoneb)
 
 struct BurnDriver BurnDrvMegazoneb = {
 	"megazoneb", "megazone", NULL, NULL, "1983",
-	"Mega Zone (unknown program code 2)\0", NULL, "Konami", "GX319",
+	"Mega Zone (unknown version 2)\0", NULL, "Konami", "GX319",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VERSHOOT, 0,
 	NULL, megazonebRomInfo, megazonebRomName, NULL, NULL, NULL, NULL, MegazoneInputInfo, MegazonaDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	224, 288, 3, 4

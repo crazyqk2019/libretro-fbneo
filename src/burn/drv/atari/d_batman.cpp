@@ -9,6 +9,7 @@
 #include "atarimo.h"
 #include "atarivad.h"
 #include "atarijsa.h"
+#include "msm6295.h"
 
 static UINT8 *AllMem;
 static UINT8 *MemEnd;
@@ -106,7 +107,7 @@ static void __fastcall batman_main_write_word(UINT32 address, UINT16 data)
 	}
 
 	if ((address & 0xefe000) == 0x2f6000) {
-		*((UINT16*)(DrvMobRAM + (address & 0x1ffe))) = data;
+		*((UINT16*)(DrvMobRAM + (address & 0x1ffe))) = BURN_ENDIAN_SWAP_INT16(data);
 		AtariMoWrite(0, (address / 2) & 0xfff, data);
 		return;
 	}
@@ -141,7 +142,7 @@ static void __fastcall batman_main_write_byte(UINT32 address, UINT8 data)
 
 	if ((address & 0xefe000) == 0x2f6000 ) {
 		DrvMobRAM[(address & 0x1fff)^1] = data;
-		AtariMoWrite(0, (address / 2) & 0xfff, *((UINT16*)(DrvMobRAM + (address & 0x1ffe))));
+		AtariMoWrite(0, (address / 2) & 0xfff, BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvMobRAM + (address & 0x1ffe)))));
 		return;
 	}
 
@@ -259,7 +260,7 @@ static void palette_write(INT32 offset, UINT16 data)
 
 static tilemap_callback( alpha )
 {
-	UINT16 data = *((UINT16*)(DrvAlphaRAM + offs * 2));
+	UINT16 data = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvAlphaRAM + offs * 2)));
 	int code = (data & 0x3ff);
 	if (data & 0x400) code += alpha_tile_bank * 0x400;
 
@@ -285,6 +286,8 @@ static INT32 DrvDoReset(INT32 clear_mem)
 	sound_cpu_halt = 0;
 	alpha_tile_bank = 0;
 	scanline_int_state = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -392,12 +395,7 @@ static INT32 DrvInit()
 		NULL				/* callback routine for special entries */
 	};
 
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	{
 		INT32 k = 0;
@@ -449,6 +447,7 @@ static INT32 DrvInit()
 	GenericTilemapSetGfx(3, DrvGfxROM0, 2, 8, 8, 0x080000, 0x000, 0x0f);
 
 	AtariVADInit(0, 1, 0, scanline_timer, palette_write);
+	AtariVADSetXOffsets(2, 6, 1);
 	AtariVADSetPartialCB(draw_scanline);
 	AtariMoInit(0, &modesc);
 
@@ -477,13 +476,15 @@ static INT32 DrvInit()
 	for (INT32 i = 0; i < 0x20000; i+=0x1000) {
 		AtariEEPROMInstallMap(1, 0x120000 + i, 0x120fff + i);
 	}
-	AtariEEPROMLoad(Drv68KROM); // temp memory
+	AtariEEPROMLoad(Drv68KRAM); // temp memory
 
 	SekClose();
 
 	BurnWatchdogInit(DrvDoReset, 180);
 
 	AtariJSAInit(DrvM6502ROM, &update_interrupts, DrvSndROM, NULL);
+	MSM6295SetRoute(0, 0.85, BURN_SND_ROUTE_BOTH);
+	MSM6295SetRoute(1, 0.85, BURN_SND_ROUTE_BOTH);
 
 	DrvDoReset(1);
 
@@ -500,7 +501,7 @@ static INT32 DrvExit()
 	AtariMoExit();
 	AtariEEPROMExit();
 
-	BurnFree(AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -598,8 +599,9 @@ static void DrvDrawBegin()
 		DrvRecalc = 0;
 	}
 
-	if (pBurnDraw)
+	if (pBurnDraw) {
 		BurnTransferClear();
+	}
 
 	lastline = 0;
 }
@@ -660,18 +662,14 @@ static INT32 DrvFrame()
 
 		if (i == 0) AtariVADEOFUpdate(DrvEOFData);
 
-		if (atarivad_scanline_timer_enabled) {
-			if (atarivad_scanline_timer == atarivad_scanline) {
-				scanline_timer(CPU_IRQSTATUS_ACK);
-			}
-		}
+		AtariVADTimerUpdate();
 
-		nCyclesDone[0] += SekRun(((i + 1) * nCyclesTotal[0] / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, Sek);
 
 		if (sound_cpu_halt == 0) {
-			nCyclesDone[1] += M6502Run(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+			CPU_RUN(1, M6502);
 		} else {
-			nCyclesDone[1] += M6502Idle(((i + 1) * nCyclesTotal[1] / nInterleave) - nCyclesDone[1]);
+			CPU_IDLE(1, M6502);
 		}
 
 		if (i <= 240) {
@@ -802,7 +800,7 @@ struct BurnDriver BurnDrvBatman = {
 	"batman", NULL, NULL, NULL, "1991",
 	"Batman\0", NULL, "Atari Games", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_SCRFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_SCRFIGHT, 0,
 	NULL, batmanRomInfo, batmanRomName, NULL, NULL, NULL, NULL, BatmanInputInfo, BatmanDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	336, 240, 4, 3

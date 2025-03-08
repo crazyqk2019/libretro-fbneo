@@ -68,93 +68,95 @@ static UINT8 DrvDips[4];
 static UINT8 DrvInputs[3];
 static UINT8 DrvReset;
 
+static INT32 nCyclesExtra[3];
+
 static struct BurnInputInfo Drv2bInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy3 + 3,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 3,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy3 + 5,	"p1 start"	},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
 	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
 	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy3 + 4,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy3 + 4,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy3 + 6,	"p2 start"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Service",		BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Test SW",		BIT_DIGITAL,	DrvJoy3 + 2,	"diag"		},
-	{"Tilt",		BIT_DIGITAL,	DrvJoy3 + 1,	"tilt"		},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
-	{"Dip C",		BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
+	{"Test SW",			BIT_DIGITAL,	DrvJoy3 + 2,	"diag"		},
+	{"Tilt",			BIT_DIGITAL,	DrvJoy3 + 1,	"tilt"		},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Dip C",			BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
 };
 
 STDINPUTINFO(Drv2b)
 
 static struct BurnInputInfo Drv3bInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy3 + 3,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 3,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy3 + 5,	"p1 start"	},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
 	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
 	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 	{"P1 Button 3",		BIT_DIGITAL,	DrvJoy1 + 6,	"p1 fire 3"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy3 + 4,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy3 + 4,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy3 + 6,	"p2 start"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
 	{"P2 Button 3",		BIT_DIGITAL,	DrvJoy2 + 6,	"p2 fire 3"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Service",		BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Test SW",		BIT_DIGITAL,	DrvJoy3 + 2,	"diag"		},
-	{"Tilt",		BIT_DIGITAL,	DrvJoy3 + 1,	"tilt"		},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
-	{"Dip C",		BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
+	{"Test SW",			BIT_DIGITAL,	DrvJoy3 + 2,	"diag"		},
+	{"Tilt",			BIT_DIGITAL,	DrvJoy3 + 1,	"tilt"		},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Dip C",			BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
 };
 
 STDINPUTINFO(Drv3b)
 
 static struct BurnInputInfo FiresharkInputList[] = {
-	{"P1 Coin",		BIT_DIGITAL,	DrvJoy3 + 3,	"p1 coin"	},
+	{"P1 Coin",			BIT_DIGITAL,	DrvJoy3 + 3,	"p1 coin"	},
 	{"P1 Start",		BIT_DIGITAL,	DrvJoy3 + 5,	"p1 start"	},
-	{"P1 Up",		BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
-	{"P1 Down",		BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
-	{"P1 Left",		BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
+	{"P1 Up",			BIT_DIGITAL,	DrvJoy1 + 0,	"p1 up"		},
+	{"P1 Down",			BIT_DIGITAL,	DrvJoy1 + 1,	"p1 down"	},
+	{"P1 Left",			BIT_DIGITAL,	DrvJoy1 + 2,	"p1 left"	},
 	{"P1 Right",		BIT_DIGITAL,	DrvJoy1 + 3,	"p1 right"	},
 	{"P1 Button 1",		BIT_DIGITAL,	DrvJoy1 + 4,	"p1 fire 1"	},
 	{"P1 Button 2",		BIT_DIGITAL,	DrvJoy1 + 5,	"p1 fire 2"	},
 
-	{"P2 Coin",		BIT_DIGITAL,	DrvJoy3 + 4,	"p2 coin"	},
+	{"P2 Coin",			BIT_DIGITAL,	DrvJoy3 + 4,	"p2 coin"	},
 	{"P2 Start",		BIT_DIGITAL,	DrvJoy3 + 6,	"p2 start"	},
-	{"P2 Up",		BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
-	{"P2 Down",		BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
-	{"P2 Left",		BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
+	{"P2 Up",			BIT_DIGITAL,	DrvJoy2 + 0,	"p2 up"		},
+	{"P2 Down",			BIT_DIGITAL,	DrvJoy2 + 1,	"p2 down"	},
+	{"P2 Left",			BIT_DIGITAL,	DrvJoy2 + 2,	"p2 left"	},
 	{"P2 Right",		BIT_DIGITAL,	DrvJoy2 + 3,	"p2 right"	},
 	{"P2 Button 1",		BIT_DIGITAL,	DrvJoy2 + 4,	"p2 fire 1"	},
 	{"P2 Button 2",		BIT_DIGITAL,	DrvJoy2 + 5,	"p2 fire 2"	},
 
-	{"Reset",		BIT_DIGITAL,	&DrvReset,	"reset"		},
-	{"Service",		BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
-	{"Tilt",		BIT_DIGITAL,	DrvJoy3 + 1,	"tilt"		},
-	{"Dip A",		BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
-	{"Dip B",		BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
-	{"Dip C",		BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
+	{"Reset",			BIT_DIGITAL,	&DrvReset,		"reset"		},
+	{"Service",			BIT_DIGITAL,	DrvJoy3 + 0,	"service"	},
+	{"Tilt",			BIT_DIGITAL,	DrvJoy3 + 1,	"tilt"		},
+	{"Dip A",			BIT_DIPSWITCH,	DrvDips + 0,	"dip"		},
+	{"Dip B",			BIT_DIPSWITCH,	DrvDips + 1,	"dip"		},
+	{"Dip C",			BIT_DIPSWITCH,	DrvDips + 2,	"dip"		},
 };
 
 STDINPUTINFO(Fireshark)
@@ -290,6 +292,132 @@ static struct BurnDIPInfo HellfireDIPList[]=
 {
 	{0x14, 0xff, 0xff, 0x00, NULL			},
 	{0x15, 0xff, 0xff, 0x00, NULL			},
+	{0x16, 0xff, 0xff, 0xf1, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x00, "Off"			},
+	{0x14, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x04, 0x00, "Off"			},
+	{0x14, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x14, 0x01, 0x08, 0x08, "Off"			},
+	{0x14, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x14, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	}, // ok a,b
+	{0x14, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x14, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x03, 0x01, "Easy"			},
+	{0x15, 0x01, 0x03, 0x00, "Normal"		},
+	{0x15, 0x01, 0x03, 0x02, "Hard"			},
+	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x15, 0x01, 0x0c, 0x00, "70k 270k 200k+"	},
+	{0x15, 0x01, 0x0c, 0x04, "100k 350k 250k+"	},
+	{0x15, 0x01, 0x0c, 0x08, "100k Only"		},
+	{0x15, 0x01, 0x0c, 0x0c, "200k Only"		},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0x30, 0x30, "2"			},
+	{0x15, 0x01, 0x30, 0x00, "3"			},
+	{0x15, 0x01, 0x30, 0x20, "4"			},
+	{0x15, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x15, 0x01, 0x40, 0x00, "Off"			},
+	{0x15, 0x01, 0x40, 0x40, "On"			},
+
+	{0   , 0xfe, 0   ,    3, "Region"		},
+	{0x16, 0x01, 0x03, 0x02, "Europe"		},
+	{0x16, 0x01, 0x03, 0x01, "USA"			},
+	{0x16, 0x01, 0x03, 0x00, "Japan"		},
+};
+
+STDDIPINFO(Hellfire)
+
+static struct BurnDIPInfo Hellfire1DIPList[] = {
+	{0x14, 0xff, 0xff, 0x01, NULL			},
+	{0x15, 0xff, 0xff, 0x00, NULL			},
+	{0x16, 0xff, 0xff, 0xf1, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Cabinet"		},
+	{0x14, 0x01, 0x01, 0x01, "Upright"		},
+	{0x14, 0x01, 0x01, 0x00, "Cocktail"		},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x00, "Off"			},
+	{0x14, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x04, 0x00, "Off"			},
+	{0x14, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x14, 0x01, 0x08, 0x08, "Off"			},
+	{0x14, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x14, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	}, // ok a,b
+	{0x14, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x14, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x03, 0x01, "Easy"			},
+	{0x15, 0x01, 0x03, 0x00, "Normal"		},
+	{0x15, 0x01, 0x03, 0x02, "Hard"			},
+	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x15, 0x01, 0x0c, 0x00, "70k 270k 200k+"	},
+	{0x15, 0x01, 0x0c, 0x04, "100k 350k 250k+"	},
+	{0x15, 0x01, 0x0c, 0x08, "100k Only"		},
+	{0x15, 0x01, 0x0c, 0x0c, "200k Only"		},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0x30, 0x30, "2"			},
+	{0x15, 0x01, 0x30, 0x00, "3"			},
+	{0x15, 0x01, 0x30, 0x20, "4"			},
+	{0x15, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x15, 0x01, 0x40, 0x00, "Off"			},
+	{0x15, 0x01, 0x40, 0x40, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0x15, 0x01, 0x80, 0x00, "Off"			},
+	{0x15, 0x01, 0x80, 0x80, "On"			},
+
+	{0   , 0xfe, 0   ,    3, "Region"		},
+	{0x16, 0x01, 0x03, 0x02, "Europe"		},
+	{0x16, 0x01, 0x03, 0x01, "USA"			},
+	{0x16, 0x01, 0x03, 0x00, "Japan"		},
+};
+
+STDDIPINFO(Hellfire1)
+
+static struct BurnDIPInfo Hellfire2aDIPList[] = {
+	{0x14, 0xff, 0xff, 0x00, NULL			},
+	{0x15, 0xff, 0xff, 0x00, NULL			},
 	{0x16, 0xff, 0xff, 0xf2, NULL			},
 
 	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
@@ -323,10 +451,10 @@ static struct BurnDIPInfo HellfireDIPList[]=
 	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
 
 	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
-	{0x15, 0x01, 0x03, 0x00, "70k 270k 200k+"	},
-	{0x15, 0x01, 0x03, 0x04, "100k 350k 250k+"	},
-	{0x15, 0x01, 0x03, 0x08, "100k Only"		},
-	{0x15, 0x01, 0x03, 0x0c, "200k Only"		},
+	{0x15, 0x01, 0x0c, 0x00, "70k 270k 200k+"	},
+	{0x15, 0x01, 0x0c, 0x04, "100k 350k 250k+"	},
+	{0x15, 0x01, 0x0c, 0x08, "100k Only"		},
+	{0x15, 0x01, 0x0c, 0x0c, "200k Only"		},
 
 	{0   , 0xfe, 0   ,    4, "Lives"		},
 	{0x15, 0x01, 0x30, 0x30, "2"			},
@@ -334,7 +462,7 @@ static struct BurnDIPInfo HellfireDIPList[]=
 	{0x15, 0x01, 0x30, 0x20, "4"			},
 	{0x15, 0x01, 0x30, 0x10, "5"			},
 
-	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0   , 0xfe, 0   ,    2, "Dip Switch Display"	},
 	{0x15, 0x01, 0x40, 0x00, "Off"			},
 	{0x15, 0x01, 0x40, 0x40, "On"			},
 
@@ -344,48 +472,74 @@ static struct BurnDIPInfo HellfireDIPList[]=
 	{0x16, 0x01, 0x03, 0x00, "Japan"		},
 };
 
-STDDIPINFO(Hellfire)
+STDDIPINFO(Hellfire2a)
 
-static struct BurnDIPInfo Hellfire1DIPList[] = {
+static struct BurnDIPInfo Hellfire1aDIPList[] = {
 	{0x14, 0xff, 0xff, 0x01, NULL			},
 	{0x15, 0xff, 0xff, 0x00, NULL			},
+	{0x16, 0xff, 0xff, 0xf1, NULL			},
 
 	{0   , 0xfe, 0   ,    2, "Cabinet"		},
 	{0x14, 0x01, 0x01, 0x01, "Upright"		},
 	{0x14, 0x01, 0x01, 0x00, "Cocktail"		},
 
-	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
-	{0x15, 0x01, 0x40, 0x00, "Off"			},
-	{0x15, 0x01, 0x40, 0x40, "On"			},
-};
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x00, "Off"			},
+	{0x14, 0x01, 0x02, 0x02, "On"			},
 
-STDDIPINFOEXT(Hellfire1, Hellfire,  Hellfire1)
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x04, 0x00, "Off"			},
+	{0x14, 0x01, 0x04, 0x04, "On"			},
 
-static struct BurnDIPInfo Hellfire2aDIPList[] = {
-	{0x14, 0xff, 0xff, 0x01, NULL			},
-	{0x15, 0xff, 0xff, 0x00, NULL			},
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x14, 0x01, 0x08, 0x08, "Off"			},
+	{0x14, 0x01, 0x08, 0x00, "On"			},
 
-	{0   , 0xfe, 0   ,    2, "Dip switch display"	},
-	{0x15, 0x01, 0x40, 0x00, "Off"			},
-	{0x15, 0x01, 0x40, 0x40, "On"			},
-};
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x14, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	}, // ok a,b
+	{0x14, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},
 
-STDDIPINFOEXT(Hellfire2a, Hellfire,  Hellfire2a)
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x14, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
 
-static struct BurnDIPInfo Hellfire1aDIPList[] = {
-	{0x14, 0xff, 0xff, 0x01, NULL			},
-	{0x15, 0xff, 0xff, 0x00, NULL			},
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x03, 0x01, "Easy"			},
+	{0x15, 0x01, 0x03, 0x00, "Normal"		},
+	{0x15, 0x01, 0x03, 0x02, "Hard"			},
+	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
 
-	{0   , 0xfe, 0   ,    2, "Dip switch display"	},
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x15, 0x01, 0x0c, 0x00, "70k 270k 200k+"	},
+	{0x15, 0x01, 0x0c, 0x04, "100k 350k 250k+"	},
+	{0x15, 0x01, 0x0c, 0x08, "100k Only"		},
+	{0x15, 0x01, 0x0c, 0x0c, "200k Only"		},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0x30, 0x30, "2"			},
+	{0x15, 0x01, 0x30, 0x00, "3"			},
+	{0x15, 0x01, 0x30, 0x20, "4"			},
+	{0x15, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Dip Switch Display"	},
 	{0x15, 0x01, 0x40, 0x00, "Off"			},
 	{0x15, 0x01, 0x40, 0x40, "On"			},
 
 	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
 	{0x15, 0x01, 0x80, 0x00, "Off"			},
 	{0x15, 0x01, 0x80, 0x80, "On"			},
+
+	{0   , 0xfe, 0   ,    3, "Region"		},
+	{0x16, 0x01, 0x03, 0x02, "Europe"		},
+	{0x16, 0x01, 0x03, 0x01, "USA"			},
+	{0x16, 0x01, 0x03, 0x00, "Japan"		},
 };
 
-STDDIPINFOEXT(Hellfire1a, Hellfire,  Hellfire1a)
+STDDIPINFO(Hellfire1a)
 
 static struct BurnDIPInfo ZerowingDIPList[]=
 {
@@ -454,31 +608,76 @@ static struct BurnDIPInfo ZerowingDIPList[]=
 
 STDDIPINFO(Zerowing)
 
-static struct BurnDIPInfo Zerowing2DIPList[] = {
+static struct BurnDIPInfo Zerowing2DIPList[]=
+{
 	{0x14, 0xff, 0xff, 0x00, NULL			},
 	{0x15, 0xff, 0xff, 0x00, NULL			},
-	{0x16, 0xff, 0xff, 0x00, NULL			},
+	{0x16, 0xff, 0xff, 0xf0, NULL			},
 
-	{0   , 0xfe, 0   ,    2, "Unused"		},
-	{0x14, 0x01, 0x01, 0x01, "On"			},
-	{0x14, 0x01, 0x01, 0x00, "Off"			},
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x00, "Off"			},
+	{0x14, 0x01, 0x02, 0x02, "On"			},
 
-	{0   , 0xfe, 0   ,    2, "Unused"		},
-	{0x15, 0x01, 0x80, 0x00, "Off"			},
-	{0x15, 0x01, 0x80, 0x80, "On"			},
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x04, 0x00, "Off"			},
+	{0x14, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x14, 0x01, 0x08, 0x08, "Off"			},
+	{0x14, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x14, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	},  // ok a,b
+	{0x14, 0x01, 0x30, 0x10, "1 Coins 2 Credits"	},
+	{0x14, 0x01, 0x30, 0x20, "2 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x30, "2 Coins 3 Credits"	},
+
+	{0   , 0xfe, 0   ,    3, "Coin B"		},
+	{0x14, 0x01, 0xc0, 0x00, "1 Coin  1 Credit"	},
+	{0x14, 0x01, 0xc0, 0x40, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xc0, 0x80, "2 Coins 1 Credit"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x03, 0x01, "Easy"			},
+	{0x15, 0x01, 0x03, 0x00, "Normal"		},
+	{0x15, 0x01, 0x03, 0x02, "Hard"			},
+	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x15, 0x01, 0x03, 0x00, "200k 700k 500k+"	},
+	{0x15, 0x01, 0x03, 0x04, "500k 1500k 1000k+"	},
+	{0x15, 0x01, 0x03, 0x08, "500k Only"		},
+	{0x15, 0x01, 0x03, 0x0c, "None"			},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0x30, 0x30, "2"			},
+	{0x15, 0x01, 0x30, 0x00, "3"			},
+	{0x15, 0x01, 0x30, 0x20, "4"			},
+	{0x15, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x15, 0x01, 0x40, 0x00, "Off"			},
+	{0x15, 0x01, 0x40, 0x40, "On"			},
+
+#if 0
+	// allow continue has no effect on this set
+	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0x15, 0x01, 0x80, 0x80, "No"			},
+	{0x15, 0x01, 0x80, 0x00, "Yes"			},
+#endif
 
 	{0   , 0xfe, 0   ,    2, "Region"		},
 	{0x16, 0x01, 0x03, 0x02, "Europe"		},
 	{0x16, 0x01, 0x03, 0x00, "USA"			},
 };
 
-STDDIPINFOEXT(Zerowing2, Zerowing,  Zerowing2)
+STDDIPINFO(Zerowing2)
 
 static struct BurnDIPInfo VimanaDIPList[]=
 {
 	{0x14, 0xff, 0xff, 0x01, NULL			},
 	{0x15, 0xff, 0xff, 0x00, NULL			},
-	{0x16, 0xff, 0xff, 0x02, NULL			},
+	{0x16, 0xff, 0xff, 0x01, NULL			},
 
 	{0   , 0xfe, 0   ,    2, "Cabinet"		},
 	{0x14, 0x01, 0x01, 0x01, "Upright"		},
@@ -548,7 +747,63 @@ static struct BurnDIPInfo VimanaDIPList[]=
 STDDIPINFO(Vimana)
 
 static struct BurnDIPInfo VimananDIPList[] = {
-	{0x16, 0xff, 0xff, 0x02, NULL			},
+	{0x14, 0xff, 0xff, 0x01, NULL			},
+	{0x15, 0xff, 0xff, 0x00, NULL			},
+	{0x16, 0xff, 0xff, 0x01, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Cabinet"		},
+	{0x14, 0x01, 0x01, 0x01, "Upright"		},
+	{0x14, 0x01, 0x01, 0x00, "Cocktail"		},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x00, "Off"			},
+	{0x14, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x04, 0x00, "Off"			},
+	{0x14, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x14, 0x01, 0x08, 0x08, "Off"			},
+	{0x14, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x14, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	},
+	{0x14, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},  // a/b good.
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x14, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x03, 0x01, "Easy"			},
+	{0x15, 0x01, 0x03, 0x00, "Normal"		},
+	{0x15, 0x01, 0x03, 0x02, "Hard"			},
+	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x15, 0x01, 0x03, 0x00, "70k 270k 200k+"	},
+	{0x15, 0x01, 0x03, 0x04, "100k 350k 250k+"	},
+	{0x15, 0x01, 0x03, 0x08, "100k Only"		},
+	{0x15, 0x01, 0x03, 0x0c, "200k Only"		},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0x30, 0x30, "2"			},
+	{0x15, 0x01, 0x30, 0x00, "3"			},
+	{0x15, 0x01, 0x30, 0x20, "4"			},
+	{0x15, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x15, 0x01, 0x40, 0x00, "Off"			},
+	{0x15, 0x01, 0x40, 0x40, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0x15, 0x01, 0x80, 0x80, "No"			},
+	{0x15, 0x01, 0x80, 0x00, "Yes"			},
 
 	{0   , 0xfe, 0   ,    8, "Region"		},
 	{0x16, 0x01, 0x0f, 0x02, "Europe (Nova Apparate license)" },
@@ -561,16 +816,72 @@ static struct BurnDIPInfo VimananDIPList[] = {
 	{0x16, 0x01, 0x0f, 0x06, "Taiwan (Spacy license)"},
 };
 
-STDDIPINFOEXT(Vimanan, Vimana,  Vimanan)
+STDDIPINFO(Vimanan)
 
 static struct BurnDIPInfo VimanajDIPList[] = {
+	{0x14, 0xff, 0xff, 0x01, NULL			},
+	{0x15, 0xff, 0xff, 0x00, NULL			},
 	{0x16, 0xff, 0xff, 0x00, NULL			},
 
-	{0   , 0xfe, 0   ,    8, "Region"		},
+	{0   , 0xfe, 0   ,    2, "Cabinet"		},
+	{0x14, 0x01, 0x01, 0x01, "Upright"		},
+	{0x14, 0x01, 0x01, 0x00, "Cocktail"		},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x14, 0x01, 0x02, 0x00, "Off"			},
+	{0x14, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x14, 0x01, 0x04, 0x00, "Off"			},
+	{0x14, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x14, 0x01, 0x08, 0x08, "Off"			},
+	{0x14, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x14, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	},
+	{0x14, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x14, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},  // a/b good.
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x14, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x14, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x14, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x14, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x15, 0x01, 0x03, 0x01, "Easy"			},
+	{0x15, 0x01, 0x03, 0x00, "Normal"		},
+	{0x15, 0x01, 0x03, 0x02, "Hard"			},
+	{0x15, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x15, 0x01, 0x03, 0x00, "70k 270k 200k+"	},
+	{0x15, 0x01, 0x03, 0x04, "100k 350k 250k+"	},
+	{0x15, 0x01, 0x03, 0x08, "100k Only"		},
+	{0x15, 0x01, 0x03, 0x0c, "200k Only"		},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x15, 0x01, 0x30, 0x30, "2"			},
+	{0x15, 0x01, 0x30, 0x00, "3"			},
+	{0x15, 0x01, 0x30, 0x20, "4"			},
+	{0x15, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x15, 0x01, 0x40, 0x00, "Off"			},
+	{0x15, 0x01, 0x40, 0x40, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0x15, 0x01, 0x80, 0x80, "No"			},
+	{0x15, 0x01, 0x80, 0x00, "Yes"			},
+
+	{0   , 0xfe, 0   ,    1, "Region"		},
 	{0x16, 0x01, 0x0f, 0x00, "Japan (distributed by Tecmo)" },
 };
 
-STDDIPINFOEXT(Vimanaj, Vimana,  Vimanaj)
+STDDIPINFO(Vimanaj)
 
 static struct BurnDIPInfo DemonwldDIPList[]=
 {
@@ -632,7 +943,55 @@ static struct BurnDIPInfo DemonwldDIPList[]=
 STDDIPINFO(Demonwld)
 
 static struct BurnDIPInfo Demonwld1DIPList[] = {
+	{0x16, 0xff, 0xff, 0x00, NULL			},
+	{0x17, 0xff, 0xff, 0x00, NULL			},
 	{0x18, 0xff, 0xff, 0x02, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x16, 0x01, 0x02, 0x00, "Off"			},
+	{0x16, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x16, 0x01, 0x04, 0x00, "Off"			},
+	{0x16, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x16, 0x01, 0x08, 0x08, "Off"			},
+	{0x16, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x16, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	},     // ok a,b
+	{0x16, 0x01, 0x30, 0x10, "1 Coin  2 Credits"	},
+	{0x16, 0x01, 0x30, 0x20, "2 Coins 1 Credit"	},
+	{0x16, 0x01, 0x30, 0x30, "2 Coins 3 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x16, 0x01, 0xc0, 0x00, "1 Coin  1 Credit"	},
+	{0x16, 0x01, 0xc0, 0x40, "1 Coin  2 Credits"	},
+	{0x16, 0x01, 0xc0, 0x80, "2 Coins 1 Credit"	},
+	{0x16, 0x01, 0xc0, 0xc0, "2 Coins 3 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x17, 0x01, 0x03, 0x01, "Easy"			},
+	{0x17, 0x01, 0x03, 0x00, "Medium"		},
+	{0x17, 0x01, 0x03, 0x02, "Hard"			},
+	{0x17, 0x01, 0x03, 0x03, "Hardest"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x17, 0x01, 0x0c, 0x00, "30K, every 100K"	},
+	{0x17, 0x01, 0x0c, 0x04, "50K and 100K"		},
+	{0x17, 0x01, 0x0c, 0x08, "100K only"		},
+	{0x17, 0x01, 0x0c, 0x0c, "None"			},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x17, 0x01, 0x30, 0x30, "1"			},
+	{0x17, 0x01, 0x30, 0x20, "2"			},
+	{0x17, 0x01, 0x30, 0x00, "3"			},
+	{0x17, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x17, 0x01, 0x40, 0x00, "Off"			},
+	{0x17, 0x01, 0x40, 0x40, "On"			},
 
 	{0   , 0xfe, 0   ,    4, "Territory/Copyright"	},
 	{0x18, 0x01, 0x03, 0x02, "World/Taito Japan"	},
@@ -641,7 +1000,7 @@ static struct BurnDIPInfo Demonwld1DIPList[] = {
 	{0x18, 0x01, 0x03, 0x00, "Japan/Taito Corp"	},
 };
 
-STDDIPINFOEXT(Demonwld1, Demonwld, Demonwld1)
+STDDIPINFO(Demonwld1)
 
 static struct BurnDIPInfo OutzoneDIPList[]=
 {
@@ -695,7 +1054,7 @@ static struct BurnDIPInfo OutzoneDIPList[]=
 	{0x17, 0x01, 0x40, 0x00, "Off"			},
 	{0x17, 0x01, 0x40, 0x40, "On"			},
 
-	{0   , 0xfe, 0   ,    0, "Region"		},
+	{0   , 0xfe, 0   ,    8, "Region"		},
 	{0x18, 0x01, 0x0f, 0x00, "Japan"		},
 	{0x18, 0x01, 0x0f, 0x01, "USA"			},
 	{0x18, 0x01, 0x0f, 0x02, "Europe"		},
@@ -710,7 +1069,55 @@ static struct BurnDIPInfo OutzoneDIPList[]=
 STDDIPINFO(Outzone)
 
 static struct BurnDIPInfo OutzoneaDIPList[] = {
+	{0x16, 0xff, 0xff, 0x00, NULL			},
+	{0x17, 0xff, 0xff, 0x00, NULL			},
 	{0x18, 0xff, 0xff, 0x02, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x16, 0x01, 0x02, 0x00, "Off"			},
+	{0x16, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x16, 0x01, 0x04, 0x00, "Off"			},
+	{0x16, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x16, 0x01, 0x08, 0x08, "Off"			},
+	{0x16, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x16, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	},
+	{0x16, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},   // ok a,b
+	{0x16, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x16, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x16, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x16, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x16, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x16, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x17, 0x01, 0x03, 0x01, "Easy"			},
+	{0x17, 0x01, 0x03, 0x00, "Normal"		},
+	{0x17, 0x01, 0x03, 0x02, "Hard"			},
+	{0x17, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x17, 0x01, 0x0c, 0x00, "Every 300k"		},
+	{0x17, 0x01, 0x0c, 0x04, "200k and 500k"	},
+	{0x17, 0x01, 0x0c, 0x08, "300k Only"		},
+	{0x17, 0x01, 0x0c, 0x0c, "None"			},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x17, 0x01, 0x30, 0x30, "1"			},
+	{0x17, 0x01, 0x30, 0x20, "2"			},
+	{0x17, 0x01, 0x30, 0x00, "3"			},
+	{0x17, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x17, 0x01, 0x40, 0x00, "Off"			},
+	{0x17, 0x01, 0x40, 0x40, "On"			},
 
 	{0   , 0xfe, 0   ,    4, "Territory/Copyright"	},
 	{0x18, 0x01, 0x03, 0x02, "World/Taito Japan"	},
@@ -719,12 +1126,60 @@ static struct BurnDIPInfo OutzoneaDIPList[] = {
 	{0x18, 0x01, 0x03, 0x00, "Japan/Taito Corp"	},
 };
 
-STDDIPINFOEXT(Outzonea, Outzone, Outzonea)
+STDDIPINFO(Outzonea)
 
 static struct BurnDIPInfo OutzonecDIPList[] = {
+	{0x16, 0xff, 0xff, 0x00, NULL			},
+	{0x17, 0xff, 0xff, 0x00, NULL			},
 	{0x18, 0xff, 0xff, 0x02, NULL			},
 
-	{0   , 0xfe, 0   ,    0, "Region"		},
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x16, 0x01, 0x02, 0x00, "Off"			},
+	{0x16, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Service Mode"		},
+	{0x16, 0x01, 0x04, 0x00, "Off"			},
+	{0x16, 0x01, 0x04, 0x04, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x16, 0x01, 0x08, 0x08, "Off"			},
+	{0x16, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x16, 0x01, 0x30, 0x00, "1 Coin  1 Credit"	},
+	{0x16, 0x01, 0x30, 0x10, "2 Coins 1 Credit"	},   // ok a,b
+	{0x16, 0x01, 0x30, 0x20, "3 Coins 1 Credit"	},
+	{0x16, 0x01, 0x30, 0x30, "4 Coins 1 Credit"	},
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x16, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x16, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x16, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x16, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x17, 0x01, 0x03, 0x01, "Easy"			},
+	{0x17, 0x01, 0x03, 0x00, "Normal"		},
+	{0x17, 0x01, 0x03, 0x02, "Hard"			},
+	{0x17, 0x01, 0x03, 0x03, "Very Hard"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x17, 0x01, 0x0c, 0x00, "Every 300k"		},
+	{0x17, 0x01, 0x0c, 0x04, "200k and 500k"	},
+	{0x17, 0x01, 0x0c, 0x08, "300k Only"		},
+	{0x17, 0x01, 0x0c, 0x0c, "None"			},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x17, 0x01, 0x30, 0x30, "1"			},
+	{0x17, 0x01, 0x30, 0x20, "2"			},
+	{0x17, 0x01, 0x30, 0x00, "3"			},
+	{0x17, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x17, 0x01, 0x40, 0x00, "Off"			},
+	{0x17, 0x01, 0x40, 0x40, "On"			},
+
+	{0   , 0xfe, 0   ,    7, "Region"		},
 	{0x18, 0x01, 0x07, 0x00, "Japan"		},
 	{0x18, 0x01, 0x07, 0x01, "USA"			},
 	{0x18, 0x01, 0x07, 0x02, "Europe"		},
@@ -734,10 +1189,9 @@ static struct BurnDIPInfo OutzonecDIPList[] = {
 	{0x18, 0x01, 0x07, 0x06, "World"		},
 };
 
-STDDIPINFOEXT(Outzonec, Outzone, Outzonec)
+STDDIPINFO(Outzonec)
 
-static struct BurnDIPInfo FireshrkDIPList[]=
-{
+static struct BurnDIPInfo FireshrkDIPList[]= {
 	{0x13, 0xff, 0xff, 0x01, NULL			},
 	{0x14, 0xff, 0xff, 0x00, NULL			},
 	{0x15, 0xff, 0xff, 0x02, NULL			},
@@ -788,7 +1242,7 @@ static struct BurnDIPInfo FireshrkDIPList[]=
 	{0x14, 0x01, 0x40, 0x00, "Off"			},
 	{0x14, 0x01, 0x40, 0x40, "On"			},
 
-	{0   , 0xfe, 0   ,    2, "Allow Continue"	},
+	{0   , 0xfe, 0   ,    2, "Unknown"		},
 	{0x14, 0x01, 0x80, 0x80, "No"			},
 	{0x14, 0x01, 0x80, 0x00, "Yes"			},
 
@@ -801,14 +1255,66 @@ static struct BurnDIPInfo FireshrkDIPList[]=
 STDDIPINFO(Fireshrk)
 
 static struct BurnDIPInfo FireshrkaDIPList[] = {
+	{0x13, 0xff, 0xff, 0x01, NULL			},
+	{0x14, 0xff, 0xff, 0x00, NULL			},
 	{0x15, 0xff, 0xff, 0x03, NULL			},
+
+	{0   , 0xfe, 0   ,    2, "Cabinet"		},
+	{0x13, 0x01, 0x01, 0x01, "Upright"		},
+	{0x13, 0x01, 0x01, 0x00, "Cocktail"		},
+
+	{0   , 0xfe, 0   ,    2, "Flip Screen"		},
+	{0x13, 0x01, 0x02, 0x00, "Off"			},
+	{0x13, 0x01, 0x02, 0x02, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Demo Sounds"		},
+	{0x13, 0x01, 0x08, 0x08, "Off"			},
+	{0x13, 0x01, 0x08, 0x00, "On"			},
+
+	{0   , 0xfe, 0   ,    4, "Coin A"		},
+	{0x13, 0x01, 0x30, 0x00, "1 Coin  1 Credits"	},  // good a,b
+	{0x13, 0x01, 0x30, 0x10, "2 Coins 1 Credits"	},
+	{0x13, 0x01, 0x30, 0x20, "3 Coins 1 Credits"	},
+	{0x13, 0x01, 0x30, 0x30, "4 Coins 1 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Coin B"		},
+	{0x13, 0x01, 0xc0, 0x00, "1 Coin  2 Credits"	},
+	{0x13, 0x01, 0xc0, 0x40, "1 Coin  3 Credits"	},
+	{0x13, 0x01, 0xc0, 0x80, "1 Coin  4 Credits"	},
+	{0x13, 0x01, 0xc0, 0xc0, "1 Coin  6 Credits"	},
+
+	{0   , 0xfe, 0   ,    4, "Difficulty"		},
+	{0x14, 0x01, 0x03, 0x01, "Easy"			},
+	{0x14, 0x01, 0x03, 0x00, "Medium"		},
+	{0x14, 0x01, 0x03, 0x02, "Hard"			},
+	{0x14, 0x01, 0x03, 0x03, "Hardest"		},
+
+	{0   , 0xfe, 0   ,    4, "Bonus Life"		},
+	{0x14, 0x01, 0x0c, 0x04, "50K, every 150K"	},
+	{0x14, 0x01, 0x0c, 0x00, "70K, every 200K"	},
+	{0x14, 0x01, 0x0c, 0x08, "100K"			},
+	{0x14, 0x01, 0x0c, 0x0c, "None"			},
+
+	{0   , 0xfe, 0   ,    4, "Lives"		},
+	{0x14, 0x01, 0x30, 0x30, "2"			},
+	{0x14, 0x01, 0x30, 0x00, "3"			},
+	{0x14, 0x01, 0x30, 0x20, "4"			},
+	{0x14, 0x01, 0x30, 0x10, "5"			},
+
+	{0   , 0xfe, 0   ,    2, "Invulnerability"	},
+	{0x14, 0x01, 0x40, 0x00, "Off"			},
+	{0x14, 0x01, 0x40, 0x40, "On"			},
+
+	{0   , 0xfe, 0   ,    2, "Unknown"		},
+	{0x14, 0x01, 0x80, 0x80, "No"			},
+	{0x14, 0x01, 0x80, 0x00, "Yes"			},
 
 	{0   , 0xfe, 0   ,    2, "Region"		},
 	{0x15, 0x01, 0x07, 0x03, "Europe"		},
 	{0x15, 0x01, 0x07, 0x00, "USA"			},
 };
 
-STDDIPINFOEXT(Fireshrka, Fireshrk, Fireshrka)
+STDDIPINFO(Fireshrka)
 
 static struct BurnDIPInfo SamesameDIPList[] = {
 	{0x13, 0xff, 0xff, 0x01, NULL			},
@@ -1190,7 +1696,7 @@ static UINT16 __fastcall toaplan1_tilemap_read_word(UINT32 address)
 
 		case 0x0004:
 		{
-			UINT16 ret = *((UINT16*)(DrvVidRAM + ((tileram_offs & 0x3fff) * 4)));
+			UINT16 ret = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvVidRAM + ((tileram_offs & 0x3fff) * 4))));
 
 			// rallybik (doesn't seem to affect other games)
 			ret |= ((ret & 0xf000) >> 4);
@@ -1200,7 +1706,7 @@ static UINT16 __fastcall toaplan1_tilemap_read_word(UINT32 address)
 		}
 
 		case 0x0006:
-			return *((UINT16*)(DrvVidRAM + ((tileram_offs & 0x3fff) * 4) + (address & 2)));
+			return BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvVidRAM + ((tileram_offs & 0x3fff) * 4) + (address & 2))));
 
 		case 0x0010:
 		case 0x0012:
@@ -1236,7 +1742,7 @@ static void __fastcall toaplan1_tilemap_write_word(UINT32 address, UINT16 data)
 
 		case 0x0004:
 		case 0x0006:
-			*((UINT16*)(DrvVidRAM + ((tileram_offs & 0x3fff) * 4) + (address & 2))) = data;
+			*((UINT16*)(DrvVidRAM + ((tileram_offs & 0x3fff) * 4) + (address & 2))) = BURN_ENDIAN_SWAP_INT16(data);
 		return;
 
 		case 0x0010:
@@ -1267,7 +1773,7 @@ static UINT16 __fastcall toaplan1_spriteram_read_word(UINT32 address)
 		case 0x0004:
 		{
 			UINT16 *spriteram = (UINT16*)DrvSprRAM;
-			UINT16 ret = spriteram[spriteram_offset & 0x7ff];
+			UINT16 ret = BURN_ENDIAN_SWAP_INT16(spriteram[spriteram_offset & 0x7ff]);
 			spriteram_offset++;
 			return ret;
 		}
@@ -1275,7 +1781,7 @@ static UINT16 __fastcall toaplan1_spriteram_read_word(UINT32 address)
 		case 0x0006:
 		{
 			UINT16 *spritesizeram = (UINT16*)DrvSprSizeRAM;
-			UINT16 ret = spritesizeram[spriteram_offset & 0x3f];
+			UINT16 ret = BURN_ENDIAN_SWAP_INT16(spritesizeram[spriteram_offset & 0x3f]);
 			spriteram_offset++;
 			return ret;
 		}
@@ -1308,7 +1814,7 @@ static void __fastcall toaplan1_spriteram_write_word(UINT32 address, UINT16 data
 		case 0x0004:
 		{
 			UINT16 *spriteram = (UINT16*)DrvSprRAM;
-			spriteram[spriteram_offset & 0x7ff] = data;
+			spriteram[spriteram_offset & 0x7ff] = BURN_ENDIAN_SWAP_INT16(data);
 			spriteram_offset++;
 		}
 		return;
@@ -1316,7 +1822,7 @@ static void __fastcall toaplan1_spriteram_write_word(UINT32 address, UINT16 data
 		case 0x0006:
 		{
 			UINT16 *spritesizeram = (UINT16*)DrvSprSizeRAM;
-			spritesizeram[spriteram_offset & 0x3f] = data;
+			spritesizeram[spriteram_offset & 0x3f] = BURN_ENDIAN_SWAP_INT16(data);
 			spriteram_offset++;
 		}
 		return;
@@ -1330,7 +1836,7 @@ static void __fastcall toaplan1_spriteram_write_byte(UINT32 address, UINT8 data)
 
 static inline void update_palette(INT32 offset)
 {
-	UINT16 p = *((UINT16*)(DrvPalRAM + offset * 2));
+	UINT16 p = BURN_ENDIAN_SWAP_INT16(*((UINT16*)(DrvPalRAM + offset * 2)));
 
 	UINT8 r = (p >>  0) & 0x1f;
 	UINT8 g = (p >>  5) & 0x1f;
@@ -1347,7 +1853,7 @@ static void __fastcall toaplan1_palette_write_word(UINT32 address, UINT16 data)
 {
 	UINT16 *p = (UINT16*)DrvPalRAM;
 	INT32 offset = ((address & 0x7ff) / 2) + ((address & 0x2000) >> 3);
-	p[offset] = data;
+	p[offset] = BURN_ENDIAN_SWAP_INT16(data);
 	update_palette(offset);
 }
 
@@ -1713,8 +2219,8 @@ static UINT8 __fastcall demonwld_sound_read_port(UINT16 port)
 
 #define tilemap_cb(layer)					\
 	UINT16 *ram = (UINT16*)(DrvVidRAM + (layer*0x4000));	\
-	UINT16 attr = ram[offs * 2 + 0];			\
-	UINT16 code = ram[offs * 2 + 1];			\
+	UINT16 attr = BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 0]);			\
+	UINT16 code = BURN_ENDIAN_SWAP_INT16(ram[offs * 2 + 1]);			\
 	UINT8 color = attr & 0x3f;				\
 	INT32 flags = (code & 0x8000) ? TILE_SKIP : 0;		\
 	if (DrvTransTable[code]) flags |= TILE_SKIP;		\
@@ -1788,6 +2294,8 @@ static INT32 DrvDoReset()
 	spriteram_offset = 0;
 	soundlatch = 0;
 	mcu_command = 0;
+
+	nCyclesExtra[0] = nCyclesExtra[1] = nCyclesExtra[2] = 0;
 
 	return 0;
 }
@@ -2025,7 +2533,7 @@ static void common_sound_init(void (__fastcall *write_port)(UINT16, UINT8), UINT
 	ZetClose();
 
 	BurnYM3812Init(1, 3500000, &toaplan1YM3812IrqHandler, toaplan1SynchroniseStream, 0);
-	BurnTimerAttachYM3812(&ZetConfig, 3500000);
+	BurnTimerAttach(&ZetConfig, 3500000);
 	BurnYM3812SetRoute(0, BURN_SND_YM3812_ROUTE, 1.00, BURN_SND_ROUTE_BOTH);
 }
 
@@ -2336,9 +2844,9 @@ static void DrvPaletteUpdate()
 
 	for (INT32 i = 0; i < BurnDrvGetPaletteEntries(); i++)
 	{
-		UINT8 r = (p[i] >>  0) & 0x1f;
-		UINT8 g = (p[i] >>  5) & 0x1f;
-		UINT8 b = (p[i] >> 10) & 0x1f;
+		UINT8 r = (BURN_ENDIAN_SWAP_INT16(p[i]) >>  0) & 0x1f;
+		UINT8 g = (BURN_ENDIAN_SWAP_INT16(p[i]) >>  5) & 0x1f;
+		UINT8 b = (BURN_ENDIAN_SWAP_INT16(p[i]) >> 10) & 0x1f;
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
@@ -2357,17 +2865,17 @@ static void rallybik_draw_sprites()
 
 	for (INT32 offs = (0x1000/2)-4; offs >= 0; offs -= 4)
 	{
-		UINT16 attr = spriteram[offs + 1];
+		UINT16 attr = BURN_ENDIAN_SWAP_INT16(spriteram[offs + 1]);
 		UINT16 priority = (attr & 0x0c00)>>8;
 		if (!priority) continue;
 
-		INT32 sy = spriteram[offs + 3] >> 7;
+		INT32 sy = BURN_ENDIAN_SWAP_INT16(spriteram[offs + 3]) >> 7;
 
 		if (sy != 0x0100)
 		{
-			UINT16 code  = spriteram[offs] & 0x7ff;
+			UINT16 code  = BURN_ENDIAN_SWAP_INT16(spriteram[offs]) & 0x7ff;
 			UINT16 color = ((attr & 0x3f) << 4) | 0x400;
-			INT32  sx    = spriteram[offs + 2] >> 7;
+			INT32  sx    = BURN_ENDIAN_SWAP_INT16(spriteram[offs + 2]) >> 7;
 			INT32 flipx  = attr & 0x100;
 			INT32 flipy  = attr & 0x200;
 			
@@ -2543,22 +3051,22 @@ static void draw_sprites()
 
 	for (INT32 offs = 0x1000/2 - 4; offs >= 0; offs -= 4)
 	{
-		if (!(source[offs] & 0x8000))
+		if (!(BURN_ENDIAN_SWAP_INT16(source[offs]) & 0x8000))
 		{
 			INT32 sx, sy;
 
-			INT32 attrib = source[offs+1];
+			INT32 attrib = BURN_ENDIAN_SWAP_INT16(source[offs+1]);
 			INT32 priority = (attrib & 0xf000) >> 12;
 
-			INT32 sprite = source[offs] & 0x7fff;
+			INT32 sprite = BURN_ENDIAN_SWAP_INT16(source[offs]) & 0x7fff;
 			INT32 color = attrib & 0x3f;
 
 			INT32 sizeram_ptr = (attrib >> 6) & 0x3f;
-			INT32 sprite_sizex = ( size[sizeram_ptr]       & 0x0f) * 8;
-			INT32 sprite_sizey = ((size[sizeram_ptr] >> 4) & 0x0f) * 8;
+			INT32 sprite_sizex = (BURN_ENDIAN_SWAP_INT16(size[sizeram_ptr])       & 0x0f) * 8;
+			INT32 sprite_sizey = ((BURN_ENDIAN_SWAP_INT16(size[sizeram_ptr]) >> 4) & 0x0f) * 8;
 
-			INT32 sx_base = (source[offs + 2] >> 7) & 0x1ff;
-			INT32 sy_base = (source[offs + 3] >> 7) & 0x1ff;
+			INT32 sx_base = (BURN_ENDIAN_SWAP_INT16(source[offs + 2]) >> 7) & 0x1ff;
+			INT32 sy_base = (BURN_ENDIAN_SWAP_INT16(source[offs + 3]) >> 7) & 0x1ff;
 
 			if (sx_base >= 0x180) sx_base -= 0x200;
 			if (sy_base >= 0x180) sy_base -= 0x200;
@@ -2640,8 +3148,8 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = vertical_lines;
-	INT32 nCyclesTotal[3] = { (10000000 * 100) / nBurnFPS, (3500000 * 100) / nBurnFPS, (14000000 * 100) / nBurnFPS };
-	INT32 nCyclesDone[3] = { 0, 0, 0 };
+	INT32 nCyclesTotal[3] = { ((INT64)10000000 * 100 * nBurnCPUSpeedAdjust) / (0x0100 * nBurnFPS), (3500000 * 100) / nBurnFPS, (14000000 * 100) / nBurnFPS };
+	INT32 nCyclesDone[3] = { nCyclesExtra[0], nCyclesExtra[1], nCyclesExtra[2] };
 	INT32 nVBlankLine = 240 + sprite_y_adjust;
 
 	SekOpen(0);
@@ -2673,21 +3181,27 @@ static INT32 DrvFrame()
 			SekSetIRQLine(2, CPU_IRQSTATUS_AUTO);
 		}
 
-		BurnTimerUpdateYM3812((i + 1) * (nCyclesTotal[1] / nInterleave));
+		CPU_RUN_TIMER(1);
 
-		if (has_dsp && dsp_on) {
-			CPU_RUN(2, tms32010);
+		if (has_dsp) {
+			if (dsp_on) {
+				CPU_RUN(2, tms32010);
+			} else {
+				CPU_IDLE(2, tms32010);
+			}
 		}
 	}
 
-	BurnTimerEndFrameYM3812(nCyclesTotal[1]);
+	ZetClose();
+	SekClose();
 
 	if (pBurnSoundOut) {
 		BurnYM3812Update(pBurnSoundOut, nBurnSoundLen);
 	}
 
-	ZetClose();
-	SekClose();
+	nCyclesExtra[0] = nCyclesDone[0] - nCyclesTotal[0];
+	nCyclesExtra[1] = nCyclesDone[1] - nCyclesTotal[1];
+	nCyclesExtra[2] = nCyclesDone[2] - nCyclesTotal[2];
 
 	return 0;
 }
@@ -2733,13 +3247,15 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 			SCAN_VAR(dsp_BIO);
 			SCAN_VAR(dsp_on);
 		}
+
+		SCAN_VAR(nCyclesExtra);
 	}
 
 	return 0;
 }
 
 
-// Rally Bike / Dash Yarou
+// Rally Bike (Europe, US) / Dash Yarou (Japan)
 
 static struct BurnRomInfo rallybikRomDesc[] = {
 	{ "b45-02.rom",			0x08000, 0x383386d7, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -2770,7 +3286,7 @@ STD_ROM_FN(rallybik)
 
 struct BurnDriver BurnDrvRallybik = {
 	"rallybik", NULL, NULL, NULL, "1988",
-	"Rally Bike / Dash Yarou\0", NULL, "Toaplan / Taito Corporation", "Toaplan BCU-2 / FCU-2 based",
+	"Rally Bike (Europe, US) / Dash Yarou (Japan)\0", NULL, "Toaplan / Taito Corporation", "Toaplan BCU-2 / FCU-2 based",
 	L"Rally Bike\0\u30C0\u30C3\u30B7\u30E5\uC91E\u90CE\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RACING, 0,
 	NULL, rallybikRomInfo, rallybikRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, RallybikDIPInfo,
@@ -2779,26 +3295,26 @@ struct BurnDriver BurnDrvRallybik = {
 };
 
 
-// Truxton / Tatsujin
+// Truxton (Europe, US) / Tatsujin (Japan)
 
 static struct BurnRomInfo truxtonRomDesc[] = {
-	{ "b65_11.bin",			0x20000, 0x1a62379a, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "b65_10.bin",			0x20000, 0xaff5195d, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "b65_11.7k",			0x20000, 0x1a62379a, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "b65_10.7l",			0x20000, 0xaff5195d, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "b65_09.bin",			0x04000, 0x1bdd4ddc, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "b65_09.2f",			0x04000, 0x1bdd4ddc, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "b65_08.bin",			0x20000, 0xd2315b37, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "b65_07.bin",			0x20000, 0xfb83252a, 3 | BRF_GRA },           //  4
-	{ "b65_06.bin",			0x20000, 0x36cedcbe, 3 | BRF_GRA },           //  5
-	{ "b65_05.bin",			0x20000, 0x81cd95f1, 3 | BRF_GRA },           //  6
+	{ "b65_08.13e",			0x20000, 0xd2315b37, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "b65_07.11e",			0x20000, 0xfb83252a, 3 | BRF_GRA },           //  4
+	{ "b65_06.10e",			0x20000, 0x36cedcbe, 3 | BRF_GRA },           //  5
+	{ "b65_05.8e",			0x20000, 0x81cd95f1, 3 | BRF_GRA },           //  6
 
-	{ "b65_04.bin",			0x20000, 0x8c6ff461, 5 | BRF_GRA },           //  7 Sprites
-	{ "b65_03.bin",			0x20000, 0x58b1350b, 5 | BRF_GRA },           //  8
-	{ "b65_02.bin",			0x20000, 0x1dd55161, 5 | BRF_GRA },           //  9
-	{ "b65_01.bin",			0x20000, 0xe974937f, 5 | BRF_GRA },           // 10
+	{ "b65_04.20c",			0x20000, 0x8c6ff461, 5 | BRF_GRA },           //  7 Sprites
+	{ "b65_03.20b",			0x20000, 0x58b1350b, 5 | BRF_GRA },           //  8
+	{ "b65_02.20ab",		0x20000, 0x1dd55161, 5 | BRF_GRA },           //  9
+	{ "b65_01.20a",			0x20000, 0xe974937f, 5 | BRF_GRA },           // 10
 
-	{ "b65_12.bpr",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
-	{ "b65_13.bpr",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
+	{ "b65_12.7c",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
+	{ "b65_13.6d",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(truxton)
@@ -2806,7 +3322,7 @@ STD_ROM_FN(truxton)
 
 struct BurnDriver BurnDrvTruxton = {
 	"truxton", NULL, NULL, NULL, "1988",
-	"Truxton / Tatsujin\0", NULL, "Toaplan / Taito Corporation", "Toaplan BCU-2 / FCU-2 based",
+	"Truxton (Europe, US) / Tatsujin (Japan)\0", NULL, "Toaplan / Taito Corporation", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, truxtonRomInfo, truxtonRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, TruxtonDIPInfo,
@@ -2818,23 +3334,23 @@ struct BurnDriver BurnDrvTruxton = {
 // Hellfire (2P set)
 
 static struct BurnRomInfo hellfireRomDesc[] = {
-	{ "b90_14.0",			0x20000, 0x101df9f5, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "b90_15.1",			0x20000, 0xe67fd452, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "b90_14.10m",			0x20000, 0x101df9f5, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "b90_15.9m",			0x20000, 0xe67fd452, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "b90_03.2",			0x08000, 0x4058fa67, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "b90_03.11e",			0x08000, 0x4058fa67, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "b90_04.3",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "b90_05.4",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
-	{ "b90_06.5",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
-	{ "b90_07.6",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
+	{ "b90_04.7x",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "b90_05.7v",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
+	{ "b90_06.7t",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
+	{ "b90_07.7r",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
 
-	{ "b90_11.10",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
-	{ "b90_10.9",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
-	{ "b90_09.8",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
-	{ "b90_08.7",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
+	{ "b90_11.3a",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
+	{ "b90_10.3c",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
+	{ "b90_09.3d",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
+	{ "b90_08.3f",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
 
-	{ "13.3w",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
-	{ "12.6b",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
+	{ "13.rom13.3w",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
+	{ "12.rom12.6b",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(hellfire)
@@ -2844,7 +3360,7 @@ struct BurnDriver BurnDrvHellfire = {
 	"hellfire", NULL, NULL, NULL, "1989",
 	"Hellfire (2P set)\0", NULL, "Toaplan (Taito license)", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, hellfireRomInfo, hellfireRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, HellfireDIPInfo,
 	HellfireInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
@@ -2857,20 +3373,20 @@ static struct BurnRomInfo hellfire1RomDesc[] = {
 	{ "b90_01.10m",			0x20000, 0x034966d3, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
 	{ "b90_02.9m",			0x20000, 0x06dd24c7, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "b90_03.2",			0x08000, 0x4058fa67, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "b90_03.11e",			0x08000, 0x4058fa67, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "b90_04.3",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "b90_05.4",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
-	{ "b90_06.5",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
-	{ "b90_07.6",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
+	{ "b90_04.7x",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "b90_05.7v",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
+	{ "b90_06.7t",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
+	{ "b90_07.7r",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
 
-	{ "b90_11.10",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
-	{ "b90_10.9",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
-	{ "b90_09.8",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
-	{ "b90_08.7",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
+	{ "b90_11.3a",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
+	{ "b90_10.3c",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
+	{ "b90_09.3d",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
+	{ "b90_08.3f",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
 
-	{ "13.3w",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
-	{ "12.6b",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
+	{ "13.rom13.3w",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
+	{ "12.rom12.6b",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(hellfire1)
@@ -2880,7 +3396,7 @@ struct BurnDriver BurnDrvHellfire1 = {
 	"hellfire1", "hellfire", NULL, NULL, "1989",
 	"Hellfire (1P set)\0", NULL, "Toaplan (Taito license)", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, hellfire1RomInfo, hellfire1RomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, Hellfire1DIPInfo,
 	HellfireInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
@@ -2890,23 +3406,23 @@ struct BurnDriver BurnDrvHellfire1 = {
 // Hellfire (2P set, older)
 
 static struct BurnRomInfo hellfire2aRomDesc[] = {
-	{ "b90_01.0",			0x20000, 0xc94acf53, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "b90_02.1",			0x20000, 0xd17f03c3, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "b90_01.10m",			0x20000, 0xc94acf53, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "b90_02.9m",			0x20000, 0xd17f03c3, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "b90_03.2",			0x08000, 0x4058fa67, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "b90_03.11e",			0x08000, 0x4058fa67, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "b90_04.3",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "b90_05.4",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
-	{ "b90_06.5",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
-	{ "b90_07.6",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
+	{ "b90_04.7x",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "b90_05.7v",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
+	{ "b90_06.7t",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
+	{ "b90_07.7r",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
 
-	{ "b90_11.10",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
-	{ "b90_10.9",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
-	{ "b90_09.8",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
-	{ "b90_08.7",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
+	{ "b90_11.3a",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
+	{ "b90_10.3c",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
+	{ "b90_09.3d",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
+	{ "b90_08.3f",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
 
-	{ "13.3w",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
-	{ "12.6b",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
+	{ "13.rom13.3w",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
+	{ "12.rom12.6b",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(hellfire2a)
@@ -2916,7 +3432,7 @@ struct BurnDriver BurnDrvHellfire2a = {
 	"hellfire2a", "hellfire", NULL, NULL, "1989",
 	"Hellfire (2P set, older)\0", NULL, "Toaplan (Taito license)", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, hellfire2aRomInfo, hellfire2aRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, Hellfire2aDIPInfo,
 	HellfireInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
@@ -2926,23 +3442,23 @@ struct BurnDriver BurnDrvHellfire2a = {
 // Hellfire (1P set, older)
 
 static struct BurnRomInfo hellfire1aRomDesc[] = {
-	{ "b90_14x.0",			0x20000, 0xa3141ea5, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "b90_15x.1",			0x20000, 0xe864daf4, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "b90_14x.10m",		0x20000, 0xa3141ea5, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "b90_15x.9m",			0x20000, 0xe864daf4, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "b90_03x.2",			0x08000, 0xf58c368f, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "b90_03x.11e",		0x08000, 0xf58c368f, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "b90_04.3",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "b90_05.4",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
-	{ "b90_06.5",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
-	{ "b90_07.6",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
+	{ "b90_04.7x",			0x20000, 0xea6150fc, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "b90_05.7v",			0x20000, 0xbb52c507, 3 | BRF_GRA },           //  4
+	{ "b90_06.7t",			0x20000, 0xcf5b0252, 3 | BRF_GRA },           //  5
+	{ "b90_07.7r",			0x20000, 0xb98af263, 3 | BRF_GRA },           //  6
 
-	{ "b90_11.10",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
-	{ "b90_10.9",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
-	{ "b90_09.8",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
-	{ "b90_08.7",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
+	{ "b90_11.3a",			0x20000, 0xc33e543c, 5 | BRF_GRA },           //  7 Sprites
+	{ "b90_10.3c",			0x20000, 0x35fd1092, 5 | BRF_GRA },           //  8
+	{ "b90_09.3d",			0x20000, 0xcf01009e, 5 | BRF_GRA },           //  9
+	{ "b90_08.3f",			0x20000, 0x3404a5e3, 5 | BRF_GRA },           // 10
 
-	{ "13.3w",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
-	{ "12.6b",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
+	{ "13.rom13.3w",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 11 PROMs
+	{ "12.rom12.6b",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 12
 };
 
 STD_ROM_PICK(hellfire1a)
@@ -2952,7 +3468,7 @@ struct BurnDriver BurnDrvHellfire1a = {
 	"hellfire1a", "hellfire", NULL, NULL, "1989",
 	"Hellfire (1P set, older)\0", NULL, "Toaplan (Taito license)", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, hellfire1aRomInfo, hellfire1aRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, Hellfire1aDIPInfo,
 	HellfireInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
@@ -2979,8 +3495,8 @@ static struct BurnRomInfo zerowingRomDesc[] = {
 	{ "o15-01.rom",			0x20000, 0x70570e43, 5 | BRF_GRA },           // 11
 	{ "o15-02.rom",			0x20000, 0x724b487f, 5 | BRF_GRA },           // 12
 
-	{ "tp015_14.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
-	{ "tp015_15.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
+	{ "tp015_14.prom14.3d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
+	{ "tp015_15.prom15.2c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(zerowing)
@@ -2990,7 +3506,7 @@ struct BurnDriver BurnDrvZerowing = {
 	"zerowing", NULL, NULL, NULL, "1989",
 	"Zero Wing (2P set)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, zerowingRomInfo, zerowingRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, Zerowing2DIPInfo,
 	ZerowingInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
@@ -3017,8 +3533,8 @@ static struct BurnRomInfo zerowing1RomDesc[] = {
 	{ "o15-01.rom",			0x20000, 0x70570e43, 5 | BRF_GRA },           // 11
 	{ "o15-02.rom",			0x20000, 0x724b487f, 5 | BRF_GRA },           // 12
 
-	{ "tp015_14.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
-	{ "tp015_15.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
+	{ "tp015_14.prom14.3d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
+	{ "tp015_15.prom15.2c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(zerowing1)
@@ -3028,7 +3544,7 @@ struct BurnDriver BurnDrvZerowing1 = {
 	"zerowing1", "zerowing", NULL, NULL, "1989",
 	"Zero Wing (1P set)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, zerowing1RomInfo, zerowing1RomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, ZerowingDIPInfo,
 	ZerowingInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
@@ -3055,8 +3571,8 @@ static struct BurnRomInfo zerowingwRomDesc[] = {
 	{ "o15-01.rom",			0x20000, 0x70570e43, 5 | BRF_GRA },           // 11
 	{ "o15-02.rom",			0x20000, 0x724b487f, 5 | BRF_GRA },           // 12
 
-	{ "tp015_14.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
-	{ "tp015_15.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
+	{ "tp015_14.prom14.3d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
+	{ "tp015_15.prom15.2c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(zerowingw)
@@ -3066,14 +3582,14 @@ struct BurnDriver BurnDrvZerowingw = {
 	"zerowingw", "zerowing", NULL, NULL, "1989",
 	"Zero Wing (2P set, Williams license)\0", NULL, "Toaplan (Williams license)", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_HORSHOOT, 0,
 	NULL, zerowingwRomInfo, zerowingwRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, Zerowing2DIPInfo,
 	ZerowingInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
 };
 
 
-// Demon's World / Horror Story (set 1)
+// Demon's World (World) / Horror Story (Japan) (set 1)
 
 static struct BurnRomInfo demonwldRomDesc[] = {
 	{ "o16-10.v2",			0x20000, 0xca8194f3, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3103,7 +3619,7 @@ STD_ROM_FN(demonwld)
 
 struct BurnDriver BurnDrvDemonwld = {
 	"demonwld", NULL, NULL, NULL, "1990",
-	"Demon's World / Horror Story (set 1)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Demon's World (World) / Horror Story (Japan) (set 1)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"Demon's World\0\u30DB\u30E9\u30FC\u30B9\u30C8\u30FC\u30EA\u30FC (set 1)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RUNGUN, 0,
 	NULL, demonwldRomInfo, demonwldRomName, NULL, NULL, NULL, NULL, Drv3bInputInfo, DemonwldDIPInfo,
@@ -3112,7 +3628,7 @@ struct BurnDriver BurnDrvDemonwld = {
 };
 
 
-// Demon's World / Horror Story (set 2)
+// Demon's World (World) / Horror Story (Japan) (set 2)
 
 static struct BurnRomInfo demonwld1RomDesc[] = {
 	{ "o16n-10.bin",		0x20000, 0xfc38aeaa, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3142,7 +3658,7 @@ STD_ROM_FN(demonwld1)
 
 struct BurnDriver BurnDrvDemonwld1 = {
 	"demonwld1", "demonwld", NULL, NULL, "1989",
-	"Demon's World / Horror Story (set 2)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Demon's World (World) / Horror Story (Japan) (set 2)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"Demon's World\0\u30DB\u30E9\u30FC\u30B9\u30C8\u30FC\u30EA\u30FC (set 2)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RUNGUN, 0,
 	NULL, demonwld1RomInfo, demonwld1RomName, NULL, NULL, NULL, NULL, Drv3bInputInfo, DemonwldDIPInfo,
@@ -3151,7 +3667,7 @@ struct BurnDriver BurnDrvDemonwld1 = {
 };
 
 
-// Demon's World / Horror Story (set 3)
+// Demon's World (World) / Horror Story (Japan) (set 3)
 
 static struct BurnRomInfo demonwld2RomDesc[] = {
 	{ "o16-10.rom",			0x20000, 0x036ee46c, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3181,7 +3697,7 @@ STD_ROM_FN(demonwld2)
 
 struct BurnDriver BurnDrvDemonwld2 = {
 	"demonwld2", "demonwld", NULL, NULL, "1989",
-	"Demon's World / Horror Story (set 3)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Demon's World (World) / Horror Story (Japan) (set 3)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"Demon's World\0\u30DB\u30E9\u30FC\u30B9\u30C8\u30FC\u30EA\u30FC (set 3)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RUNGUN, 0,
 	NULL, demonwld2RomInfo, demonwld2RomName, NULL, NULL, NULL, NULL, Drv3bInputInfo, Demonwld1DIPInfo,
@@ -3190,7 +3706,7 @@ struct BurnDriver BurnDrvDemonwld2 = {
 };
 
 
-// Demon's World / Horror Story (set 4)
+// Demon's World (World) / Horror Story (Japan) (set 4)
 
 static struct BurnRomInfo demonwld3RomDesc[] = {
 	{ "o16-10-2.bin",		0x20000, 0x84ee5218, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3220,7 +3736,7 @@ STD_ROM_FN(demonwld3)
 
 struct BurnDriver BurnDrvDemonwld3 = {
 	"demonwld3", "demonwld", NULL, NULL, "1989",
-	"Demon's World / Horror Story (set 4)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Demon's World (World) / Horror Story (Japan) (set 4)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"Demon's World\0\u30DB\u30E9\u30FC\u30B9\u30C8\u30FC\u30EA\u30FC (set 4)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RUNGUN, 0,
 	NULL, demonwld3RomInfo, demonwld3RomName, NULL, NULL, NULL, NULL, Drv3bInputInfo, Demonwld1DIPInfo,
@@ -3229,7 +3745,7 @@ struct BurnDriver BurnDrvDemonwld3 = {
 };
 
 
-// Demon's World / Horror Story (set 5)
+// Demon's World (World) / Horror Story (Japan) (set 5)
 
 static struct BurnRomInfo demonwld4RomDesc[] = {
 	{ "o16-10.bin",			0x20000, 0x6f7468e0, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3259,7 +3775,7 @@ STD_ROM_FN(demonwld4)
 
 struct BurnDriver BurnDrvDemonwld4 = {
 	"demonwld4", "demonwld", NULL, NULL, "1989",
-	"Demon's World / Horror Story (set 5)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Demon's World (World) / Horror Story (Japan) (set 5)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"Demon's World\0\u30DB\u30E9\u30FC\u30B9\u30C8\u30FC\u30EA\u30FC (set 5)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RUNGUN, 0,
 	NULL, demonwld4RomInfo, demonwld4RomName, NULL, NULL, NULL, NULL, Drv3bInputInfo, Demonwld1DIPInfo,
@@ -3268,7 +3784,46 @@ struct BurnDriver BurnDrvDemonwld4 = {
 };
 
 
-// Same! Same! Same! (1P set)
+// Demon's World (World) / Horror Story (Japan) (set 6)
+
+static struct BurnRomInfo demonwld5RomDesc[] = {
+	{ "o16-10.bin",			0x20000, 0x4bcd85f6, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "o16-09.bin",			0x20000, 0x8e5445ba, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "rom11",			0x08000, 0x397eca1b, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+
+	{ "dsp_21.bin",			0x00800, 0x2d135376, 7 | BRF_PRG | BRF_ESS }, //  3 DSP Code
+	{ "dsp_22.bin",			0x00800, 0x79389a71, 7 | BRF_PRG | BRF_ESS }, //  4
+
+	{ "rom05",			0x20000, 0x6506c982, 3 | BRF_GRA },           //  5 Layer Tiles
+	{ "rom07",			0x20000, 0xa3a0d993, 3 | BRF_GRA },           //  6
+	{ "rom06",			0x20000, 0x4fc5e5f3, 3 | BRF_GRA },           //  7
+	{ "rom08",			0x20000, 0xeb53ab09, 3 | BRF_GRA },           //  8
+
+	{ "rom01",			0x20000, 0x1b3724e9, 5 | BRF_GRA },           //  9 Sprites
+	{ "rom02",			0x20000, 0x7b20a44d, 5 | BRF_GRA },           // 10
+	{ "rom03",			0x20000, 0x2cacdcd0, 5 | BRF_GRA },           // 11
+	{ "rom04",			0x20000, 0x76fd3201, 5 | BRF_GRA },           // 12
+
+	{ "prom12.bpr",			0x00020, 0xbc88cced, 0 | BRF_OPT },           // 13 PROMs
+	{ "prom13.bpr",			0x00020, 0xa1e17492, 0 | BRF_OPT },           // 14
+};
+
+STD_ROM_PICK(demonwld5)
+STD_ROM_FN(demonwld5)
+
+struct BurnDriver BurnDrvDemonwld5 = {
+	"demonwld5", "demonwld", NULL, NULL, "1989",
+	"Demon's World (World) / Horror Story (Japan) (set 6)\0", NULL, "Toaplan (APM Electronics license)", "Toaplan BCU-2 / FCU-2 based",
+	L"Demon's World\0\u30DB\u30E9\u30FC\u30B9\u30C8\u30FC\u30EA\u30FC (set 6)\0", NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_RUNGUN, 0,
+	NULL, demonwld5RomInfo, demonwld5RomName, NULL, NULL, NULL, NULL, Drv3bInputInfo, Demonwld1DIPInfo,
+	DemonwldInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
+	320, 240, 4, 3
+};
+
+
+// Same! Same! Same! (Japan, 1P set)
 
 static struct BurnRomInfo samesameRomDesc[] = {
 	{ "o17_09.8j",			0x08000, 0x3f69e437, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3276,7 +3831,7 @@ static struct BurnRomInfo samesameRomDesc[] = {
 	{ "o17_11.7j",			0x20000, 0xbe07d101, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12.7l",			0x20000, 0xef698811, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3297,7 +3852,7 @@ STD_ROM_FN(samesame)
 
 struct BurnDriver BurnDrvSamesame = {
 	"samesame", "fireshrk", NULL, NULL, "1989",
-	"Same! Same! Same! (1P set)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Same! Same! Same! (Japan, 1P set)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"\u9BAB!\u9BAB!\u9BAB!\0Same! Same! Same! (1P set)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, samesameRomInfo, samesameRomName, NULL, NULL, NULL, NULL, FiresharkInputInfo, SamesameDIPInfo,
@@ -3306,7 +3861,7 @@ struct BurnDriver BurnDrvSamesame = {
 };
 
 
-// Same! Same! Same! (2P set)
+// Same! Same! Same! (Japan, 2P set)
 
 static struct BurnRomInfo samesame2RomDesc[] = {
 	{ "o17_09x.8j",			0x08000, 0x3472e03e, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3314,7 +3869,7 @@ static struct BurnRomInfo samesame2RomDesc[] = {
 	{ "o17_11ii.7j",		0x20000, 0x6beac378, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12ii.7l",		0x20000, 0x6adb6eb5, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3335,7 +3890,7 @@ STD_ROM_FN(samesame2)
 
 struct BurnDriver BurnDrvSamesame2 = {
 	"samesame2", "fireshrk", NULL, NULL, "1989",
-	"Same! Same! Same! (2P set)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Same! Same! Same! (Japan, 2P set)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	L"\u9BAB!\u9BAB!\u9BAB!\0Same! Same! Same!\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, samesame2RomInfo, samesame2RomName, NULL, NULL, NULL, NULL, FiresharkInputInfo, Samesame2DIPInfo,
@@ -3348,11 +3903,11 @@ struct BurnDriver BurnDrvSamesame2 = {
 
 static struct BurnRomInfo samesamecnRomDesc[] = {
 	{ "o17-09-h2.8j",		0x08000, 0xfc8c2420, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "o17_10-h2.8l",		0x08000, 0xcc0ffbeb, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "o17-10-h2.8l",		0x08000, 0xcc0ffbeb, 1 | BRF_PRG | BRF_ESS }, //  1
 	{ "o17-11-2.7j",		0x20000, 0x6beac378, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17-12-2.7l",		0x20000, 0x6adb6eb5, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3372,7 +3927,7 @@ STD_ROM_PICK(samesamecn)
 STD_ROM_FN(samesamecn)
 
 struct BurnDriver BurnDrvSamesamecn = {
-	"samesamecn", "fireshrk", NULL, NULL, "1989",
+	"samesamecn", "fireshrk", NULL, NULL, "1990",
 	"Jiao! Jiao! Jiao! (China, 2P set)\0", NULL, "Toaplan (Hong Kong Honest Trading license)", "Toaplan BCU-2 / FCU-2 based",
 	L"\u9BAB!\u9BAB!\u9BAB!\0Jiao! Jiao! Jiao! (China, 2P set)\0", NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
@@ -3382,7 +3937,7 @@ struct BurnDriver BurnDrvSamesamecn = {
 };
 
 
-// Same! Same! Same! (1P set, NEW VER! hack)
+// Same! Same! Same! (Japan, 1P set, NEW VER! hack)
 
 static struct BurnRomInfo samesamenhRomDesc[] = {
 	{ "o17_09_nv.8j",		0x08000, 0xf60af2f9, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
@@ -3390,7 +3945,7 @@ static struct BurnRomInfo samesamenhRomDesc[] = {
 	{ "o17_11.7j",			0x20000, 0xbe07d101, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12.7l",			0x20000, 0xef698811, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3411,9 +3966,9 @@ STD_ROM_FN(samesamenh)
 
 struct BurnDriver BurnDrvSamesamenh = {
 	"samesamenh", "fireshrk", NULL, NULL, "2015",
-	"Same! Same! Same! (1P set, NEW VER! hack)\0", NULL, "hack (trap15)", "Toaplan BCU-2 / FCU-2 based",
+	"Same! Same! Same! (Japan, 1P set, NEW VER! hack)\0", NULL, "hack (trap15)", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HACK | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, samesamenhRomInfo, samesamenhRomName, NULL, NULL, NULL, NULL, FiresharkInputInfo, SamesameDIPInfo,
 	SamesameInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	240, 320, 3, 4
@@ -3428,7 +3983,7 @@ static struct BurnRomInfo fireshrkRomDesc[] = {
 	{ "o17_11ii.7j",		0x20000, 0x6beac378, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12ii.7l",		0x20000, 0x6adb6eb5, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3466,7 +4021,7 @@ static struct BurnRomInfo fireshrkaRomDesc[] = {
 	{ "o17_11ii.7j",		0x20000, 0x6beac378, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12ii.7l",		0x20000, 0x6adb6eb5, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3504,7 +4059,7 @@ static struct BurnRomInfo fireshrkdRomDesc[] = {
 	{ "o17_11ii.7j",		0x20000, 0x6beac378, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12ii.7l",		0x20000, 0x6adb6eb5, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3542,7 +4097,7 @@ static struct BurnRomInfo fireshrkdhRomDesc[] = {
 	{ "o17_11ii.7j",		0x20000, 0x6beac378, 1 | BRF_PRG | BRF_ESS }, //  2
 	{ "o17_12ii.7l",		0x20000, 0x6adb6eb5, 1 | BRF_PRG | BRF_ESS }, //  3
 
-	{ "hd647180.017",		0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
+	{ "hd647180_tp-017.8m",	0x08000, 0x43523032, 2 | BRF_PRG | BRF_ESS }, //  4 Z180 Code
 
 	{ "o17_05.12j",			0x20000, 0x565315f8, 3 | BRF_GRA },           //  5 Layer Tiles
 	{ "o17_06.13j",			0x20000, 0x95262d4c, 3 | BRF_GRA },           //  6
@@ -3575,21 +4130,21 @@ struct BurnDriver BurnDrvFireshrkdh = {
 // Out Zone
 
 static struct BurnRomInfo outzoneRomDesc[] = {
-	{ "tp_018_08.bin",		0x20000, 0x127a38d7, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "tp_018_07.bin",		0x20000, 0x9704db16, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp_018_08.6f",		0x20000, 0x127a38d7, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp_018_07.6f",		0x20000, 0x9704db16, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "tp_018_09.bin",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "tp_018_09.3j",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "tp-018_rom5.bin",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
-	{ "tp-018_rom6.bin",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
+	{ "tp-018_rom5.19h",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-018_rom6.22h",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
 
-	{ "tp-018_rom2.bin",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
-	{ "tp-018_rom1.bin",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
-	{ "tp-018_rom3.bin",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
-	{ "tp-018_rom4.bin",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
+	{ "tp-018_rom2.1c",		0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
+	{ "tp-018_rom1.1e",		0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
+	{ "tp-018_rom3.1d",		0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
+	{ "tp-018_rom4.1b",		0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
 
-	{ "tp018_10.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp018_11.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "tp018_10.rom10.18a",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "tp018_11.rom11.22c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(outzone)
@@ -3609,21 +4164,21 @@ struct BurnDriver BurnDrvOutzone = {
 // Out Zone (harder)
 
 static struct BurnRomInfo outzonehRomDesc[] = {
-	{ "tp_018_07h.bin",		0x20000, 0x0c2ac02d, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "tp_018_08h.bin",		0x20000, 0xca7e48aa, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp_018_07h.6h",		0x20000, 0x0c2ac02d, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp_018_08h.6f",		0x20000, 0xca7e48aa, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "tp_018_09.bin",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "tp_018_09.3j",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "tp-018_rom5.bin",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
-	{ "tp-018_rom6.bin",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
+	{ "tp-018_rom5.19h",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-018_rom6.22h",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
 
-	{ "tp-018_rom2.bin",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
-	{ "tp-018_rom1.bin",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
-	{ "tp-018_rom3.bin",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
-	{ "tp-018_rom4.bin",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
+	{ "tp-018_rom2.1c",		0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
+	{ "tp-018_rom1.1e",		0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
+	{ "tp-018_rom3.1d",		0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
+	{ "tp-018_rom4.1b",		0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
 
-	{ "tp018_10.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp018_11.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "tp018_10.rom10.18a",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "tp018_11.rom11.22c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(outzoneh)
@@ -3643,21 +4198,21 @@ struct BurnDriver BurnDrvOutzoneh = {
 // Out Zone (old set)
 
 static struct BurnRomInfo outzoneaRomDesc[] = {
-	{ "18.bin",			0x20000, 0x31a171bb, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "19.bin",			0x20000, 0x804ecfd1, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "18.6h",				0x20000, 0x31a171bb, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "19.6f",				0x20000, 0x804ecfd1, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "tp_018_09.bin",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "tp_018_09.3j",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "tp-018_rom5.bin",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
-	{ "tp-018_rom6.bin",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
+	{ "tp-018_rom5.19h",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-018_rom6.22h",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
 
-	{ "tp-018_rom2.bin",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
-	{ "tp-018_rom1.bin",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
-	{ "tp-018_rom3.bin",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
-	{ "tp-018_rom4.bin",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
+	{ "tp-018_rom2.1c",		0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
+	{ "tp-018_rom1.1e",		0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
+	{ "tp-018_rom3.1d",		0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
+	{ "tp-018_rom4.1b",		0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
 
-	{ "tp018_10.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp018_11.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "tp018_10.rom10.18a",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "tp018_11.rom11.22c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(outzonea)
@@ -3677,21 +4232,21 @@ struct BurnDriver BurnDrvOutzonea = {
 // Out Zone (older set)
 
 static struct BurnRomInfo outzonebRomDesc[] = {
-	{ "tp07.bin",			0x20000, 0xa85a1d48, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "tp08.bin",			0x20000, 0xd8cc44af, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp07.6h",			0x20000, 0xa85a1d48, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp08.6f",			0x20000, 0xd8cc44af, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "tp09.bin",			0x08000, 0xdd56041f, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "tp09.3j",			0x08000, 0xdd56041f, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "tp-018_rom5.bin",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
-	{ "tp-018_rom6.bin",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
+	{ "tp-018_rom5.19h",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-018_rom6.22h",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
 
-	{ "tp-018_rom2.bin",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
-	{ "tp-018_rom1.bin",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
-	{ "tp-018_rom3.bin",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
-	{ "tp-018_rom4.bin",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
+	{ "tp-018_rom2.1c",		0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
+	{ "tp-018_rom1.1e",		0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
+	{ "tp-018_rom3.1d",		0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
+	{ "tp-018_rom4.1b",		0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
 
-	{ "tp018_10.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp018_11.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "tp018_10.rom10.18a",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "tp018_11.rom11.22c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(outzoneb)
@@ -3711,21 +4266,21 @@ struct BurnDriver BurnDrvOutzoneb = {
 // Out Zone (oldest set)
 
 static struct BurnRomInfo outzonecRomDesc[] = {
-	{ "rom7.bin",			0x20000, 0x936e25d8, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "rom8.bin",			0x20000, 0xd19b3ecf, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "rom7.6h",			0x20000, 0x936e25d8, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "rom8.6f",			0x20000, 0xd19b3ecf, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "tp_018_09.bin",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "tp_018_09.3j",		0x08000, 0x73d8e235, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "tp-018_rom5.bin",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
-	{ "tp-018_rom6.bin",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
+	{ "tp-018_rom5.19h",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-018_rom6.22h",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
 
-	{ "tp-018_rom2.bin",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
-	{ "tp-018_rom1.bin",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
-	{ "tp-018_rom3.bin",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
-	{ "tp-018_rom4.bin",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
+	{ "tp-018_rom2.1c",		0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
+	{ "tp-018_rom1.1e",		0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
+	{ "tp-018_rom3.1d",		0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
+	{ "tp-018_rom4.1b",		0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
 
-	{ "tp018_10.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp018_11.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "tp018_10.rom10.18a",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "tp018_11.rom11.22c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(outzonec)
@@ -3745,21 +4300,21 @@ struct BurnDriver BurnDrvOutzonec = {
 // Out Zone (Zero Wing TP-015 PCB conversion)
 
 static struct BurnRomInfo outzonecvRomDesc[] = {
-	{ "tp_018_07+.bin",		0x20000, 0x8768d843, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "tp_018_08+.bin",		0x20000, 0xaf238f71, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp_018_07+.6f",		0x20000, 0x8768d843, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp_018_08+.6j",		0x20000, 0xaf238f71, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "tp_018_09+.bin",		0x08000, 0xb7201606, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "tp_018_09+.9l",		0x08000, 0xb7201606, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
 	{ "tp-018_rom5.bin",	0x80000, 0xc64ec7b6, 4 | BRF_GRA },           //  3 Layer Tiles
 	{ "tp-018_rom6.bin",	0x80000, 0x64b6c5ac, 4 | BRF_GRA },           //  4
 
-	{ "tp-018_rom2.bin",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
-	{ "tp-018_rom1.bin",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
-	{ "tp-018_rom3.bin",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
-	{ "tp-018_rom4.bin",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
+	{ "tp-018_rom2.22a",	0x20000, 0x6bb72d16, 5 | BRF_GRA },           //  5 Sprites
+	{ "tp-018_rom1.20a",	0x20000, 0x0934782d, 5 | BRF_GRA },           //  6
+	{ "tp-018_rom3.25a",	0x20000, 0xec903c07, 5 | BRF_GRA },           //  7
+	{ "tp-018_rom4.24a",	0x20000, 0x50cbf1a8, 5 | BRF_GRA },           //  8
 
-	{ "tp018_10.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp018_11.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "tp015_14.prom14.3d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "tp015_15.prom15.2c",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(outzonecv)
@@ -3776,24 +4331,24 @@ struct BurnDriver BurnDrvOutzonecv = {
 };
 
 
-// Vimana (World, set 1)
+// Vimana (World, rev A)
 
 static struct BurnRomInfo vimanaRomDesc[] = {
-	{ "tp019-7a.bin",		0x20000, 0x5a4bf73e, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "tp019-8a.bin",		0x20000, 0x03ba27e8, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp-019_07a.12h",		0x20000, 0x5a4bf73e, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp-019-08a.12k",		0x20000, 0x03ba27e8, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "hd647180.019",		0x08000, 0x41a97ebe, 2 | BRF_PRG | BRF_ESS }, //  2 Z180 Code
+	{ "hd647180_tp-019.4m",	0x08000, 0x41a97ebe, 2 | BRF_PRG | BRF_ESS }, //  2 Z180 Code
 
-	{ "vim6.bin",			0x20000, 0x2886878d, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "vim5.bin",			0x20000, 0x61a63d7a, 3 | BRF_GRA },           //  4
-	{ "vim4.bin",			0x20000, 0xb0515768, 3 | BRF_GRA },           //  5
-	{ "vim3.bin",			0x20000, 0x0b539131, 3 | BRF_GRA },           //  6
+	{ "tp-019_rom6.24f",	0x20000, 0x2886878d, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-019_rom5.22f",	0x20000, 0x61a63d7a, 3 | BRF_GRA },           //  4
+	{ "tp-019_rom4.20f",	0x20000, 0xb0515768, 3 | BRF_GRA },           //  5
+	{ "tp-019_rom3.18f",	0x20000, 0x0b539131, 3 | BRF_GRA },           //  6
 
-	{ "vim1.bin",			0x80000, 0xcdde26cd, 8 | BRF_GRA },           //  7 Sprites
-	{ "vim2.bin",			0x80000, 0x1dbfc118, 8 | BRF_GRA },           //  8
+	{ "tp-019_rom1.20a",	0x80000, 0xcdde26cd, 8 | BRF_GRA },           //  7 Sprites
+	{ "tp-019_rom2.20b",	0x80000, 0x1dbfc118, 8 | BRF_GRA },           //  8
 
-	{ "tp019-09.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp019-10.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "019rom9.prom9.4d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "019rom10.prom10.4h",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(vimana)
@@ -3801,7 +4356,7 @@ STD_ROM_FN(vimana)
 
 struct BurnDriver BurnDrvVimana = {
 	"vimana", NULL, NULL, NULL, "1991",
-	"Vimana (World, set 1)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Vimana (World, rev A)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, vimanaRomInfo, vimanaRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, VimanaDIPInfo,
@@ -3810,24 +4365,24 @@ struct BurnDriver BurnDrvVimana = {
 };
 
 
-// Vimana (World, set 2)
+// Vimana (World)
 
 static struct BurnRomInfo vimananRomDesc[] = {
-	{ "tp019-07.rom",		0x20000, 0x78888ff2, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "tp019-08.rom",		0x20000, 0x6cd2dc3c, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp-019_07.12h",		0x20000, 0x78888ff2, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp-019_08.12k",		0x20000, 0x6cd2dc3c, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "hd647180.019",		0x08000, 0x41a97ebe, 2 | BRF_PRG | BRF_ESS }, //  2 Z180 Code
+	{ "hd647180_tp-019.4m",	0x08000, 0x41a97ebe, 2 | BRF_PRG | BRF_ESS }, //  2 Z180 Code
 
-	{ "vim6.bin",			0x20000, 0x2886878d, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "vim5.bin",			0x20000, 0x61a63d7a, 3 | BRF_GRA },           //  4
-	{ "vim4.bin",			0x20000, 0xb0515768, 3 | BRF_GRA },           //  5
-	{ "vim3.bin",			0x20000, 0x0b539131, 3 | BRF_GRA },           //  6
+	{ "tp-019_rom6.24f",	0x20000, 0x2886878d, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-019_rom5.22f",	0x20000, 0x61a63d7a, 3 | BRF_GRA },           //  4
+	{ "tp-019_rom4.20f",	0x20000, 0xb0515768, 3 | BRF_GRA },           //  5
+	{ "tp-019_rom3.18f",	0x20000, 0x0b539131, 3 | BRF_GRA },           //  6
 
-	{ "vim1.bin",			0x80000, 0xcdde26cd, 8 | BRF_GRA },           //  7 Sprites
-	{ "vim2.bin",			0x80000, 0x1dbfc118, 8 | BRF_GRA },           //  8
+	{ "tp-019_rom1.20a",	0x80000, 0xcdde26cd, 8 | BRF_GRA },           //  7 Sprites
+	{ "tp-019_rom2.20b",	0x80000, 0x1dbfc118, 8 | BRF_GRA },           //  8
 
-	{ "tp019-09.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp019-10.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "019rom9.prom9.4d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "019rom10.prom10.4h",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(vimanan)
@@ -3835,7 +4390,7 @@ STD_ROM_FN(vimanan)
 
 struct BurnDriver BurnDrvVimanan = {
 	"vimanan", "vimana", NULL, NULL, "1991",
-	"Vimana (World, set 2)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
+	"Vimana (World)\0", NULL, "Toaplan", "Toaplan BCU-2 / FCU-2 based",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 2, HARDWARE_TOAPLAN_RAIZING, GBF_VERSHOOT, 0,
 	NULL, vimananRomInfo, vimananRomName, NULL, NULL, NULL, NULL, Drv2bInputInfo, VimananDIPInfo,
@@ -3847,21 +4402,21 @@ struct BurnDriver BurnDrvVimanan = {
 // Vimana (Japan)
 
 static struct BurnRomInfo vimanajRomDesc[] = {
-	{ "vim07.bin",			0x20000, 0x1efaea84, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "vim08.bin",			0x20000, 0xe45b7def, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "tp-019_07.12h",		0x20000, 0x1efaea84, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "tp-019_08.12k",		0x20000, 0xe45b7def, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "hd647180.019",		0x08000, 0x41a97ebe, 2 | BRF_PRG | BRF_ESS }, //  2 Z180 Code
+	{ "hd647180_tp-019.4m",	0x08000, 0x41a97ebe, 2 | BRF_PRG | BRF_ESS }, //  2 Z180 Code
 
-	{ "vim6.bin",			0x20000, 0x2886878d, 3 | BRF_GRA },           //  3 Layer Tiles
-	{ "vim5.bin",			0x20000, 0x61a63d7a, 3 | BRF_GRA },           //  4
-	{ "vim4.bin",			0x20000, 0xb0515768, 3 | BRF_GRA },           //  5
-	{ "vim3.bin",			0x20000, 0x0b539131, 3 | BRF_GRA },           //  6
+	{ "tp-019_rom6.24f",	0x20000, 0x2886878d, 3 | BRF_GRA },           //  3 Layer Tiles
+	{ "tp-019_rom5.22f",	0x20000, 0x61a63d7a, 3 | BRF_GRA },           //  4
+	{ "tp-019_rom4.20f",	0x20000, 0xb0515768, 3 | BRF_GRA },           //  5
+	{ "tp-019_rom3.18f",	0x20000, 0x0b539131, 3 | BRF_GRA },           //  6
 
-	{ "vim1.bin",			0x80000, 0xcdde26cd, 8 | BRF_GRA },           //  7 Sprites
-	{ "vim2.bin",			0x80000, 0x1dbfc118, 8 | BRF_GRA },           //  8
+	{ "tp-019_rom1.20a",	0x80000, 0xcdde26cd, 8 | BRF_GRA },           //  7 Sprites
+	{ "tp-019_rom2.20b",	0x80000, 0x1dbfc118, 8 | BRF_GRA },           //  8
 
-	{ "tp019-09.bpr",		0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
-	{ "tp019-10.bpr",		0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
+	{ "019rom9.prom9.4d",	0x00020, 0xbc88cced, 0 | BRF_OPT },           //  9 PROMs
+	{ "019rom10.prom10.4h",	0x00020, 0xa1e17492, 0 | BRF_OPT },           // 10
 };
 
 STD_ROM_PICK(vimanaj)

@@ -728,6 +728,9 @@
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_tecmo.cpp">
       <Filter>Source Files\burn\drv\pre90s</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\burn\drv\pre90s\d_tehkanwc.cpp">
+      <Filter>Source Files\burn\drv\pre90s</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\burn\drv\pre90s\d_terracre.cpp">
       <Filter>Source Files\burn\drv\pre90s</Filter>
     </ClCompile>
@@ -927,9 +930,6 @@
       <Filter>Source Files\burn\drv\pst90s</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_unico.cpp">
-      <Filter>Source Files\burn\drv\pst90s</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\burn\drv\pst90s\d_vmetal.cpp">
       <Filter>Source Files\burn\drv\pst90s</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\burn\drv\pst90s\d_welltris.cpp">

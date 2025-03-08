@@ -399,6 +399,8 @@ static INT32 DrvDoReset(INT32 full_reset)
 	flipscreen = 0;
 	portb_data = 0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -456,12 +458,7 @@ static INT32 DrvGfxDecode()
 
 static INT32 DrvInit(INT32 select)
 {
-	AllMem = NULL;
-	MemIndex();
-	INT32 nLen = MemEnd - (UINT8 *)0;
-	if ((AllMem = (UINT8 *)BurnMalloc(nLen)) == NULL) return 1;
-	memset(AllMem, 0, nLen);
-	MemIndex();
+	BurnAllocMemIndex();
 
 	game_select = select;
 
@@ -555,7 +552,7 @@ static INT32 DrvExit()
 	AY8910Exit(0);
 	DACExit();
 
-	BurnFree(AllMem);
+	BurnFreeMemIndex();
 
 	return 0;
 }
@@ -598,37 +595,13 @@ static void draw_layer()
 		INT32 flipx = attr & 0x40;
 		INT32 flipy = attr & 0x80;
 
-		if (flipy) {
-			if (flipx) {
-				Render8x8Tile_FlipXY_Clip(pTransDraw, code, sx, sy, color, 2, 0, DrvGfxROM0);
-			} else {
-				Render8x8Tile_FlipY_Clip(pTransDraw, code, sx, sy, color, 2, 0, DrvGfxROM0);
-			}
-		} else {
-			if (flipx) {
-				Render8x8Tile_FlipX_Clip(pTransDraw, code, sx, sy, color, 2, 0, DrvGfxROM0);
-			} else {
-				Render8x8Tile_Clip(pTransDraw, code, sx, sy, color, 2, 0, DrvGfxROM0);
-			}
-		}
+		Draw8x8Tile(pTransDraw, code, sx, sy, flipx, flipy, color, 2, 0, DrvGfxROM0);
 	}
 }
 
 static void draw_single_sprite(INT32 code, INT32 sx, INT32 sy, INT32 color, INT32 flipx, INT32 flipy)
 {
-	if (flipy) {
-		if (flipx) {
-			Render16x16Tile_Mask_FlipXY_Clip(pTransDraw, code, sx, sy - 16, color, 2, 0, 0, DrvGfxROM1);
-		} else {
-			Render16x16Tile_Mask_FlipY_Clip(pTransDraw, code, sx, sy - 16, color, 2, 0, 0, DrvGfxROM1);
-		}
-	} else {
-		if (flipx) {
-			Render16x16Tile_Mask_FlipX_Clip(pTransDraw, code, sx, sy - 16, color, 2, 0, 0, DrvGfxROM1);
-		} else {
-			Render16x16Tile_Mask_Clip(pTransDraw, code, sx, sy - 16, color, 2, 0, 0, DrvGfxROM1);
-		}
-	}
+	Draw16x16MaskTile(pTransDraw, code, sx, sy - 16, flipx, flipy, color, 2, 0, 0, DrvGfxROM1);
 }
 
 static void draw_sprites()
@@ -681,8 +654,7 @@ static INT32 DrvDraw()
 
 static INT32 DrvFrame()
 {
-	watchdog++;
-	if (DrvReset || watchdog >= 180) {
+	if (DrvReset || ++watchdog >= 180) {
 		DrvDoReset((watchdog < 180) ? 1 : 0);
 	}
 
@@ -722,7 +694,7 @@ static INT32 DrvFrame()
 	}
 
 	INT32 nInterleave = 256;
-	INT32 nCyclesTotal = 3072000 / 60;
+	INT32 nCyclesTotal[2] = { 3072000 / 60, 3072000 / 60 };
 	INT32 nCyclesDone[2] = { 0, 0 };
 
 	ZetOpen(0);
@@ -730,23 +702,24 @@ static INT32 DrvFrame()
 
 	for (INT32 i = 0; i < nInterleave; i++)
 	{
-        nCyclesDone[0] += ZetRun(((i + 1) * nCyclesTotal / nInterleave) - nCyclesDone[0]);
+		CPU_RUN(0, Zet);
 		if (i == 240 && irq_mask) ZetSetIRQLine(0, CPU_IRQSTATUS_HOLD);
 
 		if (mcu_halt) {
-			nCyclesDone[1] += NSC8105Idle(ZetTotalCycles() - NSC8105TotalCycles());
+			CPU_IDLE(1, NSC8105);
 		} else {
-			nCyclesDone[1] += NSC8105Run(ZetTotalCycles() - NSC8105TotalCycles());
+			CPU_RUN(1, NSC8105);
 		}
 	}
 
 	ZetClose();
+	NSC8105Close();
 
 	if (pBurnSoundOut) {
         AY8910Render(pBurnSoundOut, nBurnSoundLen);
 		DACUpdate(pBurnSoundOut, nBurnSoundLen);
+		BurnSoundDCFilter();
 	}
-	NSC8105Close(); // after dacupdate
 
 	if (pBurnDraw) {
 		DrvDraw();
@@ -826,7 +799,7 @@ struct BurnDriver BurnDrvFriskyt = {
 	"friskyt", NULL, NULL, NULL, "1981",
 	"Frisky Tom (set 1)\0", NULL, "Nichibutsu", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
 	NULL, friskytRomInfo, friskytRomName, NULL, NULL, NULL, NULL, FriskytInputInfo, FriskytDIPInfo,
 	friskytInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	256, 224, 4, 3
@@ -861,14 +834,14 @@ struct BurnDriver BurnDrvFriskyta = {
 	"friskyta", "friskyt", NULL, NULL, "1981",
 	"Frisky Tom (set 2)\0", NULL, "Nichibutsu", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
 	NULL, friskytaRomInfo, friskytaRomName, NULL, NULL, NULL, NULL, FriskytInputInfo, FriskytDIPInfo,
 	friskytInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	256, 224, 4, 3
 };
 
 
-// Frisky Tom (set 3, encrypted)
+// Frisky Tom (set 3)
 
 static struct BurnRomInfo friskytbRomDesc[] = {
 	{ "1.3a",	0x1000, 0x554bdb0f, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 & NSC8105 Code (Encrypted)
@@ -899,9 +872,9 @@ static INT32 friskytbInit()
 
 struct BurnDriver BurnDrvFriskytb = {
 	"friskytb", "friskyt", NULL, NULL, "1981",
-	"Frisky Tom (set 3, encrypted)\0", "Broken, please use parent romset!", "Nichibutsu", "Miscellaneous",
+	"Frisky Tom (set 3)\0", "Broken, please use parent romset!", "Nichibutsu", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_NOT_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
+	BDF_GAME_NOT_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_MAZE, 0,
 	NULL, friskytbRomInfo, friskytbRomName, NULL, NULL, NULL, NULL, FriskytInputInfo, FriskytDIPInfo,
 	friskytbInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	256, 224, 4, 3
@@ -941,9 +914,9 @@ static INT32 radradInit()
 
 struct BurnDriver BurnDrvRadrad = {
 	"radrad", NULL, NULL, NULL, "1982",
-	"Radical Radial (US)\0", NULL, "Nichibutsu USA", "Miscellaneous",
+	"Radical Radial (US)\0", NULL, "Logitec Corp. (Nichibutsu USA license)", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, radradRomInfo, radradRomName, NULL, NULL, NULL, NULL, RadradInputInfo, RadradDIPInfo,
 	radradInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	256, 224, 4, 3
@@ -978,10 +951,10 @@ STD_ROM_PICK(radradj)
 STD_ROM_FN(radradj)
 
 struct BurnDriver BurnDrvRadradj = {
-	"radradj", "radrad", NULL, NULL, "1982",
+	"radradj", "radrad", NULL, NULL, "1983",
 	"Radical Radial (Japan)\0", NULL, "Logitec Corp.", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_VERSHOOT, 0,
 	NULL, radradjRomInfo, radradjRomName, NULL, NULL, NULL, NULL, RadradInputInfo, RadradDIPInfo,
 	radradInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	256, 224, 4, 3
@@ -1023,7 +996,7 @@ struct BurnDriver BurnDrvSeicross = {
 	"seicross", NULL, NULL, NULL, "1984",
 	"Seicross (set 1)\0", NULL, "Nichibutsu / Alice", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, seicrossRomInfo, seicrossRomName, NULL, NULL, NULL, NULL, SeicrossInputInfo, SeicrossDIPInfo,
 	seicrossInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	224, 256, 3, 4
@@ -1061,24 +1034,24 @@ struct BurnDriver BurnDrvSeicrossa = {
 	"seicrossa", "seicross", NULL, NULL, "1984",
 	"Seicross (set 2)\0", NULL, "Nichibutsu / Alice", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, seicrossaRomInfo, seicrossaRomName, NULL, NULL, NULL, NULL, SeicrossInputInfo, SeicrossDIPInfo,
 	seicrossInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x40,
 	224, 256, 3, 4
 };
 
 
-// Sector Zone
+// Sector Zone (set 1)
 
 static struct BurnRomInfo sectrzonRomDesc[] = {
-	{ "sz1.3a",		0x1000, 0xf0a45cb4, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 & NSC8105 Code
-	{ "sz2.3c",		0x1000, 0xfea68ddb, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "sz3.3d",		0x1000, 0xbaad4294, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "sz4.3e",		0x1000, 0x75f2ca75, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "sz5.3fg",	0x1000, 0xdc14f2c8, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "sz6.3h",		0x1000, 0x397a38c5, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "sz7.3i",		0x1000, 0x7b34dc1c, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "sz8.3j",		0x0800, 0x9933526a, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sz1.3a",		0x1000, 0xf6c3aeca, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 & NSC8105 Code
+	{ "sz2.3c",		0x1000, 0xf167f10e, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sz3.3d",		0x1000, 0xceb3c8f4, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sz4.3e",		0x1000, 0x3112af59, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sz5.3fg",	0x1000, 0xb494a993, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sz6.3h",		0x1000, 0x09d5b9da, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sz7.3i",		0x1000, 0x13052b03, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sz8.3j",		0x0800, 0x019f9651, 1 | BRF_PRG | BRF_ESS }, //  7
 
 	{ "sz11.7k",	0x1000, 0xfbd9b91d, 2 | BRF_GRA },           //  8 Graphics
 	{ "sz12.7m",	0x1000, 0x2bdef9ad, 2 | BRF_GRA },           //  9
@@ -1096,10 +1069,86 @@ STD_ROM_FN(sectrzon)
 
 struct BurnDriver BurnDrvSectrzon = {
 	"sectrzon", "seicross", NULL, NULL, "1984",
-	"Sector Zone\0", NULL, "Nichibutsu / Alice", "Miscellaneous",
+	"Sector Zone (set 1)\0", NULL, "Nichibutsu / Alice", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
 	NULL, sectrzonRomInfo, sectrzonRomName, NULL, NULL, NULL, NULL, SeicrossInputInfo, SeicrossDIPInfo,
+	seicrossInit, DrvExit, DrvFrame, DrvDraw, NULL, &DrvRecalc, 0x40,
+	224, 256, 3, 4
+};
+
+
+// Sector Zone (bootleg)
+
+static struct BurnRomInfo sectrzontRomDesc[] = {
+	{ "czt_1.bin",	0x1000, 0xf0a45cb4, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 & NSC8105 Code
+	{ "czt_2.bin",	0x1000, 0xfea68ddb, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "czt_3.bin",	0x1000, 0xbaad4294, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "czt_4.bin",	0x1000, 0x75f2ca75, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "czt_5.bin",	0x1000, 0xdc14f2c8, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "czt_6.bin",	0x1000, 0x397a38c5, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "czt_7.bin",	0x1000, 0x7b34dc1c, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "czt_8.bin",	0x1000, 0x673a20e7, 1 | BRF_PRG | BRF_ESS }, //  7
+
+	{ "czt_11.bin",	0x1000, 0xfbd9b91d, 2 | BRF_GRA },           //  8 Graphics
+	{ "czt_12.bin",	0x1000, 0x2bdef9ad, 2 | BRF_GRA },           //  9
+	{ "czt_9.bin",	0x1000, 0x4819f0cd, 2 | BRF_GRA },           // 10
+	{ "czt_10.bin",	0x1000, 0x4c268778, 2 | BRF_GRA },           // 11
+
+	{ "czt_2_82s123.bin",	0x0020, 0x4d218a3c, 3 | BRF_GRA },   // 12 Color Data
+	{ "czt_1_82s123.bin",	0x0020, 0xc550531c, 3 | BRF_GRA },   // 13
+
+	{ "czt_pal16h2cn.bin",	0x0044, 0x7edec1ed, 0 | BRF_OPT },   // 14 PLDs
+};
+
+STD_ROM_PICK(sectrzont)
+STD_ROM_FN(sectrzont)
+
+struct BurnDriver BurnDrvSectrzont = {
+	"sectrzont", "seicross", NULL, NULL, "1984",
+	"Sector Zone (bootleg)\0", NULL, "bootleg (Tecfri)", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_CLONE | BDF_BOOTLEG | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	NULL, sectrzontRomInfo, sectrzontRomName, NULL, NULL, NULL, NULL, SeicrossInputInfo, SeicrossDIPInfo,
+	seicrossInit, DrvExit, DrvFrame, DrvDraw, NULL, &DrvRecalc, 0x40,
+	224, 256, 3, 4
+};
+
+
+// Sector Zone (set 2)
+
+static struct BurnRomInfo sectrzonaRomDesc[] = {
+	{ "sz1.3a",		0x1000, 0xf0a45cb4, 1 | BRF_PRG | BRF_ESS }, //  0 Z80 & NSC8105 Code
+	{ "sz2.3c",		0x1000, 0xfea68ddb, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sz3.3d",		0x1000, 0xbaad4294, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sz4.3e",		0x1000, 0x75f2ca75, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sz5.3fg",	0x1000, 0xdc14f2c8, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sz6.3h",		0x1000, 0x397a38c5, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sz7.3i",		0x1000, 0x7b34dc1c, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sz8.3j",		0x0800, 0x9933526a, 1 | BRF_PRG | BRF_ESS }, //  7
+
+	{ "sz11.7k",	0x1000, 0xfbd9b91d, 2 | BRF_GRA },           //  8 Graphics
+	{ "sz12.7m",	0x1000, 0x2bdef9ad, 2 | BRF_GRA },           //  9
+	{ "sz9.7j",		0x1000, 0x4819f0cd, 2 | BRF_GRA },           // 10
+	{ "sz10.7h",	0x1000, 0x4c268778, 2 | BRF_GRA },           // 11
+
+	// not dumped for this set
+	{ "sz73.10c",	0x0020, 0x4d218a3c, 3 | BRF_GRA },           // 12 Color Data
+	{ "sz74.10b",	0x0020, 0xc550531c, 3 | BRF_GRA },           // 13
+
+	// not dumped for this set
+	{ "pal16h2.3b",	0x0044, 0xe1a6a86d, 0 | BRF_OPT },           // 14 PLDs
+};
+
+STD_ROM_PICK(sectrzona)
+STD_ROM_FN(sectrzona)
+
+struct BurnDriver BurnDrvSectrzona = {
+	"sectrzona", "seicross", NULL, NULL, "1984",
+	"Sector Zone (set 2)\0", NULL, "Nichibutsu / Alice", "Miscellaneous",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_ORIENTATION_FLIPPED | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_PRE90S, GBF_HORSHOOT, 0,
+	NULL, sectrzonaRomInfo, sectrzonaRomName, NULL, NULL, NULL, NULL, SeicrossInputInfo, SeicrossDIPInfo,
 	seicrossInit, DrvExit, DrvFrame, DrvDraw, NULL, &DrvRecalc, 0x40,
 	224, 256, 3, 4
 };

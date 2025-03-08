@@ -177,6 +177,8 @@ static INT32 DrvDoReset()
 	BurnYM2203Reset();
 	MSM6295Reset(0);
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -305,7 +307,7 @@ static void draw_foreground_layer()
 
 		if (sx >= nScreenWidth || sx < -3 || sy >= nScreenHeight || sy < -3) continue;
 
-		INT32 attr  = vram[offs];
+		INT32 attr  = BURN_ENDIAN_SWAP_INT16(vram[offs]);
 		INT32 code  = attr & 0x3fff;
 		INT32 flipy = (attr & 0x8000) >> 15;
 		INT32 flipx = (attr & 0x4000) >> 14;
@@ -339,7 +341,7 @@ static void draw_background_layer()
 
 		if (sx >= nScreenWidth || sx < -7 || sy >= nScreenHeight || sy < -7) continue;
 
-		INT32 attr  = vram[offs];
+		INT32 attr  = BURN_ENDIAN_SWAP_INT16(vram[offs]);
 		INT32 code  = attr & 0x1fff;
 		INT32 flipy = attr & 0x8000;
 		INT32 flipx = attr & 0x4000;
@@ -366,7 +368,7 @@ static INT32 DrvDraw()
 		UINT8 r,g,b;
 		UINT16 *pal = (UINT16*)DrvPalRAM;
 		for (INT32 i = 0; i < 0x200; i++) {
-			INT32 d = pal[i];
+			INT32 d = BURN_ENDIAN_SWAP_INT16(pal[i]);
 
 			r = ((d >> 10) & 0x1f);
 			g = ((d >>  5) & 0x1f);
@@ -476,20 +478,20 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 // Pass
 
 static struct BurnRomInfo passRomDesc[] = {
-	{ "33",		0x20000, 0x0c5f18f6, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
-	{ "34",		0x20000, 0x7b54573d, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "33_3.u1",		0x20000, 0x0c5f18f6, 1 | BRF_PRG | BRF_ESS }, //  0 68k Code
+	{ "34_4.u2",		0x20000, 0x7b54573d, 1 | BRF_PRG | BRF_ESS }, //  1
 
-	{ "23",		0x10000, 0xb9a0ccde, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
+	{ "32_2.u202",		0x10000, 0xb9a0ccde, 2 | BRF_PRG | BRF_ESS }, //  2 Z80 Code
 
-	{ "31",		0x20000, 0xc7315bbd, 3 | BRF_SND },           //  3 Samples
+	{ "31_1.u210",		0x20000, 0xc7315bbd, 3 | BRF_SND },           //  3 Samples
 
-	{ "35",		0x20000, 0x2ab33f07, 4 | BRF_GRA },           //  4 Foreground Tiles
-	{ "36",		0x20000, 0x6677709d, 4 | BRF_GRA },           //  5
+	{ "35_5.u512",		0x20000, 0x2ab33f07, 4 | BRF_GRA },           //  4 Foreground Tiles
+	{ "36_6.u511",		0x20000, 0x6677709d, 4 | BRF_GRA },           //  5
 
-	{ "38",		0x20000, 0x7f11b81a, 5 | BRF_GRA },           //  6 Background Tiles
-	{ "40",		0x20000, 0x80e0a71d, 5 | BRF_GRA },           //  7
-	{ "37",		0x20000, 0x296499e7, 5 | BRF_GRA },           //  8
-	{ "39",		0x20000, 0x35c0ad5c, 5 | BRF_GRA },           //  9
+	{ "38_8.u421",		0x20000, 0x7f11b81a, 5 | BRF_GRA },           //  6 Background Tiles
+	{ "40_10.u420",		0x20000, 0x80e0a71d, 5 | BRF_GRA },           //  7
+	{ "37_7.u425",		0x20000, 0x296499e7, 5 | BRF_GRA },           //  8
+	{ "39_9.u426",		0x20000, 0x35c0ad5c, 5 | BRF_GRA },           //  9
 };
 
 STD_ROM_PICK(pass)
@@ -499,7 +501,7 @@ struct BurnDriver BurnDrvPass = {
 	"pass", NULL, NULL, NULL, "1992",
 	"Pass\0", NULL, "Oksan", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_MISC_POST90S, GBF_MAZE, 0,
 	NULL, passRomInfo, passRomName, NULL, NULL, NULL, NULL, PassInputInfo, PassDIPInfo,
 	DrvInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x200,
 	320, 224, 4, 3

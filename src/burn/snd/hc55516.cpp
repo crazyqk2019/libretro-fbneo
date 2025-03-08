@@ -43,12 +43,16 @@ static double  m_decay;
 static double  m_leak;
 
 static INT32   m_clock = 0; // always 0 for sw-driven clock
+static INT32   m_mute;
+
+static double  volume = 1.0;
 
 static INT16  *m_mixer_buffer; // re-sampler
 
 static INT32 (*pCPUTotalCycles)() = NULL;
 static UINT32  nDACCPUMHZ = 0;
 static INT32   nCurrentPosition = 0;
+static INT32   samples_from = 0;
 
 static void    hc55516_update_int(INT16 *inputs, INT32 sample_len);
 
@@ -56,12 +60,13 @@ static void    hc55516_update_int(INT16 *inputs, INT32 sample_len);
 // Streambuffer handling
 static INT32 SyncInternal()
 {
-	return (INT32)(float)(FRAME_SIZE * (pCPUTotalCycles() / (nDACCPUMHZ / (nBurnFPS / 100.0000))));
+	return (INT32)(float)(samples_from * (pCPUTotalCycles() / (nDACCPUMHZ / (nBurnFPS / 100.0000))));
 }
 
 static void UpdateStream(INT32 length)
 {
-	if (length > FRAME_SIZE) length = FRAME_SIZE;
+	if (!pBurnSoundOut) return;
+	if (length > samples_from) length = samples_from;
 
 	length -= nCurrentPosition;
 	if (length <= 0) return;
@@ -122,6 +127,8 @@ void hc55516_reset()
 	m_new_digit = 0;
 	m_shiftreg = 0;
 
+	m_mute = 0;
+
 	m_curr_sample = 0;
 	m_next_sample = 0;
 
@@ -131,6 +138,12 @@ void hc55516_reset()
 	m_integrator = 0;
 
 	nCurrentPosition = 0;
+	samples_from = (SAMPLE_RATE * 100 + (nBurnFPS >> 1)) / nBurnFPS;
+}
+
+void hc55516_volume(double vol)
+{
+	volume = vol;
 }
 
 void hc55516_scan(INT32 nAction, INT32 *)
@@ -139,6 +152,8 @@ void hc55516_scan(INT32 nAction, INT32 *)
 	SCAN_VAR(m_digit);
 	SCAN_VAR(m_new_digit);
 	SCAN_VAR(m_shiftreg);
+
+	SCAN_VAR(m_mute);
 
 	SCAN_VAR(m_curr_sample);
 	SCAN_VAR(m_next_sample);
@@ -164,6 +179,8 @@ static void start_common(UINT8 _shiftreg_mask, INT32 _active_clock_hi)
 	m_active_clock_hi = _active_clock_hi;
 
 	m_mixer_buffer = (INT16*)BurnMalloc(2 * sizeof(INT16) * SAMPLE_RATE);
+
+	volume = 1.0;
 }
 
 static inline INT32 is_external_oscillator()
@@ -184,10 +201,20 @@ static inline INT32 current_clock_state()
 	return ((UINT64)m_update_count * m_clock * 2 / SAMPLE_RATE) & 0x01;
 }
 
+void hc55516_mute_w(INT32 state)
+{
+	m_mute = state;
+}
+
 
 static void process_digit()
 {
 	double integrator = m_integrator, temp;
+
+	if (m_mute) {
+		m_next_sample = 0;
+		return;
+	}
 
 	/* shift the bit into the shift register */
 	m_shiftreg = (m_shiftreg << 1) | m_digit;
@@ -349,7 +376,7 @@ void hc55516_update(INT16 *inputs, INT32 sample_len)
 		return;
 	}
 
-	INT32 samples_from = (INT32)((double)((SAMPLE_RATE * 100) / nBurnFPS) + 0.5);
+	samples_from = (SAMPLE_RATE * 100 + (nBurnFPS >> 1)) / nBurnFPS;
 
 	UpdateStream(samples_from);
 
@@ -357,10 +384,11 @@ void hc55516_update(INT16 *inputs, INT32 sample_len)
 	{
 		INT32 k = (samples_from * j) / nBurnSoundLen;
 
-		INT32 rlmono = m_mixer_buffer[k];
+		INT32 rlmono = m_mixer_buffer[k] * volume;
+		rlmono = BURN_SND_CLIP(rlmono);
 
-		inputs[0] = BURN_SND_CLIP(inputs[0] + BURN_SND_CLIP(rlmono));
-		inputs[1] = BURN_SND_CLIP(inputs[1] + BURN_SND_CLIP(rlmono));
+		inputs[0] = BURN_SND_CLIP(inputs[0] + rlmono);
+		inputs[1] = BURN_SND_CLIP(inputs[1] + rlmono);
 		inputs += 2;
 	}
 

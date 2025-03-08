@@ -5,6 +5,7 @@
 // Change this to 0 to 1 if using samples in a low-ram environment.
 // May cause momentary stutter while sample loads.
 #define SAMPLE_NOSTORE		(0<<3) // only keep in memory while playing
+#define SAMPLE_NODUMP       (1<<4) // dump not available
 
 #define SAMPLE_PLAYING		(1<<0) // playing
 #define SAMPLE_PAUSED		(1<<1) // paused
@@ -34,6 +35,10 @@ void BurnSampleReset();
 
 void BurnSampleInit(INT32 bAdd);
 void BurnSampleSetRoute(INT32 sample, INT32 nIndex, double nVolume, INT32 nRouteDir);
+
+// BurnSampleSetRouteFade() fades up/down to volume to eliminate clicks/pops
+// when a game changes volume often.
+void BurnSampleSetRouteFade(INT32 sample, INT32 nIndex, double nVolume, INT32 nRouteDir);
 void BurnSampleSetRouteAllSamples(INT32 nIndex, double nVolume, INT32 nRouteDir);
 
 void BurnSampleScan(INT32 nAction, INT32 *pnMin);
@@ -41,15 +46,27 @@ void BurnSampleScan(INT32 nAction, INT32 *pnMin);
 void BurnSampleRender(INT16 *pDest, UINT32 pLen);
 void BurnSampleExit();
 
+// Buffered samples
+void BurnSampleSetBuffered(INT32 (*pCPUCyclesCB)(), INT32 nCpuMHZ);
+void BurnSampleSync();
+
+
 extern INT32 bBurnSampleTrimSampleEnd; // set before BurnSampleInit();
 
 #define BURN_SND_SAMPLE_ROUTE_1			0
 #define BURN_SND_SAMPLE_ROUTE_2			1
 
-#define BurnSampleSetAllRoutes(i, v, d)						\
+#define BurnSampleSetAllRoutes(i, v, d)	{   				\
 	BurnSampleSetRoute(i, BURN_SND_SAMPLE_ROUTE_1, v, d);	\
-	BurnSampleSetRoute(i, BURN_SND_SAMPLE_ROUTE_2, v, d);
+	BurnSampleSetRoute(i, BURN_SND_SAMPLE_ROUTE_2, v, d);   \
+}
 
-#define BurnSampleSetAllRoutesAllSamples(v, d)						\
+#define BurnSampleSetAllRoutesFade(i, v, d)	{   				\
+	BurnSampleSetRouteFade(i, BURN_SND_SAMPLE_ROUTE_1, v, d);	\
+	BurnSampleSetRouteFade(i, BURN_SND_SAMPLE_ROUTE_2, v, d);   \
+}
+
+#define BurnSampleSetAllRoutesAllSamples(v, d) {					\
 	BurnSampleSetRouteAllSamples(BURN_SND_SAMPLE_ROUTE_1, v, d);	\
-	BurnSampleSetRouteAllSamples(BURN_SND_SAMPLE_ROUTE_2, v, d);
+	BurnSampleSetRouteAllSamples(BURN_SND_SAMPLE_ROUTE_2, v, d);    \
+}

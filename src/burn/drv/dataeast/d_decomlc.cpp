@@ -1,4 +1,4 @@
-// FB Alpha Data East MLC Hardware driver module
+// FB Neo Data East MLC Hardware driver module
 // Based on MAME driver by Bryan Mcphail
 
 #include "tiles_generic.h"
@@ -95,6 +95,13 @@ static struct BurnInputInfo MlcInputList[] = {
 
 STDINPUTINFO(Mlc)
 
+static UINT8 hilite(INT32 col)
+{
+	col += 0x22;
+	if (col > 0xff) col = 0xff;
+	return col;
+}
+
 static inline void palette_write(INT32 offset)
 {
 	offset &= 0x7ffc;
@@ -114,6 +121,8 @@ static inline void palette_write(INT32 offset)
 	b = (b << 3) | (b >> 2);
 
 	DrvPalette[offset] = BurnHighCol(r,g,b,0);
+
+	DrvPalette[0x1000+offset] = BurnHighCol(hilite(r),hilite(g),hilite(b),0);
 
 	b = (b * 0x7f) >> 8;
 	g = (g * 0x7f) >> 8;
@@ -415,6 +424,8 @@ static INT32 DrvDoReset()
 	scanline_timer = -1;
 	vblank_flip = ~0;
 
+	HiscoreReset();
+
 	return 0;
 }
 
@@ -431,7 +442,7 @@ static INT32 MemIndex()
 
 	DrvEEPROM		= Next; Next += 0x0000080;
 
-	DrvPalette		= (UINT32*)Next; Next += 0x800 * 2 * sizeof(UINT32);
+	DrvPalette		= (UINT32*)Next; Next += 0x800 * 3 * sizeof(UINT32);
 
 	AllRam			= Next;
 
@@ -470,11 +481,18 @@ static void decode_sound()
 	BurnFree(tmp);
 }
 
+static INT32 shadow_mask;
+static INT32 shadow_shift;
+
 static void set_sprite_config(INT32 len, INT32 bpp)
 {
 	sprite_depth = bpp;
 	sprite_color_mask = 0x7f >> (bpp - 4);
 	sprite_mask = (((len * 8) / ((bpp + 1) & 6)) / (16 * 16));
+
+	INT32 ncol = 0x800 / (1<<bpp);
+	shadow_mask = ncol | (ncol << 1);
+	shadow_shift = 11 - bpp;
 
 	for (INT32 i = 1; i < (1 << 31); i<=1) {
 		if (i >= sprite_mask) {
@@ -718,11 +736,13 @@ static INT32 DrvExit()
 	return 0;
 }
 
-static void mlc_drawgfxzoomline(UINT16 *dest, INT32 *clip, UINT32 code1, UINT32 code2, UINT32 color, INT32 flipx, INT32 sx,
-		INT32 transparent_color, INT32 use8bpp, INT32 scalex, INT32 alpha, INT32 srcline)
+static void mlc_drawgfxzoomline(UINT16 *dest, UINT8 *pri, INT32 *clip, UINT32 code1, UINT32 code2, UINT32 color, INT32 flipx, INT32 sx,
+		INT32 transparent_color, INT32 use8bpp, INT32 scalex, INT32 srcline, INT32 shadowMode)
 {
 	if (!scalex) return;
 
+	UINT32 *m_irq_ram = (UINT32*)DrvIRQRAM;
+	const UINT32 alphaMode = m_irq_ram[0x04 / 4] & 0xc0;
 	INT32 sprite_screen_width = (scalex*16+(sx&0xffff))>>16;
 
 	sx>>=16;
@@ -759,35 +779,44 @@ static void mlc_drawgfxzoomline(UINT16 *dest, INT32 *clip, UINT32 code1, UINT32 
 		{
 			color = (color & sprite_color_mask) << sprite_depth;
 			const UINT8 *code_base1 = DrvGfxROM0 + ((code1 % sprite_mask) * 0x100);
+			const UINT8 *code_base2 = DrvGfxROM0 + ((code2 % sprite_mask) * 0x100);
+			const UINT8 *source1 = code_base1 + (srcline) * 16;
+			const UINT8 *source2 = code_base2 + (srcline) * 16;
 
-			if (alpha == 0xff)
+			if (shadowMode && (alphaMode & 0xc0))
 			{
-				const UINT8 *code_base2 = DrvGfxROM0 + ((code2 % sprite_mask) * 0x100);
-				const UINT8 *source1 = code_base1 + (srcline) * 16;
-				const UINT8 *source2 = code_base2 + (srcline) * 16;
-
-				INT32 x_index = x_index_base;
-
-				for (INT32 x=sx; x<ex; x++ )
+				INT32 x, x_index = x_index_base;
+				for (x = sx; x < ex; x++)
 				{
-					INT32 c = source1[x_index>>16];
+					if (!(pri[x] & 0x80))
+					{
+						INT32 c = source1[x_index >> 16];
+						if (use8bpp)
+							c = (c << 4) | source2[x_index >> 16];
 
-					if (use8bpp) c = (c << 4) | source2[x_index >> 16];
-
-					if (c != transparent_color) dest[x] = c + color;
-
+						if (c != transparent_color)
+							pri[x] |= shadowMode;
+					}
 					x_index += dx;
 				}
 			}
 			else
 			{
-				const UINT8 *source = code_base1 + (srcline) * 16;
-
-				INT32 x_index = x_index_base;
-				for(INT32 x=sx; x<ex; x++ )
+				INT32 x, x_index = x_index_base;
+				for (x = sx; x < ex; x++)
 				{
-					INT32 c = source[x_index>>16];
-					if (c != transparent_color) dest[x] |= 0x800;
+					if (!(pri[x] & 0x80))
+					{
+						INT32 c = source1[x_index >> 16];
+						if (use8bpp)
+							c = (c << 4) | source2[x_index >> 16];
+
+						if (c != transparent_color)
+						{
+							dest[x] = c + color;
+							pri[x] |= 0x80 | shadowMode; // Mark it drawn
+						}
+					}
 					x_index += dx;
 				}
 			}
@@ -803,9 +832,8 @@ static void draw_sprites(INT32 scanline)
 	UINT8 *rom = DrvGfxROM1 + 0x20000, *index_ptr8;
 	UINT8 *rawrom = DrvGfxROM1;
 	INT32 blockIsTilemapIndex=0;
-	INT32 sprite2=0,indx2=0,use8bppMode=0;
+	INT32 sprite2=0,use8bppMode=0;
 	INT32 yscale,xscale;
-	INT32 alpha;
 	INT32 useIndicesInRom=0;
 	INT32 hibits=0;
 	INT32 tileFormat=0;
@@ -814,6 +842,7 @@ static void draw_sprites(INT32 scanline)
 	INT32 clipper=0;
 
 	UINT16 *dest = pTransDraw + ((scanline - 8) * nScreenWidth);
+	UINT8 *pri = pPrioDraw + ((scanline - 8) * nScreenWidth);
 
 	INT32 clip[4];
 	UINT16* mlc_spriteram=(UINT16*)DrvSprBuf;
@@ -821,8 +850,12 @@ static void draw_sprites(INT32 scanline)
 	UINT32 *m_mlc_vram = (UINT32*)DrvVRAM;
 	UINT32 *m_irq_ram = (UINT32*)DrvIRQRAM;
 
-	for (offs = (0x3000/4)-8; offs>=0; offs-=8)
+	for (offs = 0; offs < (0x3000 / 4); offs += 8)
 	{
+		use8bppMode = (offs + 8 < (0x3000 / 4)) && (mlc_spriteram[offs + 8 + 1] & 0x1000) && (mlc_spriteram[offs + 8 + 0] & 0x8000);
+		if (use8bppMode)
+			offs += 8;
+
 		if ((mlc_spriteram[offs+0]&0x8000)==0)
 			continue;
 		if ((mlc_spriteram[offs+1]&0x2000) && (nCurrentFrame & 1))
@@ -865,28 +898,20 @@ static void draw_sprites(INT32 scanline)
 		clip[0]=m_mlc_clip_ram[(clipper*4)+2];
 		clip[1]=m_mlc_clip_ram[(clipper*4)+3];
 
-		// Any colours out of range (for the bpp value) trigger 'shadow' mode
-		if (color & (sprite_color_mask+1))
-			alpha=0x80;
-		else
-			alpha=0xff;
-
+		INT32 shadowMode = (color & shadow_mask) >> shadow_shift; // shadow mode (OK for skullfng)
 		color&=sprite_color_mask;
 
-		// If this bit is set, combine this block with the next one
-		if (mlc_spriteram[offs+1]&0x1000) {
-			use8bppMode=1;
-			// In 8bpp the palette base is stored in the next block
-			if (offs-8>=0) {
-				color = (mlc_spriteram[offs+1-8]&0x7f);
-				indx2 = mlc_spriteram[offs+0-8]&0x3fff;
-			}
-		} else
-			use8bppMode=0;
+		if (use8bppMode) {
+			color = (mlc_spriteram[offs + 1 - 8] & 0x7f);
+		}
 
 		// Lookup tiles/size in sprite index ram OR in the lookup rom
 		if (mlc_spriteram[offs+0]&0x4000) {
 			index_ptr8=rom + indx*8; // Byte ptr
+
+			if (index_ptr8[5] & 0x01 && nCurrentFrame & 1)
+				continue;
+
 			h=(index_ptr8[1]>>0)&0xf;
 			w=(index_ptr8[3]>>0)&0xf;
 
@@ -895,11 +920,6 @@ static void draw_sprites(INT32 scanline)
 
 			sprite = (index_ptr8[7]<<8)|index_ptr8[6];
 			sprite |= (index_ptr8[4]&3)<<16;
-
-			if (use8bppMode) {
-				UINT8* index_ptr28=rom + indx2*8;
-				sprite2=(index_ptr28[7]<<8)|index_ptr28[6];
-			}
 
 			yoffs=index_ptr8[0]&0xff;
 			xoffs=index_ptr8[2]&0xff;
@@ -918,16 +938,15 @@ static void draw_sprites(INT32 scanline)
 		} else {
 			indx&=0x1fff;
 			index_ptr=m_mlc_vram + indx*4;
+
+			if (index_ptr[2] & 0x0100 && nCurrentFrame & 1)
+				continue;
+
 			h=(index_ptr[0]>>8)&0xf;
 			w=(index_ptr[1]>>8)&0xf;
 
 			if (!h) h=16;
 			if (!w) w=16;
-
-			if (use8bppMode) {
-				UINT32* index_ptr2=m_mlc_vram + ((indx2*4)&0x7fff);
-				sprite2=((index_ptr2[2]&0x3)<<16) | (index_ptr2[3]&0xffff);
-			}
 
 			sprite = ((index_ptr[2]&0x3)<<16) | (index_ptr[3]&0xffff);
 			if (index_ptr[2]&0xc0)
@@ -945,6 +964,22 @@ static void draw_sprites(INT32 scanline)
 
 			fy1=(index_ptr[0]&0x1000)>>12;
 			fx1=(index_ptr[1]&0x1000)>>12;
+		}
+
+		if (use8bppMode)
+		{
+			indx = mlc_spriteram[offs + 0 - 8] & 0x7fff;
+			if (indx & 0x4000)
+			{
+				index_ptr8 = rom + indx * 8;
+				sprite2 = (index_ptr8[7] << 8) | index_ptr8[6];
+			}
+			else
+			{
+				indx &= 0x1fff;
+				index_ptr = m_mlc_vram + indx * 4;
+				sprite2 = ((index_ptr[2] & 0x3) << 16) | (index_ptr[3] & 0xffff);
+			}
 		}
 
 		if(fx1) fx^=0x8000;
@@ -973,15 +1008,18 @@ static void draw_sprites(INT32 scanline)
 			}
 		}
 
+		const INT32 yscale_frac = (yscale << 8);
+		const INT32 real_h = h * 16;
+
 		xscale *= extra_x_scale;
 
 		INT32 ybase=y<<16;
-		INT32 yinc=(yscale<<8)*16;
+		INT32 yinc=yscale_frac*16;
 
 		if (fy)
-			ybase+=(yoffs-15) * (yscale<<8) - ((h-1)*yinc);
+			ybase+=(yoffs-15) * yscale_frac - ((h-1)*yinc);
 		else
-			ybase-=yoffs * (yscale<<8);
+			ybase-=yoffs * yscale_frac;
 
 		INT32 xbase=x<<16;
 		INT32 xinc=(xscale)*16;
@@ -991,10 +1029,9 @@ static void draw_sprites(INT32 scanline)
 		else
 			xbase-=xoffs * (xscale);
 
-
 		INT32 full_realybase = ybase;
-		INT32 full_sprite_screen_height = ((yscale<<8)*(h*16)+(0));
-		INT32 full_sprite_screen_height_unscaled = ((1)*(h*16)+(0));
+		INT32 full_sprite_screen_height = ((yscale<<8)*real_h+(0));
+		INT32 full_sprite_screen_height_unscaled = ((1)*real_h+(0));
 
 		if (!full_sprite_screen_height_unscaled)
 			continue;
@@ -1015,6 +1052,9 @@ static void draw_sprites(INT32 scanline)
 		INT32 srcline = ((bby<<16) / ratio);
 
 		by = srcline >> 4;
+
+		if (by >= h)
+			continue;
 
 		srcline &=0xf;
 		if( fy )
@@ -1091,11 +1131,17 @@ static void draw_sprites(INT32 scanline)
 				}
 			}
 
-			mlc_drawgfxzoomline(dest,clip,tile,tile2,color + colorOffset,fx,realxbase,0,use8bppMode,(xscale),alpha, srcline);
+			mlc_drawgfxzoomline(dest,pri,clip,tile,tile2,color + colorOffset,fx,realxbase,0,use8bppMode,(xscale), srcline, shadowMode);
 		}
+	}
 
-		if (use8bppMode)
-			offs-=8;
+	// if needed, apply shadow/hilite to this line
+
+	for (x = 0; x < nScreenWidth; x++) {
+		switch (pri[x] & 3) {
+			case 1: dest[x] |= 0x800; break;	// shadow
+			case 2: dest[x] |= 0x1000; break;	// hilite
+		}
 	}
 }
 
@@ -1189,7 +1235,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 
 		deco_146_104_scan();
 
-	//	EEPROMScan(nAction, pnMin);
+		EEPROMScan(nAction, pnMin);
 
 		YMZ280BScan(nAction, pnMin);
 
@@ -1200,7 +1246,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 }
 
 
-// Avengers In Galactic Storm (US)
+// Avengers In Galactic Storm (US/Europe 1.0)
 
 static struct BurnRomInfo avengrgsRomDesc[] = {
 	{ "sf_00-0.7k",			0x080000, 0x7d20e2df, 1 | BRF_PRG | BRF_ESS }, //  0 SH2 Code
@@ -1225,7 +1271,7 @@ static struct BurnRomInfo avengrgsRomDesc[] = {
 	{ "mcg-13.9k",			0x200000, 0x92301551, 4 | BRF_GRA },           // 16
 	{ "mcg-14.6a",			0x200000, 0xc0d8b5f0, 4 | BRF_GRA },           // 17
 
-	{ "avengrgs.nv",		0x000080, 0xc0e84b4e, 0 | BRF_PRG | BRF_OPT }, // 18 Default Settings
+	{ "avengrgs.nv",		0x000080, 0xc0e84b4e, 5 | BRF_PRG }, // 18 Default Settings
 };
 
 STD_ROM_PICK(avengrgs)
@@ -1238,16 +1284,16 @@ static INT32 AvengrgsInit()
 
 struct BurnDriver BurnDrvAvengrgs = {
 	"avengrgs", NULL, NULL, NULL, "1995",
-	"Avengers In Galactic Storm (US)\0", NULL, "Data East Corporation", "DECO MLC",
+	"Avengers In Galactic Storm (US/Europe 1.0)\0", NULL, "Data East Corporation", "DECO MLC",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 4, HARDWARE_PREFIX_DATAEAST, GBF_SPORTSMISC, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_DATAEAST, GBF_VSFIGHT, 0,
 	NULL, avengrgsRomInfo, avengrgsRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
 	AvengrgsInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
 };
 
 
-// Avengers In Galactic Storm (Japan)
+// Avengers In Galactic Storm (Japan 1.2)
 
 static struct BurnRomInfo avengrgsjRomDesc[] = {
 	{ "sd_00-2.7k",			0x080000, 0x136be46a, 1 | BRF_PRG | BRF_ESS }, //  0 SH2 Code
@@ -1272,7 +1318,7 @@ static struct BurnRomInfo avengrgsjRomDesc[] = {
 	{ "mcg-13.9k",			0x200000, 0x92301551, 4 | BRF_GRA },           // 16
 	{ "mcg-14.6a",			0x200000, 0xc0d8b5f0, 4 | BRF_GRA },           // 17
 
-	{ "avengrgsj.nv",		0x000080, 0x7ea70843, 0 | BRF_PRG | BRF_OPT }, // 18 Default Settings
+	{ "avengrgsj.nv",		0x000080, 0x7ea70843, 5 | BRF_PRG }, // 18 Default Settings
 };
 
 STD_ROM_PICK(avengrgsj)
@@ -1280,16 +1326,57 @@ STD_ROM_FN(avengrgsj)
 
 struct BurnDriver BurnDrvAvengrgsj = {
 	"avengrgsj", "avengrgs", NULL, NULL, "1995",
-	"Avengers In Galactic Storm (Japan)\0", NULL, "Data East Corporation", "DECO MLC",
+	"Avengers In Galactic Storm (Japan 1.2)\0", NULL, "Data East Corporation", "DECO MLC",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 4, HARDWARE_PREFIX_DATAEAST, GBF_SPORTSMISC, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_DATAEAST, GBF_VSFIGHT, 0,
 	NULL, avengrgsjRomInfo, avengrgsjRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
 	AvengrgsInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
 };
 
+// Avengers In Galactic Storm (Playable Boss)
+// https://www.romhacking.net/hacks/7050/
 
-// Skull Fang (World)
+static struct BurnRomInfo avengrgsbhRomDesc[] = {
+	{ "sfbh_00-0.7k",			0x080000, 0x83eae27c, 1 | BRF_PRG | BRF_ESS }, //  0 SH2 Code
+	{ "sfbh_01-0.7l",			0x080000, 0x6ef1380a, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "mcg-00.1j",				0x200000, 0x99129d9a, 2 | BRF_GRA },           //  2 Sprites
+	{ "mcg-02.1f",				0x200000, 0x29af9866, 2 | BRF_GRA },           //  3
+	{ "mcg-01.1d",				0x200000, 0x3638861b, 2 | BRF_GRA },           //  4
+	{ "mcg-03.7m",				0x200000, 0x4a0c965f, 2 | BRF_GRA },           //  5
+	{ "mcg-08.7p",				0x200000, 0xc253943e, 2 | BRF_GRA },           //  6
+	{ "mcg-09.7n",				0x200000, 0x8fb9870b, 2 | BRF_GRA },           //  7
+	{ "mcg-04.3j",				0x200000, 0xa4954c0e, 2 | BRF_GRA },           //  8
+	{ "mcg-06.3f",				0x200000, 0x01571cf6, 2 | BRF_GRA },           //  9
+	{ "mcg-05.3d",				0x200000, 0x182c2b49, 2 | BRF_GRA },           // 10
+	{ "mcg-07.8m",				0x200000, 0xd09a3635, 2 | BRF_GRA },           // 11
+	{ "mcg-10.8p",				0x200000, 0x1383f524, 2 | BRF_GRA },           // 12
+	{ "mcg-11.8n",				0x200000, 0x8f7fc281, 2 | BRF_GRA },           // 13
+
+	{ "sf_02-0.6j",				0x080000, 0xc98585dd, 3 | BRF_GRA },           // 14 Sprite Look-up Table
+
+	{ "mcg-12.5a",				0x200000, 0xbef9b28f, 4 | BRF_GRA },           // 15 YMZ280b Samples
+	{ "mcg-13.9k",				0x200000, 0x92301551, 4 | BRF_GRA },           // 16
+	{ "mcg-14.6a",				0x200000, 0xc0d8b5f0, 4 | BRF_GRA },           // 17
+
+	{ "avengrgs.nv",			0x000080, 0xc0e84b4e, 5 | BRF_PRG }, // 18 Default Settings
+};
+
+STD_ROM_PICK(avengrgsbh)
+STD_ROM_FN(avengrgsbh)
+
+struct BurnDriver BurnDrvAvengrgsbh = {
+	"avengrgsbh", "avengrgs", NULL, NULL, "2022",
+	"Avengers In Galactic Storm (Playable Boss, Hack)\0", NULL, "hack", "DECO MLC",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK, 4, HARDWARE_PREFIX_DATAEAST, GBF_VSFIGHT, 0,
+	NULL, avengrgsbhRomInfo, avengrgsbhRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
+	AvengrgsInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
+	320, 240, 4, 3
+};
+
+// Skull Fang (Europe 1.13)
 
 static struct BurnRomInfo skullfngRomDesc[] = {
 	{ "sw00-0.2a",			0x080000, 0x9658d9ce, 1 | BRF_PRG | BRF_ESS }, //  0 Arm Code (Encrypted)
@@ -1307,7 +1394,7 @@ static struct BurnRomInfo skullfngRomDesc[] = {
 	{ "mch-06.6a",			0x200000, 0xb2efe4ae, 4 | BRF_SND },           //  9 YMZ280b Samples
 	{ "mch-07.11j",			0x200000, 0xbc1a50a1, 4 | BRF_SND },           // 10
 
-	{ "skullfng.eeprom",		0x000080, 0x240d882e, 0 | BRF_PRG | BRF_OPT }, // 11 Default Settings
+	{ "skullfng.eeprom",		0x000080, 0x240d882e, 5 | BRF_PRG }, // 11 Default Settings
 };
 
 STD_ROM_PICK(skullfng)
@@ -1320,16 +1407,16 @@ static INT32 SkullfngInit()
 
 struct BurnDriver BurnDrvSkullfng = {
 	"skullfng", NULL, NULL, NULL, "1996",
-	"Skull Fang (World)\0", NULL, "Data East Corporation", "DECO MLC",
+	"Skull Fang (Europe 1.13)\0", NULL, "Data East Corporation", "DECO MLC",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL, 4, HARDWARE_PREFIX_DATAEAST, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_DATAEAST, GBF_VERSHOOT, 0,
 	NULL, skullfngRomInfo, skullfngRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
 	SkullfngInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	240, 320, 3, 4
 };
 
 
-// Skull Fang (Japan)
+// Skull Fang - Kuhga Gaiden (Japan 1.09)
 
 static struct BurnRomInfo skullfngjRomDesc[] = {
 	{ "sh00-0.2a",			0x080000, 0xe50358e8, 1 | BRF_PRG | BRF_ESS }, //  0 Arm Code (Encrypted)
@@ -1347,7 +1434,7 @@ static struct BurnRomInfo skullfngjRomDesc[] = {
 	{ "mch-06.6a",			0x200000, 0xb2efe4ae, 4 | BRF_GRA },           //  9 YMZ280b Samples
 	{ "mch-07.11j",			0x200000, 0xbc1a50a1, 4 | BRF_GRA },           // 10
 
-	{ "skullfng.eeprom",		0x000080, 0x240d882e, 0 | BRF_PRG | BRF_OPT }, // 11 Default Settings
+	{ "skullfng.eeprom",		0x000080, 0x240d882e, 5 | BRF_PRG }, // 11 Default Settings
 };
 
 STD_ROM_PICK(skullfngj)
@@ -1355,16 +1442,16 @@ STD_ROM_FN(skullfngj)
 
 struct BurnDriver BurnDrvSkullfngj = {
 	"skullfngj", "skullfng", NULL, NULL, "1996",
-	"Skull Fang (Japan)\0", NULL, "Data East Corporation", "Miscellaneous",
+	"Skull Fang - Kuhga Gaiden (Japan 1.09)\0", NULL, "Data East Corporation", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 4, HARDWARE_PREFIX_DATAEAST, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_DATAEAST, GBF_VERSHOOT, 0,
 	NULL, skullfngjRomInfo, skullfngjRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
 	SkullfngInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	240, 320, 3, 4
 };
 
 
-// Skull Fang (Asia)
+// Skull Fang - Kuhga Gaiden (Asia 1.13)
 
 static struct BurnRomInfo skullfngaRomDesc[] = {
 	{ "sx00-0.2a",			0x080000, 0x749c0972, 1 | BRF_PRG | BRF_ESS }, //  0 Arm Code (Encrypted)
@@ -1382,7 +1469,7 @@ static struct BurnRomInfo skullfngaRomDesc[] = {
 	{ "mch-06.6a",			0x200000, 0xb2efe4ae, 4 | BRF_GRA },           //  9 YMZ280b Samples
 	{ "mch-07.11j",			0x200000, 0xbc1a50a1, 4 | BRF_GRA },           // 10
 
-	{ "skullfng.eeprom",		0x000080, 0x240d882e, 0 | BRF_PRG | BRF_OPT }, // 11 Default Settings
+	{ "skullfng.eeprom",		0x000080, 0x240d882e, 5 | BRF_PRG }, // 11 Default Settings
 };
 
 STD_ROM_PICK(skullfnga)
@@ -1390,16 +1477,16 @@ STD_ROM_FN(skullfnga)
 
 struct BurnDriver BurnDrvSkullfnga = {
 	"skullfnga", "skullfng", NULL, NULL, "1996",
-	"Skull Fang (Asia)\0", NULL, "Data East Corporation", "Miscellaneous",
+	"Skull Fang - Kuhga Gaiden (Asia 1.13)\0", NULL, "Data East Corporation", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL, 4, HARDWARE_PREFIX_DATAEAST, GBF_VERSHOOT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_ORIENTATION_VERTICAL | BDF_HISCORE_SUPPORTED, 4, HARDWARE_PREFIX_DATAEAST, GBF_VERSHOOT, 0,
 	NULL, skullfngaRomInfo, skullfngaRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
 	SkullfngInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	240, 320, 3, 4
 };
 
 
-// Stadium Hero '96 (World, EAJ)
+// Stadium Hero '96 (Europe, EAJ)
 
 static struct BurnRomInfo stadhr96RomDesc[] = {
 	{ "sh-eaj.2a",			0x080000, 0x10d1496a, 1 | BRF_PRG | BRF_ESS }, //  0 Arm Code (Encrypted)
@@ -1416,7 +1503,7 @@ static struct BurnRomInfo stadhr96RomDesc[] = {
 
 	{ "mcm-06.6a",			0x400000, 0xfbc178f3, 4 | BRF_GRA },           //  9 YMZ280b Samples
 
-	{ "eeprom-stadhr96.bin",	0x000080, 0x77861793, 0 | BRF_PRG | BRF_OPT }, // 10 Default Settings
+	{ "eeprom-stadhr96.bin",	0x000080, 0x77861793, 5 | BRF_PRG }, // 10 Default Settings
 };
 
 STD_ROM_PICK(stadhr96)
@@ -1429,7 +1516,7 @@ static INT32 Stadhr96Init()
 
 struct BurnDriver BurnDrvStadhr96 = {
 	"stadhr96", NULL, NULL, NULL, "1996",
-	"Stadium Hero '96 (World, EAJ)\0", NULL, "Data East Corporation", "DECO MLC",
+	"Stadium Hero '96 (Europe, EAJ, Tuning license)\0", NULL, "Data East Corporation", "DECO MLC",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_DATAEAST, GBF_SPORTSMISC, 0,
 	NULL, stadhr96RomInfo, stadhr96RomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
@@ -1455,7 +1542,7 @@ static struct BurnRomInfo stadhr96uRomDesc[] = {
 
 	{ "mcm-06.6a",			0x400000, 0xfbc178f3, 4 | BRF_GRA },           //  9 YMZ280b Samples
 
-	{ "eeprom-stadhr96u.bin",	0x000080, 0x71d796ba, 0 | BRF_PRG | BRF_OPT }, // 10 Default Settings
+	{ "eeprom-stadhr96u.bin",	0x000080, 0x71d796ba, 5 | BRF_PRG }, // 10 Default Settings
 };
 
 STD_ROM_PICK(stadhr96u)
@@ -1489,7 +1576,7 @@ static struct BurnRomInfo stadhr96jRomDesc[] = {
 
 	{ "mcm-06.6a",			0x400000, 0xfbc178f3, 4 | BRF_GRA },           //  9 YMZ280b Samples
 
-	{ "eeprom-stadhr96j.bin",	0x000080, 0xcf98098f, 0 | BRF_PRG | BRF_OPT }, // 10 Default Settings
+	{ "eeprom-stadhr96j.bin",	0x000080, 0xcf98098f, 5 | BRF_PRG }, // 10 Default Settings
 };
 
 STD_ROM_PICK(stadhr96j)
@@ -1501,6 +1588,74 @@ struct BurnDriver BurnDrvStadhr96j = {
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_DATAEAST, GBF_SPORTSMISC, 0,
 	NULL, stadhr96jRomInfo, stadhr96jRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
+	Stadhr96Init, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
+	320, 240, 4, 3
+};
+
+
+// Stadium Hero '96 (Japan?, EAE)
+// currently not working: 'This game board is not compatible with country code of mother board. Do not use, or damage will occur and void warranty of both boards.'
+// according to a dumper: 'I ran into this issue a few years ago when I was "updating" some Stadium heros 96 boards to English. Some converted with an EPROM swap and other gave me the error.
+// It wound up being a small serial EEPROM that was added to the PCB(it was socketed IIRC, on the bottom side of the PCB) and when I removed, it booted fine.
+// The other SH 96's didn't have this part and was the only difference.
+
+static struct BurnRomInfo stadhr96j2RomDesc[] = {
+	{ "eae00-5.2a",		0x080000, 0x902b84e9, 1 | BRF_PRG | BRF_ESS }, //  0 Arm Code (Encrypted)
+	{ "eae01-5.2b",		0x080000, 0x16245497, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "mcm-00.2e",		0x400000, 0xc1919c3c, 2 | BRF_GRA },           //  2 Sprites
+	{ "mcm-01.8m",		0x400000, 0x2255d47d, 2 | BRF_GRA },           //  3
+	{ "mcm-02.4e",		0x400000, 0x38c39822, 2 | BRF_GRA },           //  4
+	{ "mcm-03.10m",		0x400000, 0x4bd84ca7, 2 | BRF_GRA },           //  5
+	{ "mcm-04.6e",		0x400000, 0x7c0bd84c, 2 | BRF_GRA },           //  6
+	{ "mcm-05.11m",		0x400000, 0x476f03d7, 2 | BRF_GRA },           //  7
+
+	{ "eae02-0.6h",		0x080000, 0x57c30ca8, 3 | BRF_GRA },           //  8 Sprite Look-up Table
+
+	{ "mcm-06.6a",		0x400000, 0xfbc178f3, 4 | BRF_GRA },           //  9 YMZ280b Samples
+};
+
+STD_ROM_PICK(stadhr96j2)
+STD_ROM_FN(stadhr96j2)
+
+struct BurnDriver BurnDrvStadhr96j2 = {
+	"stadhr96j2", "stadhr96", NULL, NULL, "1996",
+	"Stadium Hero '96 (Japan?, EAE)\0", NULL, "Data East Corporation", "DECO MLC",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_NOT_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_DATAEAST, GBF_SPORTSMISC, 0,
+	NULL, stadhr96j2RomInfo, stadhr96j2RomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
+	Stadhr96Init, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
+	320, 240, 4, 3
+};
+
+
+// Stadium Hero '96 (Korea, Dream Island license)
+
+static struct BurnRomInfo stadhr96kRomDesc[] = {
+	{ "sh_kr.2a",		0x080000, 0x5731a89c, 1 | BRF_PRG | BRF_ESS }, //  0 Arm Code (Encrypted)
+	{ "sh_kr.2b",		0x080000, 0x9f43d85a, 1 | BRF_PRG | BRF_ESS }, //  1
+
+	{ "mcm-00.2e",		0x400000, 0xc1919c3c, 2 | BRF_GRA },           //  2 Sprites
+	{ "mcm-01.8m",		0x400000, 0x2255d47d, 2 | BRF_GRA },           //  3
+	{ "mcm-02.4e",		0x400000, 0x38c39822, 2 | BRF_GRA },           //  4
+	{ "mcm-03.10m",		0x400000, 0x4bd84ca7, 2 | BRF_GRA },           //  5
+	{ "mcm-04.6e",		0x400000, 0x7c0bd84c, 2 | BRF_GRA },           //  6
+	{ "mcm-05.11m",		0x400000, 0x476f03d7, 2 | BRF_GRA },           //  7
+
+	{ "eae02-0.6h",		0x080000, 0x57c30ca8, 3 | BRF_GRA },           //  8 Sprite Look-up Table
+
+	{ "mcm-06.6a",		0x400000, 0xfbc178f3, 4 | BRF_GRA },           //  9 YMZ280b Samples
+};
+
+STD_ROM_PICK(stadhr96k)
+STD_ROM_FN(stadhr96k)
+
+struct BurnDriver BurnDrvStadhr96k = {
+	"stadhr96k", "stadhr96", NULL, NULL, "1996",
+	"Stadium Hero '96 (Korea, Dream Island license)\0", NULL, "Data East Corporation", "DECO MLC",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_DATAEAST, GBF_SPORTSMISC, 0,
+	NULL, stadhr96kRomInfo, stadhr96kRomName, NULL, NULL, NULL, NULL, MlcInputInfo, NULL,
 	Stadhr96Init, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x800,
 	320, 240, 4, 3
 };
@@ -1522,7 +1677,7 @@ static struct BurnRomInfo hoops96RomDesc[] = {
 
 	{ "mce-05.6a",			0x400000, 0xe7a9355a, 4 | BRF_GRA },           //  8 YMZ280b Samples
 
-	{ "hoops.nv",			0x000080, 0x67b18457, 0 | BRF_PRG | BRF_OPT }, //  9 Default Settings
+	{ "hoops.nv",			0x000080, 0x67b18457, 5 | BRF_PRG }, //  9 Default Settings
 };
 
 STD_ROM_PICK(hoops96)
@@ -1560,7 +1715,7 @@ static struct BurnRomInfo hoops95RomDesc[] = {
 
 	{ "mce-05.6a",			0x400000, 0xe7a9355a, 4 | BRF_GRA },           //  8 YMZ280b Samples
 
-	{ "hoops.nv",			0x000080, 0x67b18457, 0 | BRF_PRG | BRF_OPT }, //  9 Default Settings
+	{ "hoops.nv",			0x000080, 0x67b18457, 5 | BRF_PRG }, //  9 Default Settings
 };
 
 STD_ROM_PICK(hoops95)
@@ -1593,7 +1748,7 @@ static struct BurnRomInfo ddream95RomDesc[] = {
 
 	{ "mce-05.6a",			0x400000, 0xe7a9355a, 4 | BRF_GRA },           //  8 YMZ280b Samples
 
-	{ "hoops.nv",			0x000080, 0x67b18457, 0 | BRF_PRG | BRF_OPT }, //  9 Default Settings
+	{ "hoops.nv",			0x000080, 0x67b18457, 5 | BRF_PRG }, //  9 Default Settings
 };
 
 STD_ROM_PICK(ddream95)

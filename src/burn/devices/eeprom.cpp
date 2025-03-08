@@ -336,6 +336,15 @@ void EEPROMFill(const UINT8 *data, INT32 offset, INT32 length)
 	memcpy(eeprom_data + offset, data, length);
 }
 
+void EEPROMByteFill(UINT8 byte, INT32 length)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugDev_EEPROMInitted) bprintf(PRINT_ERROR, _T("EEPROMByteFill called without init\n"));
+#endif
+
+	memset(eeprom_data, byte, length);
+}
+
 void EEPROMScan(INT32 nAction, INT32* pnMin)
 {
 #if defined FBNEO_DEBUG
@@ -356,6 +365,11 @@ void EEPROMScan(INT32 nAction, INT32* pnMin)
 		ba.szName	= "Serial Buffer";
 		BurnAcb(&ba);
 
+		if (nAction & ACB_RUNAHEAD) {
+			// we _must_ scan eeprom data when in RunAhead mode or corruption is a possibility
+			ScanVar(eeprom_data, MEMORY_SIZE, "eeprom_data");
+		}
+
 		SCAN_VAR(serial_count);
 		SCAN_VAR(eeprom_data_bits);
 		SCAN_VAR(eeprom_read_address);
@@ -366,6 +380,11 @@ void EEPROMScan(INT32 nAction, INT32* pnMin)
 		SCAN_VAR(sending);
 		SCAN_VAR(locked);
 		SCAN_VAR(reset_delay);
+	}
+
+	if (nAction & ACB_EEPROM) {
+		bprintf(0, _T("*** eeprom.cpp: scanning EEPROM data (recording/playback only!)\n"));
+		ScanVar(eeprom_data, MEMORY_SIZE, "eeprom_data");
 	}
 
 //	if (nAction & ACB_NVRAM) {

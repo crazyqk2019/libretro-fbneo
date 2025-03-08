@@ -231,7 +231,7 @@ static struct BurnDIPInfo Dbz2DIPList[]=
 
 STDDIPINFO(Dbz2)
 
-static void dbz_objdma() // modified from moo mesa
+static void dbz_objdma() // modified from moo mesa -dink jan 2019
 {
 	UINT16 *dst = (UINT16*)K053247Ram;   // 0x800 words
 	UINT16 *src = (UINT16*)DrvObjDMARam; // 0x2000 words
@@ -242,7 +242,7 @@ static void dbz_objdma() // modified from moo mesa
 
 	do
 	{
-		if (*src & 0x8000)
+		if (BURN_ENDIAN_SWAP_INT16(*src) & 0x8000)
 		{
 			memcpy(dst, src, 0x10);
 			dst += 0x10/2;
@@ -503,18 +503,18 @@ static void dbz_tile_callback(INT32 layer, INT32 */*code*/, INT32 *color, INT32 
 
 static void dbz_K053936_callback1(INT32 offset, UINT16 *ram, INT32 *code, INT32 *color, INT32 *, INT32 *, INT32 *flipx, INT32 *)
 {
-	*code  =  ram[(offset * 2) + 1] & 0x7fff;
-	*color = ((ram[(offset * 2) + 0] & 0x000f) + (layer_colorbase[4] << 1)) << 4;
+	*code  =  BURN_ENDIAN_SWAP_INT16(ram[(offset * 2) + 1]) & 0x7fff;
+	*color = ((BURN_ENDIAN_SWAP_INT16(ram[(offset * 2) + 0]) & 0x000f) + (layer_colorbase[4] << 1)) << 4;
 	*color &= 0x1ff0;
-	*flipx =  ram[(offset * 2) + 0] & 0x0080;
+	*flipx =  BURN_ENDIAN_SWAP_INT16(ram[(offset * 2) + 0]) & 0x0080;
 }
 
 static void dbz_K053936_callback2(INT32 offset, UINT16 *ram, INT32 *code, INT32 *color, INT32 *, INT32 *, INT32 *flipx, INT32 *)
 {
-	*code  =  ram[(offset * 2) + 1] & 0x7fff;
-	*color = ((ram[(offset * 2) + 0] & 0x000f) + (layer_colorbase[5] << 1)) << 4;
+	*code  =  BURN_ENDIAN_SWAP_INT16(ram[(offset * 2) + 1]) & 0x7fff;
+	*color = ((BURN_ENDIAN_SWAP_INT16(ram[(offset * 2) + 0]) & 0x000f) + (layer_colorbase[5] << 1)) << 4;
 	*color &= 0x1ff0;
-	*flipx =  ram[(offset * 2) + 0] & 0x0080;
+	*flipx =  BURN_ENDIAN_SWAP_INT16(ram[(offset * 2) + 0]) & 0x0080;
 }
 
 static void dbzYM2151IrqHandler(INT32 status)
@@ -540,6 +540,8 @@ static INT32 DrvDoReset()
 	BurnYM2151Reset();
 
 	control_data = 0;
+
+	HiscoreReset();
 
 	return 0;
 }
@@ -782,7 +784,8 @@ static INT32 DrvInit(INT32 nGame)
 	ZetSetReadHandler(dbz_sound_read);
 	ZetClose();
 
-	BurnYM2151Init(4000000);
+	BurnYM2151InitBuffered(4000000, 1, NULL, 0);
+	BurnTimerAttachZet(4000000);
 	BurnYM2151SetIrqHandler(&dbzYM2151IrqHandler);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_1, 1.00, BURN_SND_ROUTE_LEFT);
 	BurnYM2151SetRoute(BURN_SND_YM2151_YM2151_ROUTE_2, 1.00, BURN_SND_ROUTE_RIGHT);
@@ -835,9 +838,9 @@ static void DrvPaletteRecalc()
 
 	for (INT32 i = 0; i < 0x4000/2; i++)
 	{
-		INT32 r = (pal[i] >> 10 & 0x1f);
-		INT32 g = (pal[i] >> 5) & 0x1f;
-		INT32 b = (pal[i]) & 0x1f;
+		INT32 r = (BURN_ENDIAN_SWAP_INT16(pal[i]) >> 10 & 0x1f);
+		INT32 g = (BURN_ENDIAN_SWAP_INT16(pal[i]) >> 5) & 0x1f;
+		INT32 b = (BURN_ENDIAN_SWAP_INT16(pal[i])) & 0x1f;
 
 		r = (r << 3) | (r >> 2);
 		g = (g << 3) | (g >> 2);
@@ -928,9 +931,9 @@ static INT32 DrvFrame()
 	}
 
 	SekNewFrame();
+	ZetNewFrame();
 
 	INT32 nInterleave = 256;
-	INT32 nSoundBufferPos = 0;
 	INT32 nCyclesTotal[2] = { 16000000 / 60, 4000000 / 60 };
 	INT32 nCyclesDone[2] = { 0, 0 };
 
@@ -938,42 +941,23 @@ static INT32 DrvFrame()
 	ZetOpen(0);
 
 	for (INT32 i = 0; i < nInterleave; i++) {
-		INT32 nNext, nCyclesSegment;
+		CPU_RUN(0, Sek);
 
-		nNext = (i + 1) * nCyclesTotal[0] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[0];
-		nCyclesDone[0] += SekRun(nCyclesSegment);
-
-		if (i == ((nInterleave/2)-1) && K053246_is_IRQ_enabled()) {
-			dbz_objdma();
+		if (i == 0 && K053246_is_IRQ_enabled()) {
 			SekSetIRQLine(4, CPU_IRQSTATUS_AUTO);
 		}
 
 		if (i == (nInterleave - 1)) {
+			dbz_objdma();
 			SekSetIRQLine(2, CPU_IRQSTATUS_AUTO);
 		}
 
-		nNext = (i + 1) * nCyclesTotal[1] / nInterleave;
-		nCyclesSegment = nNext - nCyclesDone[1];
-		nCyclesDone[1] += ZetRun(nCyclesSegment);
-
-		if (pBurnSoundOut && i&1) {
-			INT32 nSegmentLength = nBurnSoundLen / (nInterleave / 2);
-			INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			MSM6295Render(pSoundBuf, nSegmentLength);
-			nSoundBufferPos += nSegmentLength;
-		}
-
+		CPU_RUN_TIMER(1);
 	}
 
 	if (pBurnSoundOut) {
-		INT32 nSegmentLength = nBurnSoundLen - nSoundBufferPos;
-		INT16* pSoundBuf = pBurnSoundOut + (nSoundBufferPos << 1);
-		if (nSegmentLength) {
-			BurnYM2151Render(pSoundBuf, nSegmentLength);
-			MSM6295Render(pSoundBuf, nSegmentLength);
-		}
+		BurnYM2151Render(pBurnSoundOut, nBurnSoundLen);
+		MSM6295Render(pBurnSoundOut, nBurnSoundLen);
 	}
 
 	ZetClose();
@@ -1017,7 +1001,7 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 }
 
 
-// Dragonball Z (rev B)
+// Dragon Ball Z (rev B)
 
 static struct BurnRomInfo dbzRomDesc[] = {
 	{ "222b11.9e",	0x080000, 0x4c6b75e9, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
@@ -1045,15 +1029,15 @@ STD_ROM_FN(dbz)
 
 struct BurnDriver BurnDrvDbz = {
 	"dbz", NULL, NULL, NULL, "1993",
-	"Dragonball Z (rev B)\0", NULL, "Banpresto", "Miscellaneous",
+	"Dragon Ball Z (rev B)\0", NULL, "Banpresto", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
 	NULL, dbzRomInfo, dbzRomName, NULL, NULL, NULL, NULL, DbzInputInfo, DbzDIPInfo,
 	dbzInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	384, 256, 4, 3
 };
 
-// Dragonball Z (rev A)
+// Dragon Ball Z (rev A)
 
 static struct BurnRomInfo dbzaRomDesc[] = {
 	{ "222a11.9e",	0x080000, 0x60c7d9b2, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
@@ -1081,16 +1065,16 @@ STD_ROM_FN(dbza)
 
 struct BurnDriver BurnDrvDbza = {
 	"dbza", "dbz", NULL, NULL, "1993",
-	"Dragonball Z (rev A)\0", NULL, "Banpresto", "Miscellaneous",
+	"Dragon Ball Z (rev A)\0", NULL, "Banpresto", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
 	NULL, dbzaRomInfo, dbzaRomName, NULL, NULL, NULL, NULL, DbzInputInfo, DbzDIPInfo,
 	dbzaInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	384, 256, 4, 3
 };
 
 
-// Dragonball Z 2 - Super Battle
+// Dragon Ball Z 2 - Super Battle
 
 static struct BurnRomInfo dbz2RomDesc[] = {
 	{ "a9e.9e",	0x080000, 0xe6a142c9, 1 | BRF_PRG | BRF_ESS }, //  0 68K Code
@@ -1120,9 +1104,9 @@ STD_ROM_FN(dbz2)
 
 struct BurnDriver BurnDrvDbz2 = {
 	"dbz2", NULL, NULL, NULL, "1994",
-	"Dragonball Z 2 - Super Battle\0", NULL, "Banpresto", "Miscellaneous",
+	"Dragon Ball Z 2 - Super Battle\0", NULL, "Banpresto", "Miscellaneous",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
+	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_PREFIX_KONAMI, GBF_VSFIGHT, 0,
 	NULL, dbz2RomInfo, dbz2RomName, NULL, NULL, NULL, NULL, DbzInputInfo, Dbz2DIPInfo,
 	dbz2Init,DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x2000,
 	384, 256, 4, 3
